@@ -1,0 +1,35 @@
+From: BaseOS <baseos@localhost>
+Date: Thu, 24 Jul 2026 00:00:00 +0000
+Subject: [PATCH] core/adbd/adb.c: always keep root (never drop privileges)
+
+BaseOS dev images are root-everything: dropbear runs root/root and there
+is no unprivileged shell account. Android's should_drop_privileges() drops
+to uid 2000 (AID_SHELL), which does not exist in our /etc/passwd, so the
+drop path (getpwuid(AID_SHELL) -> getspnam -> setgid/setuid) either crashes
+adbd or yields a broken, shell-less session.
+
+The Buildroot/Debian series already forces `return 0` inside the
+ALLOW_ADBD_ROOT branch, but that depends on adbd.mk keeping
+-DALLOW_ADBD_ROOT=1. This patch makes staying root explicit and
+build-flag independent by returning 0 at the top of the function.
+
+Upstream: N/A, BaseOS-local.
+---
+diff --git a/core/adbd/adb.c b/core/adbd/adb.c
+index 10f420b..67504e7 100644
+--- a/core/adbd/adb.c
++++ b/core/adbd/adb.c
+@@ -1166,6 +1166,11 @@ void build_local_name(char* target_str, size_t target_size, int server_port)
+ 
+ #if !ADB_HOST
+ static int should_drop_privileges() {
++    /* BaseOS: dev images are root-everything (dropbear runs root/root) and
++     * Android uid 2000 (AID_SHELL) has no passwd entry here, so any
++     * privilege drop would abort adbd or hand out a broken shell.
++     * Unconditionally keep root. */
++    return 0;
+ #ifndef ALLOW_ADBD_ROOT
+     return 1;
+ #else /* ALLOW_ADBD_ROOT */
+-- 
+2.47.0

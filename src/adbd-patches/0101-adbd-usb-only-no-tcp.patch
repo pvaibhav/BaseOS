@@ -1,0 +1,39 @@
+From: BaseOS <baseos@localhost>
+Date: Thu, 24 Jul 2026 00:00:01 +0000
+Subject: [PATCH] core/adbd/adb.c: USB-only, drop network TCP fallback
+
+The Debian add_adbd.patch rewrote adb_main() so that when no USB gadget
+(/dev/android_adb or /dev/usb-ffs/adb/ep0) is present, adbd falls back to
+local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT), which calls
+socket_inaddr_any_server() and listens on 0.0.0.0:5555. Combined with the
+BaseOS stay-root patch that is an unauthenticated root shell on the network.
+
+BaseOS uses adb over USB (FunctionFS) only, so remove the TCP fallback.
+If FunctionFS is not up, adbd simply serves no transport. The loopback-only
+smartsocket (127.0.0.1:5037) opened elsewhere is unaffected and is not
+network-reachable.
+
+Upstream: N/A, BaseOS-local.
+---
+diff --git a/core/adbd/adb.c b/core/adbd/adb.c
+index 67504e7..1dbc351 100644
+--- a/core/adbd/adb.c
++++ b/core/adbd/adb.c
+@@ -1329,11 +1329,10 @@ int adb_main(int is_daemon, int server_port)
+         // listen on TCP port specified by service.adb.tcp.port property
+     //    local_init(port);
+     //} else 
+-    if (!usb) {
+-        printf("Using USB\n");
+-        // listen on default port
+-        local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
+-    }
++    /* BaseOS: USB-only image. Do not fall back to a network-reachable adb
++     * transport -- local_init() here would socket_inaddr_any_server() on
++     * 0.0.0.0:5555 and expose an unauthenticated root shell. If FunctionFS
++     * is not up, adbd simply serves no transport. */
+ 
+     D("adb_main(): pre init_jdwp()\n");
+     init_jdwp();
+-- 
+2.47.0

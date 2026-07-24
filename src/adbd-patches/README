@@ -1,0 +1,21 @@
+android-tools (adbd) patch series
+==================================
+
+The 00xx patches are Buildroot's android-tools patch series, vendored verbatim
+from package/android-tools/ at Buildroot commit
+8c96a8981f40689c352910372404216ab0d9482e
+(https://github.com/buildroot/buildroot/tree/8c96a8981f40689c352910372404216ab0d9482e/package/android-tools).
+They are checked in here (rather than fetched at build time) so that
+build-tools.sh produces a byte-reproducible adbd from a clean, offline
+checkout. They are applied on top of android-tools 4.2.2+git20130218 after the
+upstream Debian quilt series (debian/patches/*), matching android-tools.mk.
+
+The 01xx patches are BaseOS-local, applied last:
+
+  0100-adbd-stay-root.patch     adbd never drops privileges (root shell). Our
+                                dev images are root-everything and have no
+                                AID_SHELL (uid 2000) account, so Android's
+                                privilege drop would break the shell.
+  0101-adbd-usb-only-no-tcp.patch  Remove the network TCP fallback so adbd only
+                                serves adb over USB (FunctionFS); it never
+                                opens 0.0.0.0:5555.

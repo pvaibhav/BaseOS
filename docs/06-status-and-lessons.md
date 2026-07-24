@@ -12,6 +12,7 @@
 | Deep sleep (real suspend-to-RAM, ~0 drain / 35 min) | ✅ |
 | WiFi unaided bring-up + stable association | ✅ (validated when the frontend's `wifi_init.sh` did the wait; the Base-OS-owned `wlan0` bring-up is not yet hardware-validated) |
 | Dropbear SSH over WiFi | ✅ |
+| adb over USB (charge port, device role) | ⏳ configfs gadget + adbd wired; not yet hardware-validated |
 | GLES video / input / audio in NextUI | ✅ (NextUI runs; port already validated these) |
 | Bluetooth audio pairing end-to-end | ⏳ daemons run; not yet paired on base OS |
 | HDMI output | ⏳ not retested on base OS |
@@ -65,6 +66,16 @@ superblock mount-counts, and `fbsplash` breadcrumbs as boot-stage forensics.
   `partprobe` (which EBUSYs). `gptgrow` does BLKPG.
 - Dropbear has no sftp-server; push with `cat | ssh 'cat > f'` (or `scp -O`), verify
   with a checksum.
+- Do **not** try to force the sunxi USB role. Writing `usbc0/otg_role` (e.g.
+  `echo usb_device > otg_role`) **wedges the writer in an uninterruptible D-state** on the
+  4.9.170 vendor kernel — reproduced both with and without a gadget bound, and only a
+  reboot clears the stuck process. Its siblings `usb_device`/`usb_host`/`usb_null` are
+  **0400 read-triggers** — merely `cat`-ing one switches the role (a `cat usb_host` wedged
+  the port). The adb gadget instead binds to the always-present UDC and lets the manager
+  auto-select peripheral mode on cable attach — no role write needed, and charging on the
+  shared port is undisturbed. (Real path is `/sys/devices/platform/soc/usbc0` via the
+  `/sys/bus/platform/devices/usbc0` symlink; the earlier `/sys/devices/platform/usbc0`
+  guess did not exist, which is how the bad `otg_role` write got masked at first.)
 - The repo shell is **fish**, which doesn't word-split variables — inline `ssh -o`
   options, never store them in a var.
 - The QEMU smoke test exercises generic userspace, not the vendor kernel or hardware.
@@ -83,8 +94,8 @@ superblock mount-counts, and `fbsplash` breadcrumbs as boot-stage forensics.
   ten supported images with per-target boot partitions, model identity and logos.
   Physical BaseOS validation beyond RG40XXV remains outstanding and must be recorded
   per model rather than inferred from successful image construction.
-- **Silence boot breadcrumbs / release vs dev image split** (serial getty + dropbear
-  are dev conveniences).
+- **Silence boot breadcrumbs / release vs dev image split** (serial getty, dropbear
+  and adb-over-USB are dev conveniences).
 - **PortMaster** later: the kernel already has squashfs + loop + overlay built in;
   glibc 2.35 and an `/etc/os-release` identity remain to be decided.
 

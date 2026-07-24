@@ -1,5 +1,5 @@
 #!/bin/sh
-# Development conveniences, started by rcS in the background.
+# Development conveniences (SSH, ADB), started by rcS in the background.
 # This file is only installed in dev-flavour images (build-rootfs.sh).
 
 # Persistent dropbear host keys on /data.
@@ -12,3 +12,10 @@ done
 # SSH daemon (password: root/root — dev images only).
 dropbear -r /data/dropbear/dropbear_rsa_host_key \
          -r /data/dropbear/dropbear_ed25519_host_key -B 2>/dev/null
+
+# adb-over-USB gadget. Safe no-op when the kernel/hardware USB bits are absent;
+# backgrounded so dropbear keygen and the gadget bring-up don't serialise.
+[ -x /usr/sbin/usb-gadget-adb ] && /usr/sbin/usb-gadget-adb &
+
+# Boot instrumentation: dev services launched.
+/bin/cut -d" " -f1 /proc/uptime > /run/boot-dev-done

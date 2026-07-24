@@ -25,8 +25,8 @@ chk "no systemd running"                        "! pidof systemd"
 chk "busybox is init (PID 1)"                   "grep -q busybox /proc/1/comm || readlink /proc/1/exe | grep -q busybox"
 
 echo "=== boot speed ==="
-for m in rcS-start rcS-done frontend-exec; do
-	[ -f /run/boot-$m ] && echo "  boot-$m: $(cat /run/boot-$m)s"
+for m in rcS-start rcS-done frontend-exec dev-done adb-gadget-done; do
+	if [ -f /run/boot-$m ]; then echo "  boot-$m: $(cat /run/boot-$m)s"; else echo "  boot-$m: (absent)"; fi
 done
 chk "frontend exec marker exists" "test -f /run/boot-frontend-exec"
 
@@ -51,6 +51,16 @@ echo "=== NextUI ==="
 chk "SD card mounted (/mnt/sdcard)"    "mountpoint -q /mnt/sdcard"
 chk "nextui.elf running"               "pidof nextui.elf"
 chk "keymon running"                   "pidof keymon.elf"
+
+echo "=== dev services ==="
+chk "adbd running"                      "pidof adbd"
+# The adb gadget is bound to the always-present UDC; device (peripheral) mode is
+# auto-selected by the sunxi manager on cable attach. We deliberately do NOT
+# force usbc0/otg_role — writing it wedges the writer in D-state on this vendor
+# kernel, and its siblings usb_device/usb_host/usb_null are read-triggers that
+# switch the role on cat. So the check is "gadget bound", not "role == device".
+chk "adb gadget bound (g1/UDC)"         "test -s /sys/kernel/config/usb_gadget/g1/UDC"
+chk "functionfs mounted"                "grep -q functionfs /proc/mounts"
 
 echo "=== resources ==="
 echo "  processes: $(ps | wc -l)"
