@@ -2,7 +2,7 @@
 
 BaseOS is a small, fast operating system for Anbernic RG XX handhelds. It
 handles the hardware and starts your choice of frontend:
-[NextUI](https://nextui.loveretro.games), [Slot](https://slot.kowalski.io),
+[NextUI](https://nextui.loveretro.games), [Slot](https://slot-cfw.fyi),
 [spruceOS](https://spruceui.github.io), or your own. It has no menu of its own.
 
 **[Installation guide](https://github.com/pvaibhav/BaseOS/wiki/BaseOS-Install-Guide)**
