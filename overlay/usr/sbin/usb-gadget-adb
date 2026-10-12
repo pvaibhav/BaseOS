@@ -1,24 +1,25 @@
 #!/bin/sh
-# Bring up the BaseOS USB gadget once during boot.
+# Bring up the BaseOS USB gadget and recover peripheral-mode disconnects.
 #
 # The optional argument is `setup`; omitting it has the same effect. The script
 # composes the configfs gadget, starts adbd, and performs one bounded initial
-# bind. Run once by init.d/dev.
+# bind, then starts an event-driven recovery helper. Run by init.d/dev.
 #
 # This is an optional convenience and NEVER a boot dependency: there is no
 # `set -e`, every failure path exits 0 silently, and every wait is a bounded
-# loop. If the kernel USB bits or the hardware are absent the whole thing is a
+# loop. The recovery helper blocks on kernel events while idle.
+# If the kernel USB bits or the hardware are absent the whole thing is a
 # no-op. init.d/dev launches setup backgrounded so it never serialises boot.
 #
-# The sunxi OTG role manager clears the gadget's UDC binding on disconnect and
-# may select host role when a cable is attached later. BaseOS deliberately does
-# not run a reconnect helper or force the role: this shared port must remain
-# available for intentional USB-host peripherals. The supported contract is to
-# connect the host cable before powering on. After a disconnect, reboot with the
-# cable connected to restore adb.
+# The sunxi OTG role manager clears the gadget's UDC binding on disconnect,
+# including light sleep on some H700 kernels. The recovery helper only restores
+# an existing gadget when the safe otg_role status reports usb_device. It never
+# selects a role: intentional host use and unknown roles are left alone.
+# A later cable attach can still select host mode; recovery does not override it.
 #
 # CRITICAL sunxi trap (measured on rg40xxv, 4.9.170): the role manager's role
-# attributes must NOT be touched by this script.
+# controls must NOT be touched by this script or the recovery helper.
+# Reading otg_role (status only) is safe; the helper uses that to gate recovery.
 #   * Writing usbc0/otg_role (e.g. "usb_device") wedges the writer in an
 #     uninterruptible (D) kernel state forever — reproduced both with and
 #     without a gadget bound — so a boot script that wrote it would leak a
@@ -36,6 +37,7 @@
 SYS="${BASEOS_SYS_ROOT:-/sys}"
 FFS_DIR="${BASEOS_FFS_DIR:-/dev/usb-ffs/adb}"
 ADBD="${BASEOS_ADBD:-/usr/sbin/adbd}"
+WATCHER=/usr/sbin/usb-gadget-watch
 STORAGE_DEVICE_FILE="${BASEOS_STORAGE_DEVICE_FILE:-/run/usb-storage-device}"
 MOUNTS="${BASEOS_PROC_MOUNTS:-/proc/mounts}"
 
@@ -71,6 +73,15 @@ gadget_is_bound() {
 	bound_udc=
 	[ -r "$GADGET/UDC" ] && IFS= read -r bound_udc < "$GADGET/UDC"
 	[ -n "$bound_udc" ]
+}
+
+start_watcher() {
+	[ -z "$TEST_MODE" ] || return 0
+	[ -x "$WATCHER" ] || return 0
+	# The helper holds a lifetime flock, so repeated setup cannot duplicate it.
+	# Setup can also run from an interactive ADB/SSH session. Keep recovery
+	# alive when that session disconnects, and do not retain its input.
+	(trap '' HUP; exec "$WATCHER") </dev/null >/dev/null 2>&1 &
 }
 
 storage_status() {
@@ -129,6 +140,7 @@ do_setup() {
 	# Idempotent re-entry (suspend/resume, manual re-run): a gadget that is
 	# already bound to a UDC is left completely alone.
 	if [ -d "$GADGET" ] && gadget_is_bound; then
+		start_watcher
 		return 0
 	fi
 
@@ -270,6 +282,7 @@ do_setup() {
 			storage_status failed
 		fi
 	fi
+	start_watcher
 }
 
 case "${1:-setup}" in

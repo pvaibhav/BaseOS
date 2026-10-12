@@ -236,6 +236,7 @@ python3 tests/test-strip-gpu-module.py
 ./tests/test-update-apply.sh
 ./tests/test-boot-menu-held.sh
 ./tests/test-usb-gadget-adb.sh
+./tests/test-usb-gadget-watch.sh
 ./tests/test-usb-storage-mode.sh
 ./tests/test-axp-off.sh
 ./tests/test-power-intent.sh

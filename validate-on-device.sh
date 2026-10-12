@@ -82,6 +82,7 @@ chk "keymon running"                   "pidof keymon.elf"
 
 echo "=== dev services ==="
 chk "sftp-server present + executable"  "test -x /usr/libexec/sftp-server"
+chk "USB recovery listener running"      "pidof usb-gadget-watch"
 chk "adbd running"                      "pidof adbd"
 chk "adb has no TCP 5555 listener"       "! netstat -lnt 2>/dev/null | grep -q ':5555 '"
 # The adb gadget is bound to the always-present UDC; device (peripheral) mode is
@@ -89,7 +90,7 @@ chk "adb has no TCP 5555 listener"       "! netstat -lnt 2>/dev/null | grep -q '
 # force usbc0/otg_role — writing it wedges the writer in D-state on this vendor
 # kernel, and its siblings usb_device/usb_host/usb_null are read-triggers that
 # switch the role on cat. So the check is "gadget bound", not "role == device".
-chk "adb gadget bound (g1/UDC)"         "test -s /sys/kernel/config/usb_gadget/g1/UDC"
+chk "adb gadget bound (g1/UDC)"         "test -n \"\$(cat /sys/kernel/config/usb_gadget/g1/UDC)\""
 chk "functionfs mounted"                "grep -q functionfs /proc/mounts"
 
 echo "=== resources ==="

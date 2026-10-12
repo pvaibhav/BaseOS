@@ -47,6 +47,7 @@ if [ ! -x "$HERE/work/tools/busybox" ] \
   || [ ! -x "$HERE/work/tools/gptslot" ] \
   || [ ! -x "$HERE/work/tools/sftp-server" ] \
   || [ ! -x "$HERE/work/tools/adbd" ] \
+  || [ ! -x "$HERE/work/tools/usb-gadget-watch" ] \
   || [ ! -x "$HERE/work/tools/avahi-daemon" ] \
   || [ ! -x "$HERE/work/tools/boot-clock" ] \
   || ! "$HERE/tools/tools-stamp.sh" | cmp -s - "$HERE/work/tools/.stamp"; then

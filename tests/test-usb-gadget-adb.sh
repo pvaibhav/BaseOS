@@ -3,7 +3,9 @@ set -eu
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT="$HERE/overlay/usr/sbin/usb-gadget-adb"
-TMP="$(mktemp -d)"
+: "${TMPDIR:=$HERE/work/test-tmp}"
+mkdir -p "$TMPDIR"
+TMP="$(mktemp -d "$TMPDIR/usb-gadget.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 : > "$TMP/mounts-empty"
 

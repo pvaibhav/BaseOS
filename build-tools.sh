@@ -9,6 +9,7 @@
 #   work/tools/gptgrow        (grow last GPT partition on first boot)
 #   work/tools/gptslot        (A/B root-slot geometry + flip for updates)
 #   work/tools/charger-wait   (blocking charger recovery input)
+#   work/tools/usb-gadget-watch (event-driven peripheral binding recovery)
 #   work/tools/boot-clock     (H700 hardware-counter boot-stage timing)
 #   work/tools/axp-off        (cut power at the PMIC; rcK's last step)
 #   work/tools/sftp-server    (OpenSSH sftp subsystem child for dropbear)
@@ -23,8 +24,6 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/tools/docker-platform.sh"
 TOOLS="$HERE/work/tools"
 mkdir -p "$TOOLS"
-# Do not let an obsolete reconnect helper linger in a reused tools directory.
-rm -f "$TOOLS/usb-gadget-watch"
 
 docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" -v "$TOOLS":/out alpine:3.20 sh -euc '
   apk add -q busybox-static
@@ -98,7 +97,8 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   gcc -static -O2 -Wall -Wextra -o /out/axp-off /src/axp-off.c
   gcc -static -O2 -Wall -Wextra -o /out/charger-wait /src/charger-wait.c
   gcc -static -O2 -Wall -Wextra -o /out/boot-clock /src/boot-clock.c
-  strip /out/axp-off /out/charger-wait /out/boot-clock
+  gcc -static -O2 -Wall -Wextra -Werror -o /out/usb-gadget-watch /src/usb-gadget-watch.c
+  strip /out/axp-off /out/charger-wait /out/boot-clock /out/usb-gadget-watch
 '
 
 # sftp-server: dropbear 2024.85 ships the sftp subsystem execing
@@ -211,6 +211,9 @@ file "$TOOLS/busybox" "$TOOLS/dropbearmulti" "$TOOLS/curl" \
   "$TOOLS/fbsplash" "$TOOLS/gptgrow" "$TOOLS/gptslot" "$TOOLS/sftp-server" \
   "$TOOLS/adbd" "$TOOLS/axp-off" "$TOOLS/avahi-daemon" 2>/dev/null || true
 [ -x "$TOOLS/gptslot" ] || { echo "gptslot build did not produce an executable" >&2; exit 1; }
+[ -x "$TOOLS/usb-gadget-watch" ] || { echo "usb-gadget-watch build did not produce an executable" >&2; exit 1; }
+file "$TOOLS/usb-gadget-watch" | grep -q "statically linked" \
+  || { echo "usb-gadget-watch build is not static" >&2; exit 1; }
 [ -x "$TOOLS/charger-wait" ] || { echo "charger-wait build did not produce an executable" >&2; exit 1; }
 [ -x "$TOOLS/axp-off" ] || { echo "axp-off build did not produce an executable" >&2; exit 1; }
 [ -x "$TOOLS/curl" ] || { echo "curl build did not produce an executable" >&2; exit 1; }

@@ -4,10 +4,12 @@
 
 ## Supported behavior
 
-BaseOS enables USB-only adb by default alongside BaseOS's SSH/SFTP service. For reliable adb,
-the data cable must be connected before the handheld is powered on. If the cable is
-disconnected, restart with it connected. BaseOS does not run a reconnect watcher,
-poll the port, force a USB role, or modify the vendor DTB.
+BaseOS enables USB-only adb by default alongside BaseOS's SSH/SFTP service.
+Connect the data cable before power-on for reliable initial role selection.
+An event-driven helper restores a lost gadget binding when the kernel reports
+peripheral (`usb_device`) mode, including after sleep/wake or cable transitions.
+It never forces a USB role or modifies the vendor DTB. If a later attach selects
+host mode instead, restart with the cable connected.
 
 A BaseOS-owned maintenance boot exposes user storage as writable
 USB mass storage. Connect the cable, then hold MENU from power-on. A one-shot state
@@ -43,8 +45,8 @@ leave the sunxi manager in auto mode. Its role-control sysfs files must not be u
 - writing `usbc0/otg_role` wedges the writer permanently in uninterruptible D-state;
 - `usb_device`, `usb_host`, and `usb_null` are read-trigger controls, not status
   files, and merely reading them can switch or wedge the port;
-- reading `otg_role` itself is safe for diagnosis, but BaseOS does not need it for
-  normal operation.
+- reading `otg_role` itself is safe; recovery requires the exact value
+  `usb_device` and leaves host, unknown, or missing role status alone.
 
 With the cable present during power-on, the manager reliably selects peripheral
 mode. A later attach can instead select host mode and source VBUS to the computer;
@@ -63,14 +65,32 @@ and Buildroot non-Android patches plus two local policies:
 The daemon still owns its private smart socket on `127.0.0.1:5037`, so
 `usb-gadget-adb` brings up loopback before launching it. FunctionFS cannot bind until
 `adbd` has supplied its descriptors, so the script performs one bounded initial UDC
-bind loop. That loop handles boot ordering; it is not reconnect machinery.
+bind loop. That loop handles boot ordering; the separate recovery helper handles
+later lost bindings without recomposing functions or changing storage backing.
 
 ## Disconnect and reconnect
 
-On VBUS loss the vendor manager clears `usb_gadget/g1/UDC`. Rebinding cannot
-reliably restore access because a later attach may select host role. Restart
-with the cable connected to restore peripheral access. BaseOS preserves stock
-OTG support and does not run a resident reconnect watcher.
+The vendor manager can clear `usb_gadget/g1/UDC` on disconnect. `adbd` and its
+FunctionFS descriptors usually survive, so restoring the UDC binding is sufficient
+once the controller returns to peripheral mode.
+
+`usb-gadget-watch` subscribes to kernel uevents before checking the initial state.
+USB/UDC events start a ten-second settling window with 250 ms recovery checks.
+Power-supply events can also start recovery when an unbound gadget is already in
+peripheral mode. A fresh disconnect or an event with an unbound gadget renews
+the settling window, so a late replug receives its own recovery time. Events
+from the helper's successful rebind do not extend an active window. Relevant
+events also request an immediate recovery check. After the window expires, the
+helper blocks indefinitely on netlink; it does not poll while idle.
+
+Each recovery checks both the existing gadget binding and the safe `otg_role`
+status. It writes only the UDC attribute, and only in `usb_device` mode. A lifetime
+file lock prevents duplicate listeners when setup is repeated. The helper does
+not restart adbd, expose new functions, or change a mass-storage LUN.
+
+A later attach may select host mode. Recovery deliberately leaves that kernel
+decision alone so USB DACs and other OTG peripherals remain usable. Restart with
+the computer cable connected if the kernel fails to select peripheral mode.
 
 Configfs attribute sizes are synthetic; inspect the contents of `g1/UDC` to
 check whether the gadget is bound.
@@ -104,11 +124,21 @@ selector and gadget reject a whole device when it or any `pN` child remains moun
 ## Validation
 
 Automated checks cover gadget composition, repeat setup, missing UDC, composite
-ADB+storage and storage-only layouts, storage selection, mounted-child rejection, and
-the production AArch64 build. `validate-on-device.sh` checks `adbd`, FunctionFS, the
+ADB+storage and storage-only layouts, storage selection, mounted-child rejection,
+peripheral-only binding recovery, missing role/controller handling, event filtering,
+and the production AArch64 build. `validate-on-device.sh` checks `adbd`, FunctionFS, the
 bound UDC, and absence of a TCP 5555 listener.
 
 RG40XX V hardware validation covers cable-connected startup, root shell and
 checksum-matched file transfer, and TF1 export to macOS with eject/restart.
 Whole-card TF2 behavior still needs real-card validation for enumeration,
 write/eject/restart and partition-table operations.
+
+RG34XX testing of the recovery helper covers restoring a deliberately cleared UDC
+binding, computer-to-DAC and DAC-to-computer transitions while awake, and sleep/wake
+in both roles. Both cable-swap directions also work while asleep, including suspend-to-RAM
+followed by host or peripheral enumeration. Unplugging and reconnecting the
+computer cable during remotely initiated sleep also restores ADB automatically.
+Suspend with an active peripheral UDC throughout still needs separate validation. The tested Google headphone adapter
+(`18d1:5034`) enumerates, but this kernel disables `CONFIG_SND_USB_AUDIO`, so these
+checks establish USB host detection rather than DAC playback.

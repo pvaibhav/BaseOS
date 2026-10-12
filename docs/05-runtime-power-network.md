@@ -140,8 +140,10 @@ see [charger-only boot](11-charger-only-boot.md).
 ## 6. USB access
 
 BaseOS starts USB-only adb in the background through `/etc/init.d/dev`.
-Connect a data cable before power-on; after disconnecting, restart with the
-cable connected. `/data/no-adb` disables adb.
+Connect a data cable before power-on. An event listener restores lost bindings
+only while the kernel reports peripheral mode; it preserves OTG host use. If a
+later attach selects host mode instead, restart with the cable connected.
+`/data/no-adb` disables adb.
 
 Holding MENU during startup selects exclusive USB-storage maintenance mode.
 It exports whole TF2 when present, otherwise TF1's data partition, and keeps

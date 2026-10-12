@@ -87,8 +87,9 @@ Omitted settings use their defaults. Lines starting with `#` are comments;
 
 ## USB access
 
-For adb, connect a data-capable USB-C cable before powering on. If adb stops
-working after unplugging it, restart with the cable connected.
+For adb, connect a data-capable USB-C cable before powering on. BaseOS restores
+lost USB bindings when the kernel returns to device mode. If a later cable attach
+selects host mode instead, restart with the computer cable connected.
 
 For USB storage, hold **MENU** while connecting the cable. If the handheld
 doesn't start automatically, hold Power for 3–4 seconds. Release Power when it
