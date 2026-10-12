@@ -40,6 +40,8 @@ python3 "$HERE/tools/kernel_gzip.py" prepare "$TARGET" "$WORK/boot-prefix.img" "
 
 # Every released rootfs must contain the module built for this exact vendor kernel.
 "$HERE/build-audio-module.sh" "$TARGET"
+# Kernels without the vendor USB audio driver get verified modules for it.
+"$HERE/build-usb-audio-modules.sh" "$TARGET"
 
 docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   -v "$WORK":/work -v "$TOOLS":/tools:ro \
@@ -90,6 +92,10 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   rm -f "$R"/usr/lib/aarch64-linux-gnu/alsa-lib/*.a "$R"/usr/lib/aarch64-linux-gnu/alsa-lib/*.la
   # The build is mandatory: do not silently ship only its userspace loader.
   install -m 644 /work/audio-module/h700_speaker_amp.ko "$R/usr/lib/modules/h700_speaker_amp.ko"
+  # Present only for kernels built without the USB audio driver.
+  for module in /work/usb-audio/*.ko; do
+    [ ! -f "$module" ] || install -m 644 "$module" "$R/usr/lib/modules/"
+  done
 
   # flat module paths used by rcS / setBluetooth.sh
   [ ! -f "$R/usr/lib/modules/4.9.170/kernel/drivers/net/wireless/rtl8821cs/8821cs.ko" ] \

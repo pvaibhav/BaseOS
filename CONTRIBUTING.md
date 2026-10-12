@@ -166,6 +166,13 @@ GPIO and ASoC layouts before updating that profile; a matching release string
 or exported-symbol CRC alone is insufficient. See
 [audio behavior and validation](docs/05-runtime-power-network.md#speaker-and-headphone-pop-repair).
 
+`build-rootfs.sh` also runs `build-usb-audio-modules.sh <target>`. For vendor
+kernels without the USB audio driver it builds `snd-usb-audio` and its helper
+modules with the same compiler and kernel source, and checks them against the
+target's recovered symbol versions. Targets with the same vendor configuration
+share one build under `work/usb-audio-build/`. See
+[USB audio](docs/05-runtime-power-network.md#usb-audio).
+
 ## Tracking a new vendor firmware
 
 Each target pins a specific vendor firmware through its committed `source.json`, so
@@ -216,6 +223,7 @@ python3 tests/test-prepared-cache.py
 ./tests/test-h700-speaker-amp-load.sh
 python3 tests/test-audio-gating.py
 python3 tests/test-audio-module.py
+python3 tests/test-usb-audio-modules.py
 ./tests/test-baseos-mdns.sh
 ./tests/test-boot-splash-policy.sh
 ./tests/test-frontend-session.sh

@@ -109,6 +109,34 @@ must also check audible start/stop behavior, headphone insertion/removal,
 suspend/resume and the additional boot cost on each target. A successful
 cross-build does not establish those hardware results.
 
+### USB audio
+
+Six targets have vendor kernels without the USB audio class driver: RG28XX,
+RG34XX, RG35XX H, RG35XX Pro, RG35XX SP and RG CubeXX. Their kernels set
+`CONFIG_SND_USB=y` but not `CONFIG_SND_USB_AUDIO`. For these targets, the
+rootfs includes `snd-hwdep.ko`, `snd-usbmidi-lib.ko` and `snd-usb-audio.ko`,
+built from the vendor kernel configuration with `CONFIG_SND_USB_AUDIO=m`.
+The other targets have the driver built in and ship no modules.
+
+`rcS` loads the three modules in dependency order in the background, so the
+frontend does not wait for them. A USB DAC or headset that is connected in
+OTG host mode then shows up as an additional ALSA card after the built-in
+cards. See [USB adb and OTG](08-usb-adb-and-otg.md) for USB role selection.
+
+`build-usb-audio-modules.sh` builds the modules once for each distinct vendor
+configuration, which is one build for these six targets. It then checks the
+modules against each target's own kernel. The check rejects:
+
+- a configuration change, other than the USB audio options, caused by
+  enabling the driver;
+- a vermagic or `struct module` layout that differs from the vendor modules;
+- an import without a symbol version, or with a version that the kernel or an
+  earlier module does not export;
+- a module dependency that is missing or that loads later;
+- an export that the kernel already provides.
+
+Validated on RG34XX with USB headphones.
+
 ## 4. Bluetooth audio
 
 `rtk_hciattach` attaches the controller UART. The `systemctl` shim starts D-Bus

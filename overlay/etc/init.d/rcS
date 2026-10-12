@@ -55,6 +55,14 @@ fi
 # background to overlap startup; frontend-session waits for /dev/mali0.
 /sbin/insmod /lib/modules/mali_kbase.ko 2>/dev/null &
 
+# USB audio for kernels built without the driver. A DAC is optional, so load
+# in the background; the modules must load in dependency order.
+if [ -f /lib/modules/snd-usb-audio.ko ]; then
+	{ /sbin/insmod /lib/modules/snd-hwdep.ko \
+		&& /sbin/insmod /lib/modules/snd-usbmidi-lib.ko \
+		&& /sbin/insmod /lib/modules/snd-usb-audio.ko; } 2>/dev/null &
+fi
+
 # Persistent state partition (p6, label "userdata"). It survives system
 # updates: an A/B slot flip only moves the rootfs partition.
 /bin/mkdir -p /data
