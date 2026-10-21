@@ -15,6 +15,7 @@ import hashlib
 import os
 from pathlib import Path
 import random
+import signal
 import shutil
 import struct
 import subprocess
@@ -294,6 +295,37 @@ class Diagnostics(unittest.TestCase):
     def assert_private(self, text):
         for secret in ("5c001040f4438852493", "aa:bb:cc:dd:ee:ff", "12:34:56:78:9a:bc", "snum", "serialno"):
             self.assertNotIn(secret, text)
+
+    # ----------------------------------------------------- power diagnostics
+
+    def test_power_report_does_not_poll_peripheral_batteries(self):
+        supplies = self.root / "sys/class/power_supply"
+        # A foreign sysfs read can synchronously request a report from a HID
+        # device. FIFOs with no writer prove these attributes are never opened.
+        for name in ("hid-controller-battery", "external-battery", "usb-controller", "ac-controller"):
+            supply = supplies / name
+            supply.mkdir()
+            for field in ("type", "capacity", "status", "online"):
+                os.mkfifo(supply / field)
+        ac = supplies / "axp2202-ac"
+        ac.mkdir()
+        (ac / "online").write_text("1\n")
+        process = subprocess.Popen(["/bin/busybox", "sh", str(SCRIPT)], env=self.env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, start_new_session=True)
+        try:
+            out, err = process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            # Terminate the shell and its blocked reader, not unrelated tests.
+            os.killpg(process.pid, signal.SIGKILL)
+            process.communicate()
+            self.fail("Diagnostics blocked while reading a peripheral power supply")
+        self.assertEqual(process.returncode, 0, out + err)
+        self.assertIn("battery 62% Discharging", out)
+        self.assertIn("axp2202-usb not connected", out)
+        self.assertIn("axp2202-ac connected", out)
+        for name in ("hid-controller-battery", "external-battery", "usb-controller", "ac-controller"):
+            self.assertNotIn(name, out)
 
     # --------------------------------------------------------- loader line
 
