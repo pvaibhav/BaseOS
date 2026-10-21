@@ -478,9 +478,11 @@ power_now() {
 	for supply in "$ROOT"/sys/class/power_supply/*; do
 		[ -d "$supply" ] || continue
 		name=${supply##*/}
+		# Read only the console PMIC. A peripheral battery read can block
+		# on a synchronous HID report; do not probe foreign nodes, even type.
 		case "$name" in
-		*battery*) line="$line battery $(first_line "$supply/capacity")% $(first_line "$supply/status")," ;;
-		*usb*|*ac*) line="$line $name $( [ "$(first_line "$supply/online")" = 1 ] && echo connected || echo "not connected")," ;;
+		axp2202-battery) line="$line battery $(first_line "$supply/capacity")% $(first_line "$supply/status")," ;;
+		axp2202-usb|axp2202-ac) line="$line $name $( [ "$(first_line "$supply/online")" = 1 ] && echo connected || echo "not connected")," ;;
 		esac
 	done
 	echo "${line%,}"
