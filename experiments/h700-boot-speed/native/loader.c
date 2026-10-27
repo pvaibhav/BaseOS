@@ -187,9 +187,15 @@ __attribute__((noinline)) int baseos_prepare_logo(void *tree)
     int early = baseos_native_display_state();
     /* Never promise warm ownership for pixels that are not actually scanned out. */
     if (early <= 0) return -1;
+    const struct baseos_native_logo *logo = (void *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS;
+    const unsigned char *bmp = (void *)BASEOS_NATIVE_LOGO_BMP_ADDRESS;
+    unsigned columns = logo->bytes ? baseos_logo_le32(bmp + 18) : BASEOS_LOGO_WIDTH;
+    unsigned rows = logo->bytes ? baseos_logo_le32(bmp + 22) : BASEOS_LOGO_HEIGHT;
+    if (rows >> 31) rows = 0u - rows;
+    unsigned left = (BASEOS_LOGO_WIDTH - columns) / 2, top = (BASEOS_LOGO_HEIGHT - rows) / 2;
     char description[72];
     const uint32_t fields[] = {BASEOS_NATIVE_LOGO_PIXEL_ADDRESS, BASEOS_LOGO_WIDTH,
-        BASEOS_LOGO_HEIGHT, 32, BASEOS_LOGO_WIDTH * 4, 0, 0, BASEOS_LOGO_WIDTH, BASEOS_LOGO_HEIGHT};
+        BASEOS_LOGO_HEIGHT, 32, BASEOS_LOGO_WIDTH * 4, left, top, left + columns, top + rows};
     unsigned used = 0;
     for (unsigned i = 0; i < 9; i++) {
         if (i) description[used++] = ',';
@@ -205,7 +211,6 @@ __attribute__((noinline)) int baseos_prepare_logo(void *tree)
     if (display < 0 || fdt_setprop_u32(tree, display, "boot_disp", BASEOS_DISPLAY_BOOT_DISP) ||
         fdt_setprop_u32(tree, display, "boot_disp1", BASEOS_DISPLAY_BOOT_DISP1) ||
         fdt_setprop_u32(tree, display, "boot_disp2", BASEOS_DISPLAY_BOOT_DISP2)) return -1;
-    const struct baseos_native_logo *logo = (void *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS;
     if (logo->bytes && fdt_setprop_string(tree, display, "boot_fb0", description)) return -1;
     return 1;
 }

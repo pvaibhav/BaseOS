@@ -41,7 +41,7 @@ def fdt_reservations(blob):
 
 
 def logo_pixels(bmp, width, height):
-    """Independent BMP reference with centered, opaque black canvas padding."""
+    """Independent BMP reference with stock's zero-filled canvas padding."""
     offset = struct.unpack_from("<I", bmp, 10)[0]
     columns = struct.unpack_from("<i", bmp, 18)[0]
     stored_height = struct.unpack_from("<i", bmp, 22)[0]
@@ -50,7 +50,7 @@ def logo_pixels(bmp, width, height):
     stride = (columns * 3 + 3) & ~3
     assert offset + stride * rows <= len(bmp)
     left, top = (width - columns) // 2, (height - rows) // 2
-    pixels = bytearray(b"\0\0\0\xff" * (width * height))
+    pixels = bytearray(width * height * 4)
     for y in range(rows):
         row_index = y if stored_height < 0 else rows - 1 - y
         row = bmp[offset + row_index * stride:offset + row_index * stride + columns * 3]
@@ -132,7 +132,11 @@ def verify_logo(machine, sym, manifest, tree, directory):
             props = {(p, n): v for p, n, _, v in fdt.walk(actual_tree)}
             changed = {key for key in original_properties.keys() | props.keys() if original_properties.get(key) != props.get(key)}
             assert changed == {(display, "boot_fb0")}, (name, changed)
-            assert props[display, "boot_fb0"] == description.encode() + b"\0"
+            columns, stored_rows = struct.unpack_from("<ii", payload, 18)
+            rows = abs(stored_rows)
+            left, top = (width - columns) // 2, (height - rows) // 2
+            fields = (pixel_address, width, height, 32, width * 4, left, top, left + columns, top + rows)
+            assert props[display, "boot_fb0"] == ",".join(f"{v:x}" for v in fields).encode() + b"\0"
             assert all(props[display, n] == struct.pack(">I", v) for n, v in manifest["early_display"]["handoff"].items())
             assert props["/chosen", "bootargs"] == original_properties["/chosen", "bootargs"]
             assert f"disp_reserve={width * height * 4},0x{pixel_address:x}".encode() in props["/chosen", "bootargs"].split()

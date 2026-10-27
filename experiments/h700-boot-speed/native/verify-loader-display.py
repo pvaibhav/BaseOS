@@ -420,7 +420,10 @@ class Run:
         for key, value in handoff.items():
             assert props[display, key] == struct.pack(">I", value), key
         assert props["/chosen", "baseos,boot-display"] == record
-        fields = (PIXELS, width, height, 32, width * 4, 0, 0, width, height)
+        columns, stored_rows = struct.unpack_from("<ii", bmp, 18)
+        rows = abs(stored_rows)
+        left, top = (width - columns) // 2, (height - rows) // 2
+        fields = (PIXELS, width, height, 32, width * 4, left, top, left + columns, top + rows)
         if fault == "no-logo":
             assert (display, "boot_fb0") not in props
         else:

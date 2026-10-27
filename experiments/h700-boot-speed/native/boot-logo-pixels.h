@@ -9,7 +9,7 @@ static inline uint32_t baseos_logo_le32(const unsigned char *p)
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
 }
 
-/* BMP orientation is physical; center smaller artwork on an opaque black canvas. */
+/* BMP orientation is physical; stock centers artwork on a zero-filled canvas. */
 static inline int baseos_logo_pixels(const unsigned char *bmp, uint32_t bytes,
                                      uint32_t width, uint32_t height,
                                      uint32_t *pixels, size_t capacity)
@@ -30,7 +30,7 @@ static inline int baseos_logo_pixels(const unsigned char *bmp, uint32_t bytes,
     if (rows * stride > bytes - offset) return 0;
     uint32_t left = (width - columns) / 2, top = (height - rows) / 2;
     if (columns != width || rows != height)
-        for (uint32_t i = 0; i < width * height; ++i) pixels[i] = 0xff000000u;
+        for (uint32_t i = 0; i < width * height; ++i) pixels[i] = 0;
     for (uint32_t y = 0; y < rows; y++) {
         const unsigned char *row = bmp + offset + (top_down ? y : rows - 1 - y) * stride;
         for (uint32_t x = 0; x < columns; x++) {

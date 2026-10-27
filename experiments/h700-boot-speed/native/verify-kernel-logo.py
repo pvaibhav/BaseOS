@@ -303,10 +303,16 @@ def generated_case(directory,dtb_path,pixel_path,warm=False):
  manifest=json.loads((directory/'manifest.json').read_text())
  ram=struct.unpack('>QQ',props['/memory@40000000','reg'])[1]
  physical_address=0x40000000+ram-manifest['boot_logo']['framebuffer_from_ram_end']
- expected=[physical_address,width,height,32,width*4,0,0,width,height]
- assert numbers==expected,('boot_fb0 does not describe the owned full-frame ARGB32 source',numbers,expected)
+ expected=[physical_address,width,height,32,width*4]
+ assert numbers[:5]==expected,('boot_fb0 does not describe the stock ARGB32 source',numbers,expected)
+ left,top,right,bottom=numbers[5:]
+ assert 0<=left<right<=width and 0<=top<bottom<=height,'invalid stock crop'
  assert len(pixels)==width*height*4,'pixel byte count differs from geometry'
- assert all(pixels[i]==255 for i in range(3,len(pixels),4)),'pixel alpha must be opaque'
+ for y in range(height):
+  for x in range(width):
+   pixel=pixels[(y*width+x)*4:(y*width+x+1)*4]
+   if left<=x<right and top<=y<bottom:assert pixel[3]==255,'artwork alpha must be opaque'
+   else:assert pixel==bytes(4),'unused stock canvas must be zero'
  reserved=reservations(blob)
  assert not any(base<numbers[0]+len(pixels) and numbers[0]<base+length for base,length in reserved),'source must not be permanently FDT-reserved'
  commandlines=[v.rstrip(b'\0').decode('ascii') for (path,name),v in props.items() if name=='bootargs']
@@ -317,7 +323,7 @@ def generated_case(directory,dtb_path,pixel_path,warm=False):
  assert markers==[generation],'FDT native generation differs from manifest'
  if warm:warm_status=validate_warm_status(directory,props,display,pixels)
  else:assert ('/chosen','baseos,boot-display') not in props,'cold FDT carries warm display status'
- result=run_case(directory,width,height,pixels=pixels,property_value=raw,warm=warm,legacy_reserve=True,physical_address=physical_address)
+ result=run_case(directory,width,height,pixels=pixels,property_value=raw,warm=warm,legacy_reserve=True,physical_address=physical_address,crop=tuple(numbers[5:]))
  result.update(input_mode='generated-fdt-and-pixels',fdt_path=str(dtb_path.resolve()),
                fdt_sha256=sha(blob),pixels_path=str(pixel_path.resolve()),
                manifest_sha256=sha((directory/'manifest.json').read_bytes()),generation=manifest['generation'],
