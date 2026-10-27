@@ -18,9 +18,10 @@ GENERATION = bytes.fromhex("33dc8a21142807a21e6f9dc5ae861b37a9f55337705c0ae86495
 DISPLAY = "sys/firmware/devicetree/base/chosen/baseos,boot-display"
 
 
-def display_record(panel, generation=GENERATION):
+def display_record(panel, generation=GENERATION, blank=False):
     """The loader's 80-byte display record, as the A32 loader publishes it."""
-    record = bytearray(struct.pack("<8I", 0x31505344, 1, 80, 0, panel, 921654, 0x12345678, 0x9abcdef0))
+    record = bytearray(struct.pack("<8I", 0x31505344, 1, 80, 0, panel,
+                                   0 if blank else 921654, 0 if blank else 0x12345678, 0x9abcdef0))
     record += generation + struct.pack("<Q2I", 36312000, 0, 0)
     value = 2166136261
     for byte in record:
@@ -86,6 +87,17 @@ def main():
         finally:
             boot.close()
         print("PASS: native acceptance precedes updater", reboot_at)
+
+    boot = boot_fixture(args, mode="0", UPDATE_REBOOT_AT="boot-check")
+    try:
+        boot.write(DISPLAY, display_record(0, blank=True))
+        boot.start()
+        assert boot.proc.wait(timeout=4) == 0, boot.calls()
+        assert "usr/sbin/native-health --accept\n" in boot.calls()
+        assert boot.read("run/reboot-requested") == "boot-check"
+    finally:
+        boot.close()
+    print("PASS: a lit blank framebuffer passes startup acceptance")
 
     for fault in ("wrong-panel", "foreign-record", "duplicate-token", "missing-token"):
         boot = boot_fixture(args, mode="0")

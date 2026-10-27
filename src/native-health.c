@@ -116,7 +116,8 @@ static uint32_t le32(const uint8_t *bytes)
 
 /* The panel the loader drove this boot, from its display record (the A32
  * loader's struct baseos_native_display, little-endian). 0 old, 1 boe,
- * -1 no record (no logo was shown), -2 a record that cannot be trusted. */
+ * -1 no record, -2 a record that cannot be trusted. A zero-length logo means
+ * the loader lit the stock blank framebuffer. */
 static int loader_panel(const uint8_t running[32])
 {
     uint8_t record[DISPLAY_BYTES + 1];
@@ -140,7 +141,9 @@ static int loader_panel(const uint8_t running[32])
     for (size_t i = 64; i < 72; i++) shown |= record[i];
     for (size_t i = 72; i < 80; i++) reserved |= record[i];
     if (le32(record) != DISPLAY_MAGIC || le32(record + 4) != 1 || le32(record + 8) != DISPLAY_BYTES ||
-        le32(record + 12) != hash || panel > 1 || le32(record + 20) < 54 || !shown || reserved ||
+        le32(record + 12) != hash || panel > 1 ||
+        (le32(record + 20) && le32(record + 20) < 54) ||
+        (!le32(record + 20) && le32(record + 24)) || !shown || reserved ||
         memcmp(record + 32, running, 32)) return -2;
     return (int)panel;
 }

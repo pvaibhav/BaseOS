@@ -333,6 +333,12 @@ int main(int argc, char **argv)
         initialize(); put_file("boot-mode", "1\n", 2); put_record(1, generation);
         put_file("cmdline", "quiet\tlcd_type=boe\tloglevel=0\n", sizeof("quiet\tlcd_type=boe\tloglevel=0\n") - 1);
         assert(run(panel_modes[i]) == 0);
+        /* A lit blank framebuffer still authenticates the chosen panel. */
+        initialize(); put_file("boot-mode", "1\n", 2);
+        uint8_t blank[80]; make_record(blank, 0, generation);
+        memset(blank + 20, 0, 8); seal_record(blank);
+        put_file("display-record", blank, sizeof(blank));
+        assert(run(panel_modes[i]) == 0);
         if (!strcmp(panel_modes[i], "--check")) unchanged();
         else assert(change_count == 3 && !rtc[0x138 / 4] && !rtc[0x13c / 4] && !timer[WDT_MODE]);
         /* No logo, no record: the loader's own lcd_type stands. */
