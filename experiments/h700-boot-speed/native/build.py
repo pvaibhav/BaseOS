@@ -41,6 +41,14 @@ def toc_items(package):
     return result
 
 
+def vendor_version_message(code):
+    """Use the pinned build's literals used by the vendor command-line builder."""
+    matches = list(re.finditer(rb"(\d{2}/\d{2}/\d{4})\0(2018\.05)\0 uboot_message=%s\(%s-%s\)\0(\d{2}:\d{2}:\d{2})\0", code))
+    assert len(matches) == 1, "vendor version-message literals changed"
+    date, version, time = (value.decode("ascii") for value in matches[0].groups())
+    return f"uboot_message={version}({date}-{time})"
+
+
 def model_policy(target, inventory):
     compatibility = json.loads((HERE.parent / "evidence/compatibility.json").read_text())["targets"]
     contract = compatibility[target]
@@ -86,7 +94,8 @@ def model_policy(target, inventory):
     assert "${" not in command and "disp_reserve=" not in command
     command += (" androidboot.mode=normal androidboot.serialno=@SERIAL@"
                 " androidboot.hardware=sun50iw9p1 boot_type=1 androidboot.boot_type=1"
-                " androidboot.secure_os_exist=0 gpt=1 bootreason=@BOOTREASON@ lcd_type=@PANEL@ @ANDROID@")
+                " androidboot.secure_os_exist=0 gpt=1 " + vendor_version_message(toc_items(package)["u-boot"]) +
+                " bootreason=@BOOTREASON@ lcd_type=@PANEL@ @ANDROID@")
     strap = contract["vendor_pe6_lcd_type"]
     rule = {("old", "old"): 0, ("boe", "boe"): 1, ("old", "boe"): 2}[strap["high"], strap["low"]]
     panel_contract = json.loads((HERE / "panel-contract.json").read_text())
