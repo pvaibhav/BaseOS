@@ -615,7 +615,7 @@ def verify(directory, inventory, spl=None, prepared_source=False):
     low_panel = "old" if manifest["panel_rule"] == 0 else "boe"
     assert "disp_reserve=" not in command and "lcd_type=" + low_panel in command.split()
     assert ("maxcpus=1" in command.split()) == (manifest.get("diagnostic_maxcpus") == 1)
-    assert properties["/soc@03000000/hdmi@06000000", "status"] == b"late\0"
+    assert properties["/soc@03000000/hdmi@06000000", "status"] == b"okay\0"
     offset = 2048
     parts = []
     for field in (8, 16, 24, 1632, 1648):
@@ -638,7 +638,7 @@ def verify(directory, inventory, spl=None, prepared_source=False):
     allowed = {(path, name) for path, name in properties if path == "/dram"}
     allowed |= {("/chosen", name) for name in ("bootargs", "linux,initrd-start", "linux,initrd-end",
                                                "baseos,native-boot", "baseos,native-timing")}
-    allowed |= {("/memory@40000000", "reg"), ("/soc@03000000/hdmi@06000000", "status")}
+    allowed |= {("/memory@40000000", "reg")}
     changed = {key for key in source_properties.keys() | properties.keys() if source_properties.get(key) != properties.get(key)}
     assert changed <= allowed, changed - allowed
     assert all(value == bytes(len(value)) for (path, name), value in properties.items()

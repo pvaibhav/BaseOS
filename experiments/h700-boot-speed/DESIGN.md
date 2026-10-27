@@ -175,13 +175,30 @@ tree: five late USB statuses, auto_print disabled and debug_mode zero. The
 initial embedded-tree assumption was incorrect. The native loader still owns
 the final FDT it actually passes to Linux. Preserve every unmodified
 property, the first-24-word legacy `/dram` name order, 64-bit memory base/size,
-initrd extents and late USB/HDMI behavior. Derive serial from the vendor SID
+initrd extents and late USB behavior. Leave the HDMI node's stock `okay`
+status alone (see "HDMI on native starts" below). Derive serial from the vendor SID
 words and panel choice from model policy: RG28 old, Cube boe, others PE6.
 Generate environment-derived fixed bootargs and preserve dynamic values from
 their actual hardware sources. The no-logo path advertises no boot framebuffer
 or `disp_reserve`. Stamp generation and stage timings in the final kernel FDT.
 The final call is A32 `r0=0x8000ff04`, `r1=0x40080000`, `r2=0x44000000`,
 `r3=1`, with interrupts masked and caches/MMU cleaned and disabled.
+
+### HDMI on native starts
+
+1.5.1 and 1.5.2 set the HDMI node's status to `late` in the tree they passed
+to Linux, carried over from the earlier fast-path prototype, but no release
+shipped anything to start it later. On every native start HDMI did not exist:
+no extcon state for the frontend to read, so a plugged-in TV did nothing.
+Stock-loader starts kept `okay` and worked, so whether a unit had HDMI depended
+on which loader started it. A module that starts the device later is not
+enough: the vendor display driver registers its HDMI output during its own
+startup only if the status then reads exactly `okay` (`disp_init_hdmi`), and
+the HDMI driver's later registration only looks up that existing output.
+
+The loader now leaves the prepared tree's `okay` in place, and `native/verify.py`
+requires it. The stock kernel's HDMI start took about 3.7 ms in an instrumented
+boot (`evidence/kernel-initcalls-full.dmesg`).
 
 ### Zero-tuned LPDDR4 banks (1.5.2)
 

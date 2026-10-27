@@ -291,9 +291,8 @@ int baseos_prepare_kernel(void)
         fdt_add_mem_rsv(tree, 0x42000000, initrd_bytes) ||
         fdt_setprop(tree, chosen, "baseos,native-boot", record->generation, 32)) return 9;
     if (baseos_prepare_logo(tree) < 0) return 13;
-    /* Image input carries BaseOS's late USB policy; retain the proved HDMI deferral. */
-    int hdmi = fdt_path_offset(tree, "/soc@03000000/hdmi@06000000");
-    if (hdmi >= 0 && fdt_setprop_string(tree, hdmi, "status", "late")) return 10;
+    /* Image input carries BaseOS's late USB policy. HDMI keeps its stock "okay": the
+     * display driver registers its HDMI output at startup only for that exact string. */
     times[5] = native_ticks();
     times[6] = native_ticks();
     chosen = fdt_path_offset(tree, "/chosen");
