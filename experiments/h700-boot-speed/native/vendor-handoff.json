@@ -1,0 +1,131 @@
+{
+  "derivation": "actual vendor reserve/initr_malloc/env hash table/display/FAT/boot sequence, with and without logo",
+  "models": {
+    "rg28xx": {
+      "allocations": {
+        "1073741824": 2079471616,
+        "2147483648": 3153213440
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68012032,
+      "logo_sha256": "4114d700b12c8c76d2cf92e4d06a1a71c3890342af5eafc636252c825eb44959",
+      "package_sha256": "ffabd96eae65a94b0a0dc6ce33db7314688b3ead6169d09553b463a8e58fd490",
+      "prefix_sha256": "7a6639333e662393125a590f94e3b06887362c391bc7df1a26fb77bd6cb2f155"
+    },
+    "rg34xx": {
+      "allocations": {
+        "1073741824": 2079475712,
+        "2147483648": 3153217536
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68007936,
+      "logo_sha256": "0688cf2a9dbe548cd615be49d01c42693c65d7b0850d9ab02890eb9d3dc89f0a",
+      "package_sha256": "56371d984e29e74db63009ce27f829eb0a55ce9007ee5e40c52479b22418af3d",
+      "prefix_sha256": "fb75bc4c835fa74ff41c0a1fdbe79b8871a960fc249716847fb7be529835c3c3"
+    },
+    "rg34xxsp": {
+      "allocations": {
+        "1073741824": 2079475712,
+        "2147483648": 3153217536
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68007936,
+      "logo_sha256": "0688cf2a9dbe548cd615be49d01c42693c65d7b0850d9ab02890eb9d3dc89f0a",
+      "package_sha256": "32f92785f3e0819acbd60776e2ef839c1fd1924b31960b98363a93c85300db7e",
+      "prefix_sha256": "c67f7389d095cb9a013b197eb1f4ad3c1703809472e14218fd27734509b05c8d"
+    },
+    "rg35xxh": {
+      "allocations": {
+        "1073741824": 2079471616,
+        "2147483648": 3153213440
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68012032,
+      "logo_sha256": "9f2559945121bd0ad997954ebbceb24c384da14fb2fc587532dde4e9ba90640d",
+      "package_sha256": "7d4648c429ca5c21b084bb40147b3ababbd0d200bb5a2c2c05beef26902c0c55",
+      "prefix_sha256": "470552ff22954f3ee38a35dea856e66e72c1ae92cd0bd7eb5e3722933e3142dc"
+    },
+    "rg35xxplus": {
+      "allocations": {
+        "1073741824": 2079471616,
+        "2147483648": 3153213440
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68012032,
+      "logo_sha256": "9f2559945121bd0ad997954ebbceb24c384da14fb2fc587532dde4e9ba90640d",
+      "package_sha256": "b3cc7ea963177fb9110e26e7772847b0da084fb275d6e955c1bc7c9103ced8be",
+      "prefix_sha256": "9bab9c48f0888a8b9d1dc306d106f93eaf6313dd0b566abd58e24a718b2dbacc"
+    },
+    "rg35xxpro": {
+      "allocations": {
+        "1073741824": 2079471616,
+        "2147483648": 3153213440
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68012032,
+      "logo_sha256": "9f2559945121bd0ad997954ebbceb24c384da14fb2fc587532dde4e9ba90640d",
+      "package_sha256": "04d64e1772066fdd11e05727e89576b783340dd2b5a1238e9248c5be41a1d605",
+      "prefix_sha256": "596e57cbb9a134328d4bbe7fc0dd69dfaeed413fe8d7747e209a55829d4c4fe2"
+    },
+    "rg35xxsp": {
+      "allocations": {
+        "1073741824": 2079475712,
+        "2147483648": 3153217536
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68007936,
+      "logo_sha256": "9f2559945121bd0ad997954ebbceb24c384da14fb2fc587532dde4e9ba90640d",
+      "package_sha256": "de38acd6633b7012498c121686f93956fbf625b879fffcea5e85ba5e08dd850c",
+      "prefix_sha256": "07e4d9fa0ad10620070072c2893f4f2c0eac19b3bf858915a8456c382a9679ca"
+    },
+    "rg40xxh": {
+      "allocations": {
+        "1073741824": 2079467520,
+        "2147483648": 3153209344
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68016128,
+      "logo_sha256": "9f2559945121bd0ad997954ebbceb24c384da14fb2fc587532dde4e9ba90640d",
+      "package_sha256": "d022ec52d5cd91aee7b9336d45dc7c9f6825573793e6e6175902af37b695aa80",
+      "prefix_sha256": "06aeb355e0f653496933be280d681ecf705e68562247165c4f363ee827bab175"
+    },
+    "rg40xxv": {
+      "allocations": {
+        "1073741824": 2079467520,
+        "2147483648": 3153209344
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68016128,
+      "logo_sha256": "9f2559945121bd0ad997954ebbceb24c384da14fb2fc587532dde4e9ba90640d",
+      "package_sha256": "ea7031f8e64712d9c5a0d8530e4b5b588527f397ebda8239ac4c718c50cd886a",
+      "prefix_sha256": "072382178fa744702bacee52f69fd082f23e4498413da15af5085980991a7616"
+    },
+    "rgcubexx": {
+      "allocations": {
+        "1073741824": 2079471616,
+        "2147483648": 3153213440
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68012032,
+      "logo_sha256": "b7aaeb6b0cb6398f18f27e18c2d2c9f4df66fb51154a9ecedff0efb3a58f1b1b",
+      "package_sha256": "dcd1998046d5174d1f9ffb4e20cbe10fd0e32ce111ef880d9a6d5c9ba6a1e972",
+      "prefix_sha256": "7918b33f1af05930ead9de2f992a085ff0249275618239a621bf2a143c200dfe"
+    },
+    "rgsp": {
+      "allocations": {
+        "1073741824": 2079475712,
+        "2147483648": 3153217536
+      },
+      "environment_sha256": "d1a0856a8fb4c6f3b785943929a59206424a189f92efcbea48c26b31f472a396",
+      "framebuffer_from_ram_end": 68007936,
+      "logo_sha256": "9f2559945121bd0ad997954ebbceb24c384da14fb2fc587532dde4e9ba90640d",
+      "package_sha256": "f6664df7c8960297f2e690c10345220471f37282eb564355df1872fcd855cd15",
+      "prefix_sha256": "be9ce159433dc8b30582353326e860af97201446d27a82480d7bce99ee2c63c5"
+    }
+  },
+  "ram_bytes": [
+    1073741824,
+    2147483648
+  ],
+  "version": 1
+}
