@@ -10,7 +10,7 @@ Each capture contains the full FDT (not a reserialization), call registers,
 and the bytes read at the kernel/initrd addresses. Cached captures are bound
 to their inputs and emulator source hashes; --fresh replays them regardless.
 
-Exit 0: exact parity and both live validations pass. Exit 1: policy defects.
+Exit 0: stock plus the three approved trailing health properties, and both live validations pass. Exit 1: policy defects.
 Exit 2: an unexplained difference, invalid reference, or incomplete replay.
 Known defects are explained, never silently accepted. See ACCEPTED_DIFFERENCES.
 """
@@ -50,10 +50,11 @@ DEFAULT_INPUTS = next((p for p in INPUT_LOCATIONS if p.is_dir()), INPUT_LOCATION
 DEFAULT_LIVE = next((p for p in LIVE_LOCATIONS if (p / "kernel-kallsyms.txt").is_file()), LIVE_LOCATIONS[-1])
 SERIAL = "1c00103dc2840671ed3"
 DISPLAY = "/soc@03000000/disp@01000000"
-MODES = ("early-lit", "no-logo", "logo-only")
+MODES = ("early-lit", "no-logo")
 # No unequal hardware values are acceptable when the hardware inputs are equal.
 # Add an entry only with an exact scope, an owner's accepted reason and a test.
-ACCEPTED_DIFFERENCES: dict[str, str] = {}
+ACCEPTED_DIFFERENCES = {name: "Owner-approved native startup health property, appended after the complete stock tree"
+                        for name in ("baseos,native-boot", "baseos,native-timing", "baseos,boot-display")}
 
 
 def module(name, path):
@@ -153,6 +154,30 @@ def card_logo(card, parts):
     bmp = bytes(result[:size])
     assert bmp[:2] == b"BM" and struct.unpack_from("<I", bmp, 2)[0] == size
     return bmp, entry_at
+
+
+def small_logo_card(card, parts):
+    """Change only BOOTLOGO.BMP to odd-sized artwork in the read-only card model."""
+    _, entry = card_logo(card, parts)
+    bmp = bytearray(90)
+    bmp[:2] = b"BM"
+    struct.pack_into("<I", bmp, 2, len(bmp))
+    struct.pack_into("<IIiiHHII", bmp, 10, 54, 40, 3, 3, 1, 24, 0, 36)
+    for y in range(3):
+        for x in range(3):
+            at = 54 + y * 12 + x * 3
+            bmp[at:at + 3] = bytes((17 + x, 34 + y, 51 + x + y))
+    base = parts["boot-resource"][0]
+    header = card[base:base + 512]
+    word = lambda at: struct.unpack_from("<H", header, at)[0]
+    spc, reserved, fats, roots, sectors = header[13], word(14), header[16], word(17), word(22)
+    cluster = struct.unpack("<H", card[entry + 26:entry + 28])[0]
+    data = base + (reserved + fats * sectors) * 512 + (roots * 32 + 511) // 512 * 512
+    extents = [(entry + 28, struct.pack("<I", len(bmp))), (data + (cluster - 2) * spc * 512, bytes(bmp))]
+    extents += [(base + (reserved + i * sectors) * 512 + cluster * 2, b"\xff\xff") for i in range(fats)]
+    modified = Card(card.extents + extents)
+    assert card_logo(modified, parts)[0] == bytes(bmp)
+    return modified, bytes(bmp)
 
 
 class Stock(TR.Tracer):
@@ -291,6 +316,11 @@ def save_capture(directory, machine, registers, kernel_size, notes):
         (directory / (name + ".bin")).write_bytes(data)
         result[name] = dict(address=address, bytes=len(data), sha256=sha(data))
     result["bootargs"] = props["/chosen", "bootargs"].rstrip(b"\0").decode()
+    token, = [t for t in result["bootargs"].split() if t.startswith("disp_reserve=")]
+    size, address = [int(v, 0) for v in token.split("=", 1)[1].split(",")]
+    pixels = bytes(machine.mem_read(address, size))
+    (directory / "framebuffer.bin").write_bytes(pixels)
+    result["framebuffer"] = dict(address=address, bytes=size, sha256=sha(pixels))
     result["fdt_header"] = list(struct.unpack_from(">10I", tree))
     write_json(directory / "capture.json", result)
     return result
@@ -352,24 +382,11 @@ def native_capture(directory, native, inputs, mode, real_decode, bmp):
     streams = [init["streams"][names[p] or fallback] for p in ("old", "boe")]
     descriptor = struct.pack("<4I", 0x31474f4c, len(bmp), NV.fnv(bmp), 0)
     runner = Native(native, engine, streams, bytes(record), bmp, descriptor, inputs["serial"])
-    runner.run(mode, high=inputs["pe6_high"], fault=None if mode == "early-lit" else "no-logo", unpack=real_decode)
+    runner.run(mode, high=inputs["pe6_high"], fault="no-logo" if mode == "no-logo" else None, unpack=real_decode)
     machine = runner.machine
-    if mode == "logo-only":
-        # The linked logo-only producer is the verifier's non-early path.
-        # No source mutation: run it on the cold FDT after the complete loader.
-        machine.mem_write(NV.DESC, descriptor)
-        machine.mem_write(NV.BMP, bmp)
-        stop = 0x4a0d0000
-        machine.hook_add(u.UC_HOOK_CODE, lambda m, *_: m.emu_stop(), begin=stop, end=stop)
-        machine.reg_write(a.UC_ARM_REG_CPSR, 0x1d3)
-        machine.reg_write(a.UC_ARM_REG_R0, runner.call[2])
-        machine.reg_write(a.UC_ARM_REG_SP, 0x4a0f0000)
-        machine.reg_write(a.UC_ARM_REG_LR, stop)
-        machine.emu_start(runner.sym["baseos_prepare_logo"], stop, count=100000000)
-        assert machine.reg_read(a.UC_ARM_REG_PC) == stop and machine.reg_read(a.UC_ARM_REG_R0) == 1
     result = save_capture(directory, machine, runner.call, len(runner.kernel),
                           dict(mode=mode, real_lz4_decode=real_decode, record_hex=record.hex(),
-                               bmp_sha256=sha(bmp), diagnostic_only=mode == "logo-only",
+                               bmp_sha256=sha(bmp),
                                kernel_entry_registers="BL31 normalization inferred; identical vendor monitor service/arguments"))
     assert result["kernel"]["sha256"] == manifest["kernel_sha256"]
     return result
@@ -383,21 +400,68 @@ def view(value):
     return value.hex()
 
 
+def without_native_metadata(blob):
+    """Undo only trailing /chosen additions and trailing names; never repack a tree.
+
+    Invalid order, offsets, padding or spare bytes are an encoding failure. The
+    returned bytes must equal the stock capture, including its entire capacity.
+    """
+    start, strings, strings_size, structure_size = [struct.unpack_from(">I", blob, at)[0] for at in (8, 12, 32, 36)]
+    pos, stack, additions = start, [], []
+    chosen_closed = False
+    while True:
+        at = pos
+        token = struct.unpack_from(">I", blob, pos)[0]
+        pos += 4
+        if token == 1:
+            end = blob.index(b"\0", pos)
+            stack.append(blob[pos:end].decode())
+            pos = (end + 4) & ~3
+        elif token == 2:
+            if stack == ["", "chosen"]:
+                chosen_closed = True
+            stack.pop()
+        elif token == 3:
+            size, offset = struct.unpack_from(">II", blob, pos)
+            end = blob.index(b"\0", strings + offset)
+            name = blob[strings + offset:end].decode()
+            pos = (pos + 8 + size + 3) & ~3
+            if name in ACCEPTED_DIFFERENCES:
+                assert stack == ["", "chosen"] and not chosen_closed
+                assert size == {"baseos,native-boot": 32, "baseos,native-timing": 56, "baseos,boot-display": 80}[name]
+                assert not any(blob[at + 12 + size:pos])
+                additions.append((at, pos, name, offset))
+            elif additions and not chosen_closed:
+                raise AssertionError("native properties are not trailing /chosen additions")
+        elif token == 4:
+            assert not additions or chosen_closed, "NOP among native additions"
+        elif token == 9:
+            break
+        else:
+            raise AssertionError(f"bad FDT token {token}")
+    assert [a[2] for a in additions] in (["baseos,native-boot", "baseos,native-timing"], list(ACCEPTED_DIFFERENCES))
+    lo, hi = additions[0][0], additions[-1][1]
+    assert all(a[1] == b[0] for a, b in zip(additions, additions[1:]))
+    assert struct.unpack_from(">I", blob, hi)[0] == 2, "native additions are not at the end of /chosen"
+    names = b"".join(a[2].encode() + b"\0" for a in additions)
+    old_strings_size = strings_size - len(names)
+    assert blob[strings + old_strings_size:strings + strings_size] == names
+    cursor = old_strings_size
+    for _, _, name, offset in additions:
+        assert offset == cursor
+        cursor += len(name) + 1
+    assert not any(blob[strings + strings_size:]), "nonzero FDT spare capacity"
+    assert start + structure_size == strings, "gap before strings"
+    result = bytearray(blob[:lo] + blob[hi:strings + old_strings_size])
+    result.extend(bytes(len(blob) - len(result)))
+    for at, value in ((12, strings - (hi - lo)), (32, old_strings_size), (36, structure_size - (hi - lo))):
+        struct.pack_into(">I", result, at, value)
+    return bytes(result)
+
+
 def policy(kind, key):
-    if kind == "property":
-        path, name = key
-        if path == "/chosen" and name in ("baseos,native-boot", "baseos,native-timing", "baseos,boot-display"):
-            return "native-metadata"
-        if path == DISPLAY and name == "boot_fb0":
-            return "framebuffer"
-        if path == DISPLAY and name in ("boot_disp", "boot_disp1", "boot_disp2"):
-            return "display-ownership"
-    if kind == "bootarg" and key in ("uboot_message", "disp_reserve"):
-        return "version-message" if key == "uboot_message" else "framebuffer"
-    if kind == "reservations":
-        return "framebuffer"  # checked against an exact framebuffer reservation below
-    if kind == "encoding":
-        return "fdt-encoding"
+    if kind == "property" and key[0] == "/chosen" and key[1] in ACCEPTED_DIFFERENCES:
+        return "native-metadata"
     return "UNEXPLAINED"
 
 
@@ -406,11 +470,17 @@ def compare(stock_dir, native_dir):
     sb, nb = [(d / "fdt.bin").read_bytes() for d in (stock_dir, native_dir)]
     sp, sn, sr = fdt_description(sb)
     np, nn, nr = fdt_description(nb)
+    try:
+        stock_plus_native = without_native_metadata(nb) == sb
+    except (AssertionError, ValueError, IndexError, struct.error):
+        stock_plus_native = False
     changes, bootargs_edits = [], []
 
     def add(kind, key, before, after, explanation=None):
         changes.append(dict(kind=kind, key=key, stock=before, native=after,
-                            policy=explanation or policy(kind, key), accepted=False))
+                            policy=("native-metadata" if stock_plus_native and kind == "encoding" else explanation or policy(kind, key)),
+                            accepted=stock_plus_native and (kind == "encoding" or
+                                kind == "property" and key[0] == "/chosen" and key[1] in ACCEPTED_DIFFERENCES)))
 
     for path, name in sorted(sp.keys() | np.keys()):
         key = (path, name)
@@ -438,28 +508,22 @@ def compare(stock_dir, native_dir):
     if Counter(sn) != Counter(nn):
         add("nodes", "paths", sorted((Counter(sn) - Counter(nn)).elements()), sorted((Counter(nn) - Counter(sn)).elements()))
     if sr != nr:
-        expected = [entry for entry in nr if entry not in sr]
-        fb = np.get((DISPLAY, "boot_fb0"))
-        owned = None
-        if fb:
-            fields = [int(v, 16) for v in fb.rstrip(b"\0").decode().split(",")]
-            owned = (fields[0], fields[1] * fields[2] * 4)
-        # Never classify an arbitrary reservation delta as a known logo defect.
-        reason = "framebuffer" if expected == [owned] and all(e in nr for e in sr) and nr == sr + expected else "UNEXPLAINED"
-        add("reservations", "memreserve", sr, nr, reason)
+        add("reservations", "memreserve", sr, nr)
     for name in ("r0_r3",):
         if stock[name] != native[name]:
             add("registers", name, stock[name], native[name])
-    for name in ("kernel", "initrd", "fdt"):
+    for name in ("kernel", "initrd", "fdt", "framebuffer"):
         if stock[name]["address"] != native[name]["address"]:
             add("placement", name, stock[name]["address"], native[name]["address"])
         if name != "fdt" and (stock_dir / (name + ".bin")).read_bytes() != (native_dir / (name + ".bin")).read_bytes():
             add("payload", name, stock[name], native[name])
     if sb != nb:
         add("encoding", "full-fdt", stock["fdt"], native["fdt"])
-    return dict(changes=changes, bootargs_token_edits=bootargs_edits, raw_fdt_equal=sb == nb, property_counts=[len(sp), len(np)],
+    return dict(changes=changes, stock_plus_native_metadata=stock_plus_native,
+                bootargs_token_edits=bootargs_edits, raw_fdt_equal=sb == nb, property_counts=[len(sp), len(np)],
                 node_counts=[len(sn), len(nn)], kernel_bytes_equal=(stock_dir / "kernel.bin").read_bytes() == (native_dir / "kernel.bin").read_bytes(),
                 initrd_bytes_equal=(stock_dir / "initrd.bin").read_bytes() == (native_dir / "initrd.bin").read_bytes(),
+                framebuffer_bytes_equal=(stock_dir / "framebuffer.bin").read_bytes() == (native_dir / "framebuffer.bin").read_bytes(),
                 registers_equal=stock["r0_r3"] == native["r0_r3"],
                 fdt_header_changes=[dict(word=i, stock=x, native=y) for i, (x, y) in enumerate(zip(stock["fdt_header"], native["fdt_header"])) if x != y])
 
@@ -489,13 +553,13 @@ def capture_cached(directory, fingerprint, callback, fresh):
     try:
         if not fresh and meta.exists() and json.loads(meta.read_text()) == fingerprint:
             record = json.loads((directory / "capture.json").read_text())
-            if all(sha((directory / (name + ".bin")).read_bytes()) == record[name]["sha256"] for name in ("fdt", "kernel", "initrd")):
+            if all(sha((directory / (name + ".bin")).read_bytes()) == record[name]["sha256"] for name in ("fdt", "kernel", "initrd", "framebuffer")):
                 return record
     except (OSError, ValueError, KeyError):
         pass  # A partial/interrupted cache is reconstructed, never accepted.
     # Payload deduplication is applied after a run. Detach any shared inode
     # before a fresh capture so changed bytes cannot rewrite another case.
-    for name in ("fdt", "kernel", "initrd"):
+    for name in ("fdt", "kernel", "initrd", "framebuffer"):
         path = directory / (name + ".bin")
         if path.exists() and path.stat().st_nlink > 1:
             private = path.with_suffix(".private-tmp")
@@ -514,7 +578,7 @@ def source_hashes():
     # Report prose and classification edits do not invalidate an expensive
     # capture; all code which can change captured bytes remains in the key.
     capture_code = "\n".join(inspect.getsource(obj) for obj in
-                             (environment, gpt, Card, card_logo, Stock, fdt_description, save_capture, stock_capture, Native, native_capture))
+                             (environment, gpt, Card, card_logo, small_logo_card, Stock, fdt_description, save_capture, stock_capture, Native, native_capture))
     hashes["parity_capture_code"] = sha(capture_code.encode())
     hashes["unicorn"] = u.__version__
     hashes["capstone"] = NV.c.__version__
@@ -589,11 +653,30 @@ def run_target(target, options):
                 capture_cached(directory, dict(**stamp, mode=mode, real_decode=real_decode),
                                lambda: native_capture(directory, native, inputs, mode, real_decode, bmp), args.fresh)
                 row = dict(case=case, mode=mode, hardware=inputs, bank_offset=bank["offset"],
-                           diagnostic_only=mode == "logo-only", **compare(reference, directory))
+                           **compare(reference, directory))
                 rows.append(row)
                 write_json(base / (mode + ".diff.json"), row)
+    # One additional equal-input case per model guards transparent canvas bytes
+    # and crop coordinates that full-frame prepared artwork cannot exercise.
+    inputs, case = rows[0]["hardware"], rows[0]["case"]
+    base = args.output / target / case
+    small_card, small_bmp = small_logo_card(card, parts)
+    stamp = dict(provenance={k: v for k, v in provenance.items() if k != "vendor_common_code_check"},
+                 hardware=inputs, logo_variant="centered-3x3", logo_sha256=sha(small_bmp))
+    stock, directory = base / "stock-small-logo", base / "small-logo"
+    capture_cached(stock, stamp, lambda: stock_capture(stock, package, small_card, env, inputs, (native / "kernel.bin").stat().st_size), args.fresh)
+    capture_cached(directory, stamp, lambda: native_capture(directory, native, inputs, "small-logo", False, small_bmp), args.fresh)
+    row = dict(case=case, mode="small-logo", hardware=inputs, **compare(stock, directory))
+    consumer = module("parity_small_logo_consumer", HERE / "verify-kernel-logo.py")
+    raw = fdt.get((directory / "fdt.bin").read_bytes(), DISPLAY, "boot_fb0")
+    fields = [int(value, 16) for value in raw.rstrip(b"\0").decode().split(",")]
+    row["kernel_consumer"] = consumer.run_case(native, fields[1], fields[2],
+        pixels=(directory / "framebuffer.bin").read_bytes(), property_value=raw, legacy_reserve=True,
+        warm=True, physical_address=fields[0], crop=tuple(fields[5:]))
+    rows.append(row)
+    write_json(base / "small-logo.diff.json", row)
     result = dict(target=target, provenance=provenance, cases=rows,
-                  policy_counts=dict(Counter(c["policy"] for row in rows for c in row["changes"])),
+                  policy_counts=dict(Counter(c["policy"] for row in rows for c in row["changes"] if not c["accepted"])),
                   unexplained=sum(c["policy"] == "UNEXPLAINED" for row in rows for c in row["changes"]))
     write_json(args.output / target / "summary.json", result)
     return result
@@ -642,7 +725,7 @@ def validate_live(target, args):
 
 
 def kernel_evidence(args, targets):
-    """Run the existing real-instruction kernel consumer; no verifier edits."""
+    """Replay kernel consumers at both proven addresses, including the blank path."""
     consumer = module("parity_kernel_consumer", HERE / "verify-kernel-logo.py")
     rows = []
     for target in targets:
@@ -654,7 +737,10 @@ def kernel_evidence(args, targets):
                          strings={s: blob.count(s.encode()) for s in
                                   ("uboot_message", "disp_reserve", "boot_fb", "boot_disp", "baseos,native", "baseos,boot-display")},
                          consumer_cases=[consumer.run_case(native, logo["width"], logo["height"], legacy_reserve=legacy, warm=warm)
-                                         for legacy, warm in ((False, False), (True, False), (True, True))]))
+                                         for legacy, warm in ((False, False), (True, False), (True, True))] +
+                         [consumer.run_case(native, logo["width"], logo["height"], present=present, legacy_reserve=True, warm=True,
+                                            physical_address=0x40000000 + ram - logo["framebuffer_from_ram_end"])
+                          for ram in logo["proven_ram_bytes"] for present in (True, False)]))
     kallsyms = args.live_root / "kernel-kallsyms.txt"
     symbols = {}
     for line in kallsyms.read_text().splitlines():
@@ -674,12 +760,15 @@ def difference_gate_self_test(args, result):
     tree = (original / "fdt.bin").read_bytes()
     initrd = (original / "initrd.bin").read_bytes()
     metadata = (original / "capture.json").read_text()
+    assert compare(base / "stock", original)["stock_plus_native_metadata"], "baseline is not stock plus trailing native properties"
     checks = []
     with tempfile.TemporaryDirectory(prefix="gate-", dir=args.output) as temporary:
         native = Path(temporary)
         (native / "kernel.bin").symlink_to((original / "kernel.bin").resolve())
-        for test in ("dram-property", "bootarg", "empty-node", "reservation", "register", "initrd-byte", "kernel-placement"):
+        for test in ("dram-property", "bootarg", "empty-node", "reservation", "register", "initrd-byte", "kernel-placement",
+                     "spare-byte", "native-order", "unapproved-chosen", "framebuffer-byte"):
             blob, payload, meta = bytearray(tree), bytearray(initrd), json.loads(metadata)
+            pixels = bytearray((original / "framebuffer.bin").read_bytes())
             expected_kind = expected_key = None
             if test == "dram-property":
                 value = bytearray(fdt.get(blob, "/dram", "dram_clk")); value[-1] ^= 1
@@ -710,11 +799,29 @@ def difference_gate_self_test(args, result):
             elif test == "initrd-byte":
                 payload[0] ^= 1
                 expected_kind, expected_key = "payload", "initrd"
-            else:
+            elif test == "kernel-placement":
                 meta["kernel"]["address"] ^= 64
                 expected_kind, expected_key = "placement", "kernel"
+            elif test == "spare-byte":
+                blob[-1] ^= 1
+                expected_kind, expected_key = "encoding", "full-fdt"
+            elif test == "native-order":
+                additions = [(at - 12, 12 + (len(value) + 3 & ~3)) for path, name, at, value in fdt.walk(blob)
+                             if path == "/chosen" and name in ACCEPTED_DIFFERENCES]
+                (at, size), (following, length) = additions[:2]
+                assert at + size == following
+                blob[at:following + length] = blob[following:following + length] + blob[at:following]
+                expected_kind, expected_key = "encoding", "full-fdt"
+            elif test == "unapproved-chosen":
+                assert blob.count(b"baseos,native-boot\0") == 1
+                blob = blob.replace(b"baseos,native-boot\0", b"baseos,native-evil\0")
+                expected_kind, expected_key = "property", ("/chosen", "baseos,native-evil")
+            else:
+                pixels[0] ^= 1
+                expected_kind, expected_key = "payload", "framebuffer"
             (native / "fdt.bin").write_bytes(blob)
             (native / "initrd.bin").write_bytes(payload)
+            (native / "framebuffer.bin").write_bytes(pixels)
             write_json(native / "capture.json", meta)
             differences = compare(base / "stock", native)["changes"]
             detected = any(d["kind"] == expected_kind and d["key"] == expected_key and d["policy"] == "UNEXPLAINED" for d in differences)
@@ -742,130 +849,91 @@ def deduplicate_payloads(output):
                 os.replace(temporary, path)
 
 
-POLICY_EXPLANATIONS = """## Policy defects and proposed changes
+POLICY_EXPLANATIONS = """## What is checked
 
-These are defects under the owner's strict transparency requirement, including
-intentional behavior. None is on the accepted-difference allowlist. The source
-locations and commit IDs below come from `git log -S` on this branch, rather
-than an inferred history.
+The stock replay executes each pinned vendor's reserve, allocator, environment,
+FAT/logo, FDT and boot sequence. Its full FDT bytes are validated independently
+against the recorded RG40XX V and RG34XX SP live FDTs. No device is accessed.
+The native replay executes the linked release loader from entry to its final
+A32 monitor request. Every boot0 bank slot is crossed with both PE6 straps,
+including 1 GiB and 2 GiB inputs, with and without the physical card's logo.
+The first case per model runs the real native LZ4 decoder.
+One extra centered 3-by-3 logo per model checks transparent padding and the
+exact crop descriptor, then executes the kernel's cropped copy/free path.
 
-| Difference | Why it exists / source history | Kernel consequence | Proposed change and risk |
-|---|---|---|---|
-| Missing `uboot_message=2018.05(...)` | `205f677` introduced the minimal `native/build.py:model_policy` renderer without the vendor version token; it was never added. There is no recorded independent rationale for dropping this particular token. The vendor builds it at U-Boot `+0x58b6`. | Visible command-line data differs. All eleven kernel images contain no `uboot_message` string; no dedicated kernel consumer was identified. Generic command-line handling and userspace can still observe it. | Generate the exact token from each target's pinned U-Boot version/date/time literals and insert it at the vendor's position, preserving duplicate `gpt`/`loglevel` tokens. Low implementation risk; the tool checks the exact token sequence. |
-| Different `boot_fb0` source address, missing `disp_reserve=SIZE,ADDR`, extra FDT memory reservation | `96d108d` introduced `baseos_prepare_logo` and the owned low framebuffer at `0x4b000000`. `native/build.py:model_policy` describes its source as held reserved for the whole boot. `verify-kernel-logo.py` explicitly says there is no `disp_reserve` cleanup claim. Earlier no-logo design in `205f677` deliberately advertised no splash/reserve. | `Fb_copy_boot_fb.isra.6` parses `boot_fb0`, maps and copies the source. `early_disp_reserve` records the command-line reservation; `disp_reserve_mem` dispatches `memblock_free` after the copy. Native's FDT reservation keeps its source reserved. These are different memory lifetimes, not just cosmetic addresses. The existing actual-instruction consumer is rerun for every target, with/without the legacy reserve and on warm/cold branches; results are in `kernel-consumer.json`. | Repair and mapping risks are detailed in the following two rows. |
-| Same framebuffer defect: concrete repair | The stock address is an allocation result from U-Boot's real reserve/dlmalloc/env/logo sequence, not merely RAM-top minus a constant. This harness does not substitute the lab addresses. | Giving stock metadata for an unrelated physical allocation would let Linux copy or free the wrong bytes. Adding `disp_reserve` while retaining the native permanent reservation is also not an identical ownership contract. | Reproduce the per-target stock allocation/layout from the same RAM size, card environment and BMP; generate pixels at that exact address; emit the exact vendor `boot_fb0` and `disp_reserve` token; remove only the native-owned framebuffer `/memreserve/` entry. Keep the existing monitor/initrd reservations. The ARGB contents, descriptor, cache clean range and DE layer base must all follow the selected address. |
-| Framebuffer relocation risk | `spl/native-logo.h` fixes pixel/BMP staging addresses; `native/early-display.c` programs and cleans that buffer; `loader.c` builds A32 section descriptors with normal cacheable DRAM only for `0x40000000..0x4fffffff`. The normal stock source on 1 GiB units is near `0x7bf...`, and on the 2 GiB SP near `0xbbf...`. | Moving only the FDT string is incorrect. The native loader currently treats the higher framebuffer area as device/XN memory. Stock-reserved RAM also must not overlap BL31, image, SPL/loader records, stacks or tables. | Change the shared logo-address contract, loader pixel producer, early-display generated framebuffer writes, clean/publish paths and A32 MMU table construction together. The SPL's A64 mappings/cache-maintenance contract must be audited for the new range: its `native-cache.c` A64 tables map only `0x40000000..0x4fffffff` as the working arena. `native-boot.c` currently preloads only the BMP at `0x4b400000`, so relocation of *pixels alone* does not automatically require moving that BMP or changing SPL MMC destinations. If SPL or its preload path begins writing/caching the high pixel range, update its A64 map/clean ranges too. Emulator checks can prove address arithmetic, non-overlap, descriptor attributes, pixel bytes, register writes and requested cache operations. They cannot prove real bus/cache visibility or physical scanout. |
-| `/chosen/baseos,native-boot`, `baseos,native-timing`, and (early-lit) `baseos,boot-display` | `205f677` added generation/timing FDT stamps for native identification, health and instrumentation; `96d108d` added the authenticated early-display record. `DESIGN.md` expressly requests these stamps. `src/native-health.c` reads generation and display state through sysfs. | The stock kernels have no strings for these named properties, but generic OF/FDT interfaces expose them; they are kernel-visible differences. Native userspace health also depends on them. | Stop adding these properties and move generation/timing/display-health reporting to an explicitly agreed out-of-FDT channel. Update `src/native-health.c`, boot diagnostics and qualification contracts before removing the data; otherwise native acknowledgement/recovery can regress. A new channel itself must be assessed against the broader transparency requirement. |
-| Cold/logo-only `boot_disp=0`, missing `boot_disp1/2` where the stock counterpart advertises warm ownership | In `loader.c:baseos_prepare_logo`, warm display properties are written only when `baseos_native_display_state` authenticates a ready display; the metadata-only path from `96d108d` deliberately leaves them cold. | `display_fb_request` and display initialization choose warm synchronization/size behavior using these properties. The kernel consumer replay demonstrates distinct warm and cold branches. | Match stock display state and metadata together for the same logo-availability input. Stock still initializes a blank framebuffer and emits warm `boot_disp*` plus `disp_reserve` when BOOTLOGO.BMP is absent; native currently skips that initialization. Reproduce that blank-display path too. Do not advertise warm ownership until the matching DE/TCON/panel state exists. `logo-only` here is a linked-helper diagnostic applied to the cold final tree, not a reachable successful early-display run of the current release; its additional differences are labelled diagnostic. |
-| Full FDT encoding/capacity | `205f677` opens the tree with current libfdt into a fixed 1 MiB destination (`BASEOS_NATIVE_FDT_CAPACITY`). Vendor startup enlarges its TOC FDT by 4096 bytes rounded to 32; original property insertion order and string-table layout also matter. Native metadata and its extra reservation enlarge/reorder blocks further. | Header `totalsize`, offsets, property order, strings and remaining capacity differ even after a semantic property census. `/sys/firmware/fdt` exposes the full FDT. | Retain a sufficiently large allocation but reproduce the vendor's final header capacity, reservation block, insertion order, strings and padding. Apply changes in vendor order; if libfdt versions encode differently, reproduce the relevant vendor layout behavior. Check full captured bytes, rather than packing/re-serializing both trees to conceal differences. Emulator can prove exact output bytes for the tested inputs. |
+The only accepted differences are the owner's three /chosen health properties.
+They must follow every stock /chosen property, in order, with their names at the
+end of the strings table. The checker removes only those exact byte spans and
+compares the remaining full FDT to stock, with identical header capacity,
+reservation map, structure order, strings, padding and explicitly zero spare
+bytes. It does not reserialize or pack either tree. Every other property,
+bootarg token (including duplicates/order), byte, address, payload and measured
+A32 monitor argument must match. Framebuffer pixels are compared directly at
+the address supplied by each loader's disp_reserve token.
 
-The native `libfdt/fdt_rw.c:fdt_open_into` copies the source tree and raises
-`totalsize`; it does not clear the remaining destination capacity. Unicorn's
-unwritten RAM starts as zero. Physical unused FDT bytes can therefore contain
-prior RAM contents, another reason that merely matching properties is
-insufficient. Reproduce the stock capacity and initialize its spare/padding
-bytes explicitly. All eleven TOC spare extents, and both live-reference TOCs,
-are checked to be present and zero before the stock startup model uses zeros.
+`derive-handoff.py --jobs 4` regenerates the pinned per-model allocation rule
+with actual vendor allocation code at both supported RAM sizes, with/without
+the logo. Native rejects every other RAM size in SPL and A32. The loader uses
+the selected address for conversion, DE layer programming and cache cleaning.
+The A32 verifier checks all MMU section descriptors, including the high buffer.
+SPL still reads only the BMP into its mapped low arena; it never accesses the
+high pixels, so its A64 mappings and full clean-to-PoC path remain applicable.
 
-## Inputs and classification
+`kernel-consumer.json` executes the actual vendor framebuffer copy, display
+request and reservation cleanup paths for each model. Generated-input consumer
+checks also use the captured native boot_fb0 and pixels with the stock
+command-line reservation, checking the exact memblock_free address/size.
 
-Each target exercises all three candidate-bank slots in its pinned boot0, even
-when two slots have the same DRAM type, crossed with PE6 low/high. This is 66
-hardware cases for eleven targets. The bank's complete 32-word block is used;
-where a prepared alternate has no trained size, word 7 receives the size
-derived from its row/column/rank/width geometry. The primary fixtures are
-1 GiB; the alternate fixtures are 2 GiB, exercising RAM-dependent placement. These are
-handoff fixtures, not executions or qualifications of DRAM training. They do
-not exhaust every possible trained geometry or electrical calibration. The SP
-live reference independently validates real 2 GiB stock output.
+## Where host proof stops
 
-| Input | Stock path | Native path |
-|---|---|---|
-| 32 DRAM words | Written at U-Boot `0x4a000000+0x30`, exactly where boot0/SPL hands them over. Actual vendor `update_fdt_para_for_kernel`/legacy bindings execute. Read PCs are recorded. | Same words at SPL ABI2 record `0x4a300000+52`; real linked loader copies the first 24 into the legacy `/dram` names. |
-| RAM size | Header `+0x4f8` in MiB; `gd+0x40` and board memory bank seeded consistently, then real reserve/malloc code executes. | Same byte size at record `+16`; word 7 and record type/size must agree with the linked loader's validation. |
-| PE6 | GPIO PE_DAT `0x0300b0a0` bit 6 is low/high in the imported peripheral model. Stock panel code runs. | Same GPIO bit in the imported native display model. RG28 fixed old and Cube fixed boe are checked at both levels. |
-| SID serial | Fixed `1c00103dc2840671ed3`; encoded into SID `0x03006204/208/20c`. Real `set_snum` and command-line builder run. | Identical SID words; real native serial rendering runs. Live validation uses each recorded unit's own SID-derived serial. |
-| Boot reason | Fixed `unknow` enum 5 at `gd+0x124`, the output boundary of PMIC power-on classification, immediately before real `bootreason` initialization. | Same enum 5/source unknown in record `+232/+236`. This tool does not execute the SPL PMIC classifier; separate repo evidence documents its vendor/native comparison. |
-| Environment / GPT | Current release prepared `boot-prefix.img` GPT and CRC-checked 128 KiB env partition, with `boot-gzip/boot.img` overlaid at GPT p4. Real env driver/hash import, partition update and bootargs code execute. | Builder's release inventory uses those same env/GPT extents. Build source pins and manifest bytes are checked. |
-| Logo | Exact FAT16 BOOTLOGO.BMP from that card, through the vendor FAT/SD path. No-logo replay marks only its short directory entry deleted in the in-memory card. | The identical BMP/descriptor delivered at the SPL preload boundary; no-logo supplies an empty descriptor. The standalone `work/<target>/bootlogo.bmp` is deliberately not substituted: it differs from the card artwork. |
+The model assumes the supplied post-training DRAM words, SID, PMIC boot-reason
+classification and straps describe the same hardware inputs. It does not
+execute DRAM electrical training or prove clocks/rails/pinmux and peripheral
+state identical at Linux entry. MMIO polls, counter values, PLL lock and TCON
+scanlines are modeled. Recorded cache maintenance requests and exact pixels do
+not prove physical DMA coherency or scanout. The equal A32 monitor request is
+measured; BL31's A64 entry normalization is inferred, not replayed per case.
+Hardware must confirm uninterrupted logo takeover (and blank-logo startup),
+physical cache visibility, panel/backlight timing, the freed display memory,
+HDMI on a TV, sleep/wake and cold/charger starts on each model/panel/RAM variant.
 
-`early-lit` and `no-logo` compare equal inputs, including logo presence. The
-`logo-only` helper diagnostic uses the same BMP but deliberately bypasses the
-early-display orchestration and is not a claim about a normal shipping boot.
-Its captured differences are reported separately in each JSON row.
+Unused framebuffer RAM starts zero in this replay. A separate vendor allocation
+and write trace found that the absent-logo buffer is not written at this
+boundary; the canvas outside a small logo's crop is also untouched. Native
+clears those bytes for blank scanout. Their byte identity on hardware is not
+established by the full-buffer comparison under this fixture. Actual-kernel
+consumer runs with zero versus poisoned unused pixels produce identical output
+and reserve/free calls: absent-logo starts never map the source, and cropped
+logos copy only the advertised rectangle. The standalone evidence is in
+`work/unused-framebuffer-proof.json`. Initial RAM contents and physical DE
+scanout remain outside this host proof. No extra FDT or consumed-pixel
+differences are allowlisted.
 
-Input artefacts found and corrected: artificial low bump-allocator addresses;
-omitted environment initialization/hash-table allocations; omitted PMIC
-allocation; startup FDT capacity; secure-monitor/secure-OS header flags; serial,
-DRAM/size and boot-reason defaults; different standalone BMP fixtures; and
-comparing an absent native logo with a present stock logo. No differing
-hardware-derived values are accepted after equalizing these inputs.
+## Previous defects
 
-The earlier RG40 partition-map mismatch was a comparison against an old lab
-card. Lab validation reproduces `UDISK@mmcblk0p6:primary@mmcblk0p7`; current
-release parity uses `appfs@mmcblk0p6:UDISK@mmcblk0p7` on both sides. The JSON
-diffs would mark any unequal `partitions` token unexplained. HDMI `okay` was
-restored by this branch's `fe3872e`; any remaining HDMI property mismatch is
-also unexplained, not allowlisted.
-
-## Scope beyond the captured contract
-
-The measured final request is A32 `[0x8000ff04, 0x40080000, 0x44000000, 1]`
-on both sides. The kernel starts at `0x40080000`, initrd at `0x42000000`, and
-FDT at `0x44000000`. The tool captures these registers, physical addresses
-and payloads; it does not execute BL31 or Linux entry for each matrix case.
-The displayed A64 `x0=FDT,x1..3=0` is the known monitor normalization, explicitly
-labelled inferred in capture metadata. Equality of the A32 monitor request is
-measured. It does not prove every CPU register or architectural control bit.
-
-PMIC rails, clocks/PLLs, DRAM electrical training, pinmux/pulls, GPIO timing,
-DE/TCON/DSI/PWM state, HDMI link state, interrupt/timer state, cache/TLB contents,
-DMA coherency and RAM outside the captured buffers (including framebuffer
-pixel contents) can remain kernel-visible. Framebuffer pixels are not compared
-by this tool; both sides receive the same BMP, and the existing kernel-consumer
-replay checks copy/free behavior using controlled pixels.
-The tracer deliberately models many peripheral reads and non-kernel SMCs,
-and bypasses CPU cleanup; it is not a complete hardware simulator. Repo
-evidence (`HANDOFF.md` display-cause/platform-prerequisite sections and
-`DESIGN.md` early-Linux diagnosis) records these relevant facts without a new
-hardware investigation here:
-
-- Earlier native starts left SRAM C borrowed; stock released SYSCTRL ownership
-  before Linux DE initialization. The current loader contains the promoted
-  release fix, independently covered by `verify-sram-release.py` across all
-  eleven vendor binaries. This tool does not re-qualify physical SRAM ownership.
-- Native early-display setup replaces vendor boot-logo initialization; the
-  no-logo path leaves display setup to Linux. Matching `boot_disp*` values
-  cannot establish matching live DE state or a valid scanout.
-- Native SPL uses mainline DRAM initialization/selection and PMIC/clock setup
-  rather than vendor boot0's implementation. Repo evidence includes nine
-  vendor media-PLL power-enable fixes, DRAM QoS/master-mask comparisons, trained
-  geometry normalization, and the 1.5.2 LPDDR4 delay fix. This harness starts
-  after training and assumes the provided results agree.
-- Panel prerequisites, pinmux, reset/power/backlight timing and cache publication
-  have their own repo verifiers. Their models cannot certify panel/HDMI output,
-  suspend/resume, cold/charger starts, or per-unit electrical behavior.
-
-Confidence: high for the explicit captured FDT/token/register/payload findings
-on the tested matrix, strengthened by both byte-exact live validations and the
-actual kernel consumer replays. This is evidence of data-contract defects and
-a regression gate for their repair, not proof of complete hardware transparency.
+The original e7a7cec gate exposed the missing vendor version token (introduced
+by 205f677), native permanent framebuffer reservation/low address and cold
+no-logo handoff (96d108d), and fixed 1 MiB FDT encoding (205f677). Those are
+regressions to prevent, not accepted differences. The owner's later decision
+keeps only the three native health properties. HDMI's exact stock `okay`
+status remains covered (fe3872e). The lab card's older partition map is used
+only for live stock validation; release parity uses release GPT/environment.
 """
 
 
 def report(args, results, validations, errors):
     total = len(args.target or TARGETS)
     verdict = ("Native does not meet strict handoff transparency: every listed policy difference remains a defect."
-               if any(r["policy_counts"] for r in results) else "No completed policy-defect result yet.")
-    lines = ["# H700 kernel handoff parity", "", "Host-only; no device access. Loader/SPL/existing verifiers were not modified.", "",
+               if any(r["policy_counts"] for r in results) else "Completed captures match stock, with only the approved trailing health properties.")
+    lines = ["# H700 kernel handoff parity", "", "Host-only; no device access. Release loader and stock vendor instructions are replayed.", "",
              "## Result", "", f"{len(results)}/{total} selected models completed. {verdict}", "",
-             "Exact transparency requires identical data for identical inputs. Accepted differences: **none**.", "",
+             "Identical inputs require identical handoffs. Only the three trailing native /chosen health properties are accepted.", "",
              "| Target | Hardware cases | Native variants | Policy differences | Unexplained | Payload/register parity |",
              "|---|---:|---:|---|---:|---|"]
     for row in sorted(results, key=lambda r: TARGETS.index(r["target"])):
         cases = row["cases"]
-        passed = all(c["kernel_bytes_equal"] and c["initrd_bytes_equal"] and c["registers_equal"] for c in cases)
-        lines.append(f"| {row['target']} | {len(cases) // len(MODES)} | {len(cases)} | {', '.join(row['policy_counts'])} | {row['unexplained']} | {'exact' if passed else 'FAIL'} |")
+        passed = all(c["kernel_bytes_equal"] and c["initrd_bytes_equal"] and c["framebuffer_bytes_equal"] and c["registers_equal"] for c in cases)
+        lines.append(f"| {row['target']} | {len({c['case'] for c in cases})} | {len(cases)} | {', '.join(row['policy_counts'])} | {row['unexplained']} | {'exact' if passed else 'FAIL'} |")
     lines.extend(["", "## Stock replay validation", "",
                   "These runs use the corresponding lab GPT, environment, TOC, boot0 DRAM words, serial, boot reason and strap. The release runs use release inputs independently.", "",
                   "| Unit | Every FDT byte | Bytes | Live SHA256 (equals replay) | Properties / reservations |", "|---|---|---:|---|---|"])
@@ -875,7 +943,7 @@ def report(args, results, validations, errors):
         lines.extend(["", "## Incomplete runs", ""] + [f"- {error}" for error in errors])
     lines.extend(["", "## Representative release values by target", "",
                   "The first low-strap bank is shown; every bank/strap/variant has a complete JSON diff.", "",
-                  "| Target | RAM MiB | Stock framebuffer bases | Native base | Stock / native FDT bytes | Missing vendor token | Differing fields by variant |",
+                  "| Target | RAM MiB | Stock framebuffer bases | Native framebuffer bases | Stock / native FDT bytes | Vendor version token | Unapproved fields by variant |",
                   "|---|---|---|---|---|---|---|"])
     for result in sorted(results, key=lambda r: TARGETS.index(r["target"])):
         rows = result["cases"]
@@ -884,18 +952,21 @@ def report(args, results, validations, errors):
         stock, native = [(base / name / "fdt.bin").read_bytes() for name in ("stock", "early-lit")]
         before = fdt.get(stock, DISPLAY, "boot_fb0")
         after = fdt.get(native, DISPLAY, "boot_fb0")
-        addresses = set()
+        addresses, native_addresses = set(), set()
         for case in rows:
             if case["mode"] == "early-lit":
                 path = args.output / result["target"] / case["case"] / "stock/fdt.bin"
                 description = fdt.get(path.read_bytes(), DISPLAY, "boot_fb0")
                 if description:
                     addresses.add("0x" + description.split(b",", 1)[0].decode())
+                description = fdt.get((path.parent.parent / "early-lit/fdt.bin").read_bytes(), DISPLAY, "boot_fb0")
+                if description:
+                    native_addresses.add("0x" + description.split(b",", 1)[0].decode())
         ram = "/".join(str(size) for size in sorted({r["hardware"]["ram_bytes"] >> 20 for r in rows}))
         vendor = json.loads((base / "stock/capture.json").read_text())
         version = next(t for t in vendor["bootargs"].split() if t.startswith("uboot_message="))
-        native_base = "0x" + after.split(b",", 1)[0].decode() if after else "absent"
-        counts = "; ".join(f"{mode}: {len(next(r for r in rows if r['mode'] == mode)['changes'])}" for mode in MODES)
+        native_base = ", ".join(sorted(native_addresses)) or "absent"
+        counts = "; ".join(f"{mode}: {sum(not d['accepted'] for d in next(r for r in rows if r['mode'] == mode)['changes'])}" for mode in (*MODES, "small-logo"))
         lines.append(f"| {result['target']} | {ram} | {', '.join(sorted(addresses))} | {native_base} | {len(stock)} / {len(native)} | {version} | {counts} |")
     lines.extend(["", POLICY_EXPLANATIONS])
     lines.extend(["", "## Detailed evidence", "",

@@ -179,10 +179,39 @@ initrd extents and late USB behavior. Leave the HDMI node's stock `okay`
 status alone (see "HDMI on native starts" below). Derive serial from the vendor SID
 words and panel choice from model policy: RG28 old, Cube boe, others PE6.
 Generate environment-derived fixed bootargs and preserve dynamic values from
-their actual hardware sources. The no-logo path advertises no boot framebuffer
-or `disp_reserve`. Stamp generation and stage timings in the final kernel FDT.
+their actual hardware sources, including the pinned vendor version message.
+The no-logo path lights stock's blank buffer, advertises the same warm display
+and `disp_reserve`, and leaves `boot_fb0` absent, just as stock does. Stamp
+generation and stage timings in the final kernel FDT.
 The final call is A32 `r0=0x8000ff04`, `r1=0x40080000`, `r2=0x44000000`,
 `r3=1`, with interrupts masked and caches/MMU cleaned and disabled.
+
+### What the kernel receives
+
+The native loader must hand the kernel exactly what the stock loader does.
+The owner's only exceptions are the trailing `/chosen` properties
+`baseos,native-boot`, `baseos,native-timing` and, after the display is lit,
+`baseos,boot-display`, which startup health uses. Preserve the whole stock FDT,
+including its capacity, reservations, property/string order and zero padding.
+Generate the framebuffer address from each model's replayed vendor allocation;
+only 1 GiB and 2 GiB RAM sizes are proven, so both SPL and A32 refuse others.
+Produce and clean pixels at that address, map that RAM as normal memory, and
+give Linux the stock copy/free contract without an extra FDT reservation.
+Smaller artwork keeps stock's transparent padding and exact crop coordinates.
+
+Run `native/verify-handoff-parity.py --fresh --jobs 4` on the host. It executes
+all eleven stock and native loaders over every prepared DRAM bank and both
+panel straps, with and without the card's logo. It compares the full FDT bytes
+after removing only the three trailing additions, framebuffer pixels, payloads
+and the monitor request. Two recorded live FDTs independently validate stock
+replay. The kernel consumer checks the real reserve, copy and free paths.
+An extra small-logo replay on every model checks padding and the cropped copy.
+This proves the captured data contract; physical cache visibility, uninterrupted
+logo takeover, HDMI, sleep/wake, cold/charger starts and freed RAM still need
+the owner's hardware tests before anything ships.
+The replay starts unused DRAM at zero. Vendor blank-buffer and out-of-crop
+bytes are unwritten at this boundary, and Linux does not copy them. Native
+clears them for scanout. Their hardware byte identity remains unqualified.
 
 ### HDMI on native starts
 
