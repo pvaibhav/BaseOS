@@ -28,7 +28,7 @@ sys.path.insert(0, str(HERE.parent))
 sys.dont_write_bytecode = True
 import fdt
 
-RECORD, DESC, DISPLAY, PIXELS, BMP, CAP = 0x4a300000, 0x4a300200, 0x4a300300, 0x4b000000, 0x4b400000, 0x400000
+RECORD, DESC, DISPLAY, BMP, CAP = 0x4a300000, 0x4a300200, 0x4a300300, 0x4b400000, 0x400000
 PANEL_RECORD = 0x4a300280
 PE_CFG, PE_PULL = 0x0300b090, 0x0300b0ac
 WAITS_MS = (30, 15, 50, 100)
@@ -93,6 +93,12 @@ class Run:
         m.mem_map(0x06500000, 0x00020000)
         m.mem_map(0x07000000, 0x1000)
         m.mem_map(0x40000000, 0x10000000)
+        record = record or self.record
+        ram = struct.unpack_from("<Q", record, 16)[0]
+        PIXELS = 0x40000000 + ram - self.manifest["boot_logo"]["framebuffer_from_ram_end"]
+        base = PIXELS & ~4095
+        m.mem_map(base, (PIXELS + CAP - base + 4095) & ~4095)
+        m.mem_write(0x44000000, b"\xa5" * 0x100000)
         m.mem_write(0x4a000000, self.code)
         m.mem_write(0x45000000, self.image)
         record = record or self.record
@@ -319,13 +325,20 @@ class Run:
                         assert S["last_pixel"] < seq
                     S["clean"].append(uc.reg_read(reg))
                 else:
-                    cp[key] = uc.reg_read(reg)
+                    value = uc.reg_read(reg)
+                    if key == (0, 1, 0, 0) and value & 1:
+                        table = struct.unpack("<4096I", uc.mem_read(0x4a0f8000, 16384))
+                        for index, entry in enumerate(table):
+                            attributes = 0x1c0e if index == 0 or 0x400 <= index < 0x400 + (ram >> 20) else 0x10c16
+                            assert entry == (index << 20) | attributes, ("MMU attributes", hex(index << 20), hex(entry))
+                        assert table[PIXELS >> 20] & 0xfffff == 0x1c0e
+                    cp[key] = value
             uc.reg_write(a.UC_ARM_REG_PC, address + 4)
 
         m.hook_add(u.UC_HOOK_MEM_READ | u.UC_HOOK_MEM_WRITE, sram_access, begin=0x20000, end=SRAM_C[1] - 1)
         m.hook_add(u.UC_HOOK_MEM_READ, mmio_read, begin=0x01000000, end=0x07ffffff)
         m.hook_add(u.UC_HOOK_MEM_WRITE, mmio_write, begin=0x01000000, end=0x07ffffff)
-        m.hook_add(u.UC_HOOK_MEM_WRITE, pixel_write, begin=PIXELS, end=BMP - 1)
+        m.hook_add(u.UC_HOOK_MEM_WRITE, pixel_write, begin=PIXELS, end=PIXELS + CAP - 1)
         m.hook_add(u.UC_HOOK_MEM_WRITE, record_write, begin=DISPLAY, end=DISPLAY + 79)
         watched = set()
 
@@ -346,10 +359,11 @@ class Run:
             m.mem_unmap(SRAM_C[0], SRAM_C[1] - SRAM_C[0])
             S["unmapped"] = True
             start = m.reg_read(a.UC_ARM_REG_PC)
-        assert S.get("unmapped") and get(0x03000004) == 0x88abcdef and get(0x03000000) == 0x80000000, "SYSCTRL state"
+        assert fault == "bad-bmp" or S.get("unmapped") and get(0x03000004) == 0x88abcdef and get(0x03000000) == 0x80000000, "SYSCTRL state"
         return self.check(name, m, S, high, line, fault, bytes(bmp), descriptor, width, height, pixel_end, panel, unpack, skip)
 
     def check(self, name, m, S, high, line, fault, bmp, descriptor, width, height, pixel_end, spl_panel, unpack, fast):
+        PIXELS = pixel_end - width * height * 4
         record = bytes(m.mem_read(DISPLAY, 80))
         assert not S["sram_c"], ("loader touched SRAM C", S["sram_c"][:4])
         rule, contract = self.manifest["panel_rule"], self.manifest["panel_contract"]
@@ -362,23 +376,7 @@ class Run:
         row["panel_steps_in_loader"] = bool(touched) or any(e == ["wait_us", 30000] for e in S["timeline"])
         if fast:
             assert spl_panel and not touched, ("loader redid SPL panel steps", name, touched[:3])
-        if fault in ("no-logo", "bad-bmp") and fast:
-            assert not S["gpio"] and not S["pio_other"], "cold path with a valid SPL panel record touched GPIO"
-            command = bytes(m.mem_read(self.sym["command_line"], 2048)).split(b"\0")[0].split()
-            want = struct.unpack_from("<I", spl_panel, 16)[0]
-            assert [t for t in command if t.startswith(b"lcd_type=")] == [b"lcd_type=" + (b"boe" if want else b"old")]
-        if fault in ("no-logo", "bad-bmp"):
-            assert S["result"] == 0 and S["calls"] == [[0x8000ff04, 0x40080000, 0x44000000, 1]]
-            assert record == bytes(80) and S["first_display_write"] is None and not S["phases"] and not S["clean"]
-            assert [w[1] for w in S["sysctrl"]] == ["0x3000000", "0x3000004"], "cold path SRAM release differs"
-            tree = bytes(m.mem_read(0x44000000, 0x100000))
-            props = {(p, n): v for p, n, _, v in fdt.walk(tree)}
-            assert ("/chosen", "baseos,boot-display") not in props
-            fb = props.get(("/soc@03000000/disp@01000000", "boot_fb0"), b"")
-            assert fb == bytes(len(fb)), "boot_fb0 without a convertible logo"
-            row.update(cold_path=True, kernel_entry=True, display_mmio_writes=0)
-            return row
-        if fault:
+        if fault and fault != "no-logo":
             assert S["result"] == 14 and S["wfi"] and not S["calls"], ("display failure must stop in wfi", S["result"])
             assert record == bytes(80) and S["publish"] is None
             row.update(fail_closed=True, wfi=True)
@@ -391,8 +389,8 @@ class Run:
         assert S["clean_start"] < S["dsb_before_release"] and S["released"] < S["first_display_write"], "clean/DSB/release order"
         assert [w[1] for w in S["sysctrl"]] == ["0x3000000", "0x3000004"] * 2, S["sysctrl"]
         pixels = bytes(m.mem_read(PIXELS, pixel_end - PIXELS))
-        assert pixels == V.logo_pixels(bmp, width, height), "pixels differ from independent BMP conversion"
-        assert bytes(m.mem_read(pixel_end, BMP - pixel_end)) == b"\xa5" * (BMP - pixel_end)
+        assert pixels == (bytes(width * height * 4) if fault == "no-logo" else V.logo_pixels(bmp, width, height)), "pixels differ from independent BMP conversion"
+        assert bytes(m.mem_read(pixel_end, PIXELS + CAP - pixel_end)) == b"\xa5" * (PIXELS + CAP - pixel_end)
         if not fast:
             moments = [g["ticks"] for g in S["gpio"][:4]]
             for i, delay in enumerate((30000, 15000, 50000)):
@@ -412,7 +410,7 @@ class Run:
         magic, version, size, digest, chosen, logo_bytes, logo_fnv, pixel_fnv = struct.unpack_from("<8I", record)
         shown = struct.unpack_from("<Q", record, 64)[0]
         assert (magic, version, size, chosen, logo_bytes, logo_fnv, pixel_fnv) == (
-            0x31505344, 1, 80, panel, len(bmp), fnv(bmp), fnv(pixels))
+            0x31505344, 1, 80, panel, 0 if fault == "no-logo" else len(bmp), 0 if fault == "no-logo" else fnv(bmp), fnv(pixels))
         assert digest == fnv(record, (12, 16)) and record[32:64] == bytes.fromhex(self.manifest["generation"])
         assert record[72:] == bytes(8)
         tree = bytes(m.mem_read(0x44000000, 0x100000))
@@ -423,8 +421,12 @@ class Run:
             assert props[display, key] == struct.pack(">I", value), key
         assert props["/chosen", "baseos,boot-display"] == record
         fields = (PIXELS, width, height, 32, width * 4, 0, 0, width, height)
-        assert props[display, "boot_fb0"] == ",".join(f"{v:x}" for v in fields).encode() + b"\0"
-        assert (PIXELS, width * height * 4) in V.fdt_reservations(tree)
+        if fault == "no-logo":
+            assert (display, "boot_fb0") not in props
+        else:
+            assert props[display, "boot_fb0"] == ",".join(f"{v:x}" for v in fields).encode() + b"\0"
+        assert not any(base < pixel_end and PIXELS < base + size for base, size in V.fdt_reservations(tree))
+        assert f"disp_reserve={width * height * 4},0x{PIXELS:x}".encode() in props["/chosen", "bootargs"].split()
         stamps = struct.unpack(">7Q", props["/chosen", "baseos,native-timing"])
         # The logo is lit while the kernel decodes: after the image load, before the FDT is finished.
         assert list(stamps) == sorted(stamps) and stamps[2] <= shown <= stamps[5], (stamps, shown)

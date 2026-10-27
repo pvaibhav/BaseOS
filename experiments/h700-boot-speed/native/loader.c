@@ -121,7 +121,8 @@ __attribute__((noinline)) int baseos_native_display_state(void)
     if (ready <= 0) return ready;
     const struct baseos_native_record *record = (void *)BASEOS_NATIVE_RECORD_ADDRESS;
     const struct baseos_native_logo *logo = (void *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS;
-    if (logo->magic != BASEOS_NATIVE_LOGO_MAGIC || logo->reserved ||
+    int blank = !logo->magic && !logo->bytes && !logo->fnv && !logo->reserved;
+    if ((!blank && logo->magic != BASEOS_NATIVE_LOGO_MAGIC) || logo->reserved ||
         (BASEOS_PANEL_RULE < 2 && display->panel != BASEOS_PANEL_RULE) ||
         display->logo_bytes != logo->bytes || display->logo_fnv != logo->fnv ||
         display->shown_ticks < record->loaded_ticks || display->shown_ticks > native_ticks()) return -1;
@@ -148,6 +149,7 @@ static int make_command_line(const unsigned char *image)
     if (detected < 0) detected = baseos_panel_probe(BASEOS_PANEL_RULE, BASEOS_PANEL_PULL_UP, &panel_io);
     if (detected < 0) return -1;
     const char *panel = detected ? "boe" : "old";
+    const char *reserve = record->ram_bytes == 0x40000000ull ? baseos_display_reserve[0] : baseos_display_reserve[1];
     /* Android v2 has two separately bounded command-line fields. */
     char android[1537];
     size_t first = strnlen((const char *)image + 64, 512);
@@ -164,6 +166,7 @@ static int make_command_line(const unsigned char *image)
         else if (!strncmp(p, "@PANEL@", 7)) { value = panel; skip = 7; }
         else if (!strncmp(p, "@ANDROID@", 9)) { value = android; skip = 9; }
         else if (!strncmp(p, "@BOOTREASON@", 12)) { value = reasons[record->boot_reason]; skip = 12; }
+        else if (!strncmp(p, "@RESERVE@", 9)) { value = reserve; skip = 9; }
         if (value) {
             size_t bytes = strlen(value);
             if (bytes >= sizeof(command_line) - used) return -1;
@@ -182,15 +185,8 @@ static int make_command_line(const unsigned char *image)
 __attribute__((noinline)) int baseos_prepare_logo(void *tree)
 {
     int early = baseos_native_display_state();
-    if (early < 0) return -1;
-    const struct baseos_native_logo *logo = (void *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS;
-    const unsigned char *bmp = (void *)BASEOS_NATIVE_LOGO_BMP_ADDRESS;
-    /* A ready record already authenticated the BMP and the scanned-out pixels. */
-    if (!early && (logo->magic != BASEOS_NATIVE_LOGO_MAGIC || logo->reserved ||
-        !logo->bytes || logo->bytes > BASEOS_NATIVE_LOGO_CAPACITY ||
-        baseos_logo_hash(bmp, logo->bytes) != logo->fnv ||
-        !baseos_logo_pixels(bmp, logo->bytes, BASEOS_LOGO_WIDTH, BASEOS_LOGO_HEIGHT,
-                            (void *)BASEOS_NATIVE_LOGO_PIXEL_ADDRESS, BASEOS_NATIVE_LOGO_CAPACITY))) return 0;
+    /* Never promise warm ownership for pixels that are not actually scanned out. */
+    if (early <= 0) return -1;
     char description[72];
     const uint32_t fields[] = {BASEOS_NATIVE_LOGO_PIXEL_ADDRESS, BASEOS_LOGO_WIDTH,
         BASEOS_LOGO_HEIGHT, 32, BASEOS_LOGO_WIDTH * 4, 0, 0, BASEOS_LOGO_WIDTH, BASEOS_LOGO_HEIGHT};
@@ -204,18 +200,36 @@ __attribute__((noinline)) int baseos_prepare_logo(void *tree)
     }
     description[used] = 0;
     int display = fdt_path_offset(tree, "/soc@03000000/disp@01000000");
-    if (display < 0 || fdt_setprop_string(tree, display, "boot_fb0", description) ||
-        fdt_add_mem_rsv(tree, BASEOS_NATIVE_LOGO_PIXEL_ADDRESS,
-                        BASEOS_LOGO_WIDTH * BASEOS_LOGO_HEIGHT * 4)) return -1;
-    if (early) {
-        if (fdt_setprop_u32(tree, display, "boot_disp", BASEOS_DISPLAY_BOOT_DISP) ||
-            fdt_setprop_u32(tree, display, "boot_disp1", BASEOS_DISPLAY_BOOT_DISP1) ||
-            fdt_setprop_u32(tree, display, "boot_disp2", BASEOS_DISPLAY_BOOT_DISP2)) return -1;
-        int chosen = fdt_path_offset(tree, "/chosen");
-        if (fdt_setprop(tree, chosen, "baseos,boot-display", (void *)BASEOS_NATIVE_DISPLAY_ADDRESS,
-                        sizeof(struct baseos_native_display))) return -1;
-    }
+    /* libfdt inserts new properties at the front. Match the vendor's call order,
+     * including the order in which its strings are first added. */
+    if (display < 0 || fdt_setprop_u32(tree, display, "boot_disp", BASEOS_DISPLAY_BOOT_DISP) ||
+        fdt_setprop_u32(tree, display, "boot_disp1", BASEOS_DISPLAY_BOOT_DISP1) ||
+        fdt_setprop_u32(tree, display, "boot_disp2", BASEOS_DISPLAY_BOOT_DISP2)) return -1;
+    const struct baseos_native_logo *logo = (void *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS;
+    if (logo->bytes && fdt_setprop_string(tree, display, "boot_fb0", description)) return -1;
     return 1;
+}
+
+/* Keep the native health properties after every stock /chosen property. libfdt
+ * appends their names to the strings table, but normally prepends properties.
+ * Move just the new property to the end, leaving every stock byte in order. */
+static int append_chosen(void *tree, const char *name, const void *value, int bytes)
+{
+    int chosen = fdt_path_offset(tree, "/chosen");
+    if (chosen < 0 || fdt_getprop(tree, chosen, name, NULL) || bytes > 80 ||
+        fdt_setprop(tree, chosen, name, value, bytes)) return -1;
+    int first = fdt_first_property_offset(tree, chosen), last = first, next, length;
+    if (first < 0) return -1;
+    while ((next = fdt_next_property_offset(tree, last)) >= 0) last = next;
+    if (next != -FDT_ERR_NOTFOUND || !fdt_getprop_by_offset(tree, last, NULL, &length)) return -1;
+    unsigned size = 12u + (((unsigned)bytes + 3u) & ~3u);
+    unsigned end = (unsigned)last + 12u + (((unsigned)length + 3u) & ~3u);
+    unsigned char property[92];
+    unsigned char *start = (unsigned char *)tree + fdt_off_dt_struct(tree) + first;
+    memcpy(property, start, size);
+    memmove(start, start + size, end - (unsigned)first - size);
+    memcpy(start + end - (unsigned)first - size, property, size);
+    return 0;
 }
 
 int baseos_prepare_kernel(void)
@@ -226,7 +240,7 @@ int baseos_prepare_kernel(void)
         record->bytes != sizeof(*record) || record->model != BASEOS_MODEL_ID ||
         record->image_bytes != BASEOS_IMAGE_BYTES || record->image_fnv != BASEOS_IMAGE_FNV ||
         memcmp(record->generation, baseos_generation, 32) || record_hash(record) != record->record_fnv ||
-        record->ram_bytes < 0x10000000ull || record->ram_bytes != (uint64_t)(record->dram_words[7] >> 16) << 20 ||
+        !BASEOS_NATIVE_LOGO_PIXEL_ADDRESS || record->ram_bytes != (uint64_t)(record->dram_words[7] >> 16) << 20 ||
         record->dram_type != record->dram_words[1] ||
         !baseos_boot_reason_valid(record->boot_reason, record->boot_reason_source)) return 1;
     if (record->image_bytes < 2048 || record->image_bytes > BASEOS_NATIVE_IMAGE_CAPACITY ||
@@ -242,12 +256,8 @@ int baseos_prepare_kernel(void)
         offset != record->image_bytes) return 3;
     /* Draw where vendor U-Boot did: after BL31, from DRAM, with SRAM C unused. */
     const struct baseos_native_logo *logo = (void *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS;
-    int display = 0;
-    if (logo->magic == BASEOS_NATIVE_LOGO_MAGIC) {
-        int panel = baseos_early_display_start(logo);
-        if (panel == -1) return 14;
-        display = panel >= 0;
-    }
+    int panel = baseos_early_display_start(logo);
+    if (panel < 0) return 14;
     times[0] = record->started_ticks;
     times[1] = record->read_started_ticks;
     times[2] = record->loaded_ticks;
@@ -259,7 +269,7 @@ int baseos_prepare_kernel(void)
     int step;
     do {
         step = baseos_lz4_step(&lz4);
-        if (display && baseos_early_display_poll() < 0) return 14;
+        if (baseos_early_display_poll() < 0) return 14;
     } while (step == 1);
     if (step) return 4;
     unsigned long output_bytes = (unsigned long)(lz4.limit - lz4.dst);
@@ -272,8 +282,11 @@ int baseos_prepare_kernel(void)
     if (output_bytes < 64 || little32((const void *)0x40080038) != 0x644d5241) return 5;
     memcpy((void *)0x42000000, image + initrd, initrd_bytes);
     void *tree = (void *)BASEOS_NATIVE_FDT_ADDRESS;
+    uint32_t capacity = (fdt_totalsize(image + dtb) + 4096u + 31u) & ~31u;
+    if (capacity > BASEOS_NATIVE_FDT_CAPACITY) return 6;
+    memset(tree, 0, capacity);
     if (fdt_check_full(image + dtb, dtb_bytes) ||
-        fdt_open_into(image + dtb, tree, BASEOS_NATIVE_FDT_CAPACITY)) return 6;
+        fdt_open_into(image + dtb, tree, capacity)) return 6;
     int dram = fdt_path_offset(tree, "/dram");
     for (unsigned i = 0; i < 24; i++)
         if (fdt_setprop_u32(tree, dram, baseos_dram_properties[i], record->dram_words[i])) return 7;
@@ -282,15 +295,14 @@ int baseos_prepare_kernel(void)
     if (fdt_setprop(tree, memory, "reg", memory_reg, sizeof(memory_reg))) return 8;
     /* Copying the initrd and opening the tree also fit in the display waits; the command
      * line needs the lit display's record. */
-    if (display && baseos_early_display_finish() < 0) return 14;
+    if (baseos_early_display_finish() < 0) return 14;
+    if (baseos_prepare_logo(tree) < 0) return 13;
     int chosen = fdt_path_offset(tree, "/chosen");
     if (make_command_line(image) ||
         fdt_setprop_string(tree, chosen, "bootargs", command_line) ||
         fdt_setprop_u64(tree, chosen, "linux,initrd-start", 0x42000000) ||
         fdt_setprop_u64(tree, chosen, "linux,initrd-end", 0x42000000 + initrd_bytes) ||
-        fdt_add_mem_rsv(tree, 0x42000000, initrd_bytes) ||
-        fdt_setprop(tree, chosen, "baseos,native-boot", record->generation, 32)) return 9;
-    if (baseos_prepare_logo(tree) < 0) return 13;
+        fdt_add_mem_rsv(tree, 0x42000000, initrd_bytes)) return 9;
     /* Image input carries BaseOS's late USB policy. HDMI keeps its stock "okay": the
      * display driver registers its HDMI output at startup only for that exact string. */
     times[5] = native_ticks();
@@ -298,7 +310,10 @@ int baseos_prepare_kernel(void)
     chosen = fdt_path_offset(tree, "/chosen");
     fdt64_t stamps[7];
     for (unsigned i = 0; i < 7; i++) stamps[i] = cpu_to_fdt64(times[i]);
-    if (fdt_setprop(tree, chosen, "baseos,native-timing", stamps, sizeof(stamps))) return 11;
+    if (append_chosen(tree, "baseos,native-boot", record->generation, 32) ||
+        append_chosen(tree, "baseos,native-timing", stamps, sizeof(stamps)) ||
+        append_chosen(tree, "baseos,boot-display", (void *)BASEOS_NATIVE_DISPLAY_ADDRESS,
+                      sizeof(struct baseos_native_display))) return 11;
 #ifdef BASEOS_NATIVE_DIAGNOSTIC
     volatile uint32_t *proof = (void *)0x4a300100;
     proof[0] = fdt_totalsize(tree);
@@ -320,8 +335,10 @@ void baseos_loader_boot(void)
 {
     checkpoint(41);
     volatile uint32_t *table = (void *)0x4a0f8000;
+    const struct baseos_native_record *record = (void *)BASEOS_NATIVE_RECORD_ADDRESS;
+    unsigned ram_end = record->ram_bytes == 0x80000000ull ? 0xc00 : 0x800;
     for (unsigned i = 0; i < 4096; i++)
-        table[i] = (i << 20) | (i == 0 || (i >= 0x400 && i < 0x500) ? 0x1c0e : 0x10c16);
+        table[i] = (i << 20) | (i == 0 || (i >= 0x400 && i < ram_end) ? 0x1c0e : 0x10c16);
     checkpoint(42);
     native_enable_mmu();
     checkpoint(43);

@@ -71,7 +71,7 @@ def verify_logo(machine, sym, manifest, tree, directory):
     source_width, source_height, planes, bpp, compression = struct.unpack_from("<iiHHI", bmp, 18)
     assert 0 < source_width <= width and 0 < abs(source_height) <= height
     assert (planes, bpp, compression) == (1, 24, 0)
-    capacity, descriptor_address, bmp_address, pixel_address = 0x400000, 0x4a300200, 0x4b400000, 0x4b000000
+    capacity, descriptor_address, bmp_address, pixel_address = 0x400000, 0x4a300200, 0x4b400000, 0x40000000 + struct.unpack("<Q", machine.mem_read(0x4a300010, 8))[0] - manifest["boot_logo"]["framebuffer_from_ram_end"]
     assert 0 < len(bmp) <= capacity and 0 < width * height * 4 <= capacity
     tree_address, stop = 0x4a400000, 0x4a0d0000
     assert len(tree) == 0x100000
@@ -88,21 +88,34 @@ def verify_logo(machine, sym, manifest, tree, directory):
     cases = []
     stop_hook = machine.hook_add(u.UC_HOOK_CODE, lambda m, pc, size, data: m.emu_stop(), begin=stop, end=stop)
 
-    def execute(name, payload=bmp, descriptor=None, expected=0, input_tree=tree):
+    def execute(name, payload=bmp, descriptor=None, expected=-1, input_tree=tree):
         desc = descriptor if descriptor is not None else struct.pack("<4I", 0x31474f4c, len(payload), fnv(payload), 0)
         assert len(desc) == 16 and len(payload) <= capacity
         machine.mem_write(tree_address, input_tree)
         machine.mem_write(descriptor_address, desc)
         machine.mem_write(bmp_address, payload)
         machine.mem_write(pixel_address, sentinel)
-        machine.reg_write(a.UC_ARM_REG_CPSR, 0x1d3)
-        machine.reg_write(a.UC_ARM_REG_R0, tree_address)
-        machine.reg_write(a.UC_ARM_REG_SP, 0x4a0f0000)
-        machine.reg_write(a.UC_ARM_REG_LR, stop)
-        machine.emu_start(sym["baseos_prepare_logo"], 0x50000000, count=100000000)
-        assert machine.reg_read(a.UC_ARM_REG_PC) == stop, (name, "logo producer did not return")
-        result = machine.reg_read(a.UC_ARM_REG_R0)
-        if result & 0x80000000: result -= 1 << 32
+        def call(symbol, argument):
+            machine.reg_write(a.UC_ARM_REG_CPSR, 0x1d3)
+            machine.reg_write(a.UC_ARM_REG_R0, argument)
+            machine.reg_write(a.UC_ARM_REG_SP, 0x4a0f0000)
+            machine.reg_write(a.UC_ARM_REG_LR, stop)
+            machine.emu_start(sym[symbol], 0x50000000, count=100000000)
+            assert machine.reg_read(a.UC_ARM_REG_PC) == stop, (name, symbol, "did not return")
+            result = machine.reg_read(a.UC_ARM_REG_R0)
+            return result - (1 << 32) if result & 0x80000000 else result
+        result = call("baseos_prepare_pixels", descriptor_address)
+        if result == 1:
+            # This helper test models readiness. The complete loader verifier executes
+            # the real panel/DE/cache sequence and proves this record's publication.
+            native = bytes(machine.mem_read(0x4a300000, 240))
+            shown = struct.unpack_from("<Q", native, 40)[0]
+            status = bytearray(struct.pack("<8I32sQ2I", 0x31505344, 1, 80, 0,
+                              0 if manifest["panel_rule"] == 0 else 1, len(payload), fnv(payload),
+                              fnv(logo_pixels(payload, width, height)), bytes.fromhex(manifest["generation"]), shown, 0, 0))
+            struct.pack_into("<I", status, 12, fnv(status))
+            machine.mem_write(0x4a300300, bytes(status))
+            result = call("baseos_prepare_logo", tree_address)
         assert result == expected, (name, result, expected)
         actual_tree = bytes(machine.mem_read(tree_address, len(tree)))
         actual_pixels = bytes(machine.mem_read(pixel_address, capacity))
@@ -110,7 +123,7 @@ def verify_logo(machine, sym, manifest, tree, directory):
         assert bytes(machine.mem_read(descriptor_address, 16)) == desc, (name, "descriptor changed")
         row = dict(name=name, return_value=result, descriptor_sha256=hashlib.sha256(desc).hexdigest(),
                    bmp_sha256=hashlib.sha256(payload).hexdigest(), bmp_bytes=len(payload))
-        if expected == 0:
+        if expected == -1 and not name.startswith("fdt-"):
             assert actual_tree == input_tree and actual_pixels == sentinel, (name, "refusal changed tree or pixels")
             row.update(tree_unchanged=True, pixels_unchanged=True)
         elif expected == 1:
@@ -120,18 +133,25 @@ def verify_logo(machine, sym, manifest, tree, directory):
             changed = {key for key in original_properties.keys() | props.keys() if original_properties.get(key) != props.get(key)}
             assert changed == {(display, "boot_fb0")}, (name, changed)
             assert props[display, "boot_fb0"] == description.encode() + b"\0"
-            assert all(v == bytes(len(v)) for (p, n), v in props.items() if "/disp@" in p and n.startswith("boot_disp"))
+            assert all(props[display, n] == struct.pack(">I", v) for n, v in manifest["early_display"]["handoff"].items())
             assert props["/chosen", "bootargs"] == original_properties["/chosen", "bootargs"]
-            assert b"disp_reserve=" not in props["/chosen", "bootargs"]
-            assert fdt_reservations(actual_tree) == original_reservations + [owned_reservation]
+            assert f"disp_reserve={width * height * 4},0x{pixel_address:x}".encode() in props["/chosen", "bootargs"].split()
+            assert fdt_reservations(actual_tree) == original_reservations
             row.update(pixels_exact=True, pixel_tail_unchanged=True, only_boot_fb0_changed=True,
-                       owned_reservation_added=list(owned_reservation), boot_disp_unchanged=True, bootargs_unchanged=True)
+                       reservations_unchanged=True, boot_disp_unchanged=True, bootargs_unchanged=True)
+        elif expected == 0:
+            assert actual_tree == input_tree
+            assert actual_pixels == bytes(width * height * 4) + sentinel[width * height * 4:]
+            row.update(blank_pixels_exact=True)
+        else:
+            assert name.startswith("fdt-") and actual_tree == input_tree
+            assert actual_pixels[:width * height * 4] == expected_pixels
         cases.append(row)
         return actual_tree, actual_pixels[:width * height * 4], desc
 
     try:
         descriptor = (0x31474f4c, len(bmp), fnv(bmp), 0)
-        execute("missing-descriptor", descriptor=bytes(16))
+        execute("missing-descriptor", descriptor=bytes(16), expected=0)
         for name, index, value in (("descriptor-magic", 0, 0x31474f4d), ("descriptor-reserved", 3, 1),
                                    ("descriptor-empty", 1, 0), ("descriptor-over-capacity", 1, capacity + 1),
                                    ("descriptor-hash", 2, descriptor[2] ^ 1)):
@@ -189,6 +209,7 @@ def verify_logo(machine, sym, manifest, tree, directory):
     finally:
         machine.hook_del(stop_hook)
         machine.mem_write(descriptor_address, bytes(16))
+        machine.mem_write(0x4a300300, bytes(80))
     return dict(passed=True, linked_symbol="baseos_prepare_logo", linked_symbol_address=hex(sym["baseos_prepare_logo"]),
                 fixture_path=str(fixture_path.relative_to(root)), fixture_sha256=hashlib.sha256(bmp).hexdigest(), fixture_bytes=len(bmp),
                 width=width, height=height, pixel_address=hex(pixel_address), pixel_bytes=len(expected_pixels),
@@ -210,7 +231,7 @@ def verify_display(machine, sym, manifest, tree, directory, record, ticks):
     bmp = fixture_path.read_bytes()
     pixels = logo_pixels(bmp, width, height)
     display_address, descriptor_address = 0x4a300300, 0x4a300200
-    bmp_address, pixel_address, tree_address, stop = 0x4b400000, 0x4b000000, 0x4a400000, 0x4a0d0000
+    bmp_address, pixel_address, tree_address, stop = 0x4b400000, 0x40000000 + struct.unpack("<Q", machine.mem_read(0x4a300010, 8))[0] - manifest["boot_logo"]["framebuffer_from_ram_end"], 0x4a400000, 0x4a0d0000
     descriptor = struct.pack("<4I", 0x31474f4c, len(bmp), fnv(bmp), 0)
     generation = bytes.fromhex(manifest["generation"])
     rule = manifest["panel_rule"]
@@ -270,6 +291,8 @@ def verify_display(machine, sym, manifest, tree, directory, record, ticks):
         machine.mem_write(tree_address, input_tree)
         assert call("baseos_native_display_state") == expected, name
         if expected == 0:
+            assert call("baseos_prepare_logo", tree_address) == -1, "cold display advertised warm ownership"
+            assert bytes(machine.mem_read(tree_address, len(input_tree))) == input_tree
             cases.append(dict(name=name, return_value=0, all_zero_is_cold=True))
             return None
         assert call("make_command_line", 0x45000000) == (0 if expected == 1 else -1), name
@@ -297,11 +320,11 @@ def verify_display(machine, sym, manifest, tree, directory, record, ticks):
             props = {(p, n): v for p, n, _, v in fdt.walk(actual_tree)}
             display = "/soc@03000000/disp@01000000"
             changed = {key for key in before.keys() | props.keys() if before.get(key) != props.get(key)}
-            assert changed == {(display, n) for n in ("boot_fb0", "boot_disp", "boot_disp1", "boot_disp2")} | {("/chosen", "baseos,boot-display")}, (name, changed)
+            assert changed == {(display, "boot_fb0")}, (name, changed)
             for prop, value in policy.items(): assert props[display, prop] == struct.pack(">I", value)
-            assert props["/chosen", "baseos,boot-display"] == raw
+            assert props["/chosen", "baseos,boot-display"] == before["/chosen", "baseos,boot-display"]
             assert actual_pixels == pixels
-            assert fdt_reservations(actual_tree) == fdt_reservations(input_tree) + [(pixel_address, len(pixels))]
+            assert fdt_reservations(actual_tree) == fdt_reservations(input_tree)
             # Exercise the actual renderer above, then bind its output for the kernel consumer.
             output = bytearray(actual_tree)
             old_command = props["/chosen", "bootargs"]
@@ -310,6 +333,7 @@ def verify_display(machine, sym, manifest, tree, directory, record, ticks):
             if command + b"\0" != expected_command:
                 raise AssertionError((name, "cached renderer changed unrelated bootargs"))
             fdt.set_same_size(output, "/chosen", "bootargs", expected_command)
+            fdt.set_same_size(output, "/chosen", "baseos,boot-display", raw)
             actual_tree = bytes(output)
             row.update(panel="boe" if panel else "old", warm_metadata_exact=True, status_copied_exact=True,
                        pixels_exact=True, cached_panel_rendered=True, only_warm_properties_changed=True)
@@ -343,7 +367,9 @@ def verify_display(machine, sym, manifest, tree, directory, record, ticks):
             execute("ready-" + ("boe" if panel else "old"), raw=status(panel), expected=1 if rule == 2 or panel == rule else -1)
         for tick, name in ((loaded, "loaded-end"), (ticks[0], "current-counter")):
             execute("ready-stamp-" + name, raw=status(base_panel, tick), expected=1)
-        execute("ready-export", expected=1)
+        export = execute("ready-export", expected=1)
+        (directory / "verified-logo-kernel.dtb").write_bytes(export)
+        (directory / "logo-display-record.bin").write_bytes(base)
     finally:
         for hook in hooks: machine.hook_del(hook)
         machine.mem_write(display_address, bytes(80))
@@ -413,6 +439,10 @@ def verify(directory, inventory, spl=None, prepared_source=False):
 
     m = u.Uc(u.UC_ARCH_ARM, u.UC_MODE_ARM)
     m.mem_map(0x40000000, 0x10000000)
+    pixel_address = 0x40000000 + ram_bytes - manifest["boot_logo"]["framebuffer_from_ram_end"]
+    pixel_page = pixel_address & ~4095
+    m.mem_map(pixel_page, (pixel_address + 0x400000 - pixel_page + 4095) & ~4095)
+    m.mem_write(0x44000000, b"\xa5" * 0x100000)
     m.mem_map(0x03000000, 0x10000)
     m.mem_map(0x01008000, 0x1000)
     m.mem_map(0x07000000, 0x1000)
@@ -532,7 +562,7 @@ def verify(directory, inventory, spl=None, prepared_source=False):
                 if key == (0, 1, 0, 0) and value & 1:
                     table = struct.unpack("<4096I", machine.mem_read(0x4a0f8000, 16384))
                     for index, descriptor in enumerate(table):
-                        expected = (index << 20) | (0x1c0e if index == 0 or 0x400 <= index < 0x500 else 0x10c16)
+                        expected = (index << 20) | (0x1c0e if index == 0 or 0x400 <= index < (0x400 + (ram_bytes >> 20)) else 0x10c16)
                         assert descriptor == expected
                     assert cp[0, 2, 0, 0] == 0x4a0f8000 and cp[0, 2, 0, 2] == 0 and cp[0, 3, 0, 0] == 1
                     translations.append({"entries": len(table), "normal_dram": True, "device_xn_mmio": True})
@@ -542,6 +572,19 @@ def verify(directory, inventory, spl=None, prepared_source=False):
                 cp[key] = value
                 events.append({"address": hex(address), "register": list(key), "value": hex(value)})
         machine.reg_write(a.UC_ARM_REG_PC, address + 4)
+
+    def display_model(machine, pc, size, data):
+        if pc == sym["baseos_early_display_start"]:
+            panel = 0 if manifest["panel_rule"] == 0 else 1
+            status = bytearray(struct.pack("<8I32sQ2I", 0x31505344, 1, 80, 0, panel, 0, 0,
+                              fnv(bytes(manifest["boot_logo"]["width"] * manifest["boot_logo"]["height"] * 4)),
+                              bytes.fromhex(manifest["generation"]), ticks[0], 0, 0))
+            struct.pack_into("<I", status, 12, fnv(status))
+            machine.mem_write(0x4a300300, bytes(status))
+        machine.reg_write(a.UC_ARM_REG_R0, 0)
+        machine.reg_write(a.UC_ARM_REG_PC, machine.reg_read(a.UC_ARM_REG_LR))
+    for name in ("baseos_early_display_start", "baseos_early_display_poll", "baseos_early_display_finish"):
+        prepare_hooks.append(m.hook_add(u.UC_HOOK_CODE, display_model, begin=sym[name], end=sym[name]))
 
     for address in cp_instructions: m.hook_add(u.UC_HOOK_CODE, cp_step, begin=address, end=address)
     def before_mmu(machine, access, address, size, value, data):
@@ -553,9 +596,9 @@ def verify(directory, inventory, spl=None, prepared_source=False):
     expected_sram_writes = [(0x03000000,sram_initial[0x03000000] & 0x80000000),
                             (0x03000004,sram_initial[0x03000004] & 0xfeffffff)]
     assert sram_writes == expected_sram_writes, sram_writes
-    assert len(panel_samples) == (1 if manifest["panel_rule"] == 2 else 0)
+    assert not panel_samples, "ready display must supply its cached panel"
     assert logo_calls == [0x44000000], "kernel preparation did not call the linked logo producer once"
-    assert len(panel_writes) == (len(panel_sequence) if manifest["panel_rule"] == 2 and not spl_panel else 0)
+    assert not panel_writes, "ready display must not redo panel steps"
     for hook in display_hooks + prepare_hooks:
         m.hook_del(hook)
     assert not cp[0, 1, 0, 0] & 0x1005
@@ -613,7 +656,7 @@ def verify(directory, inventory, spl=None, prepared_source=False):
     assert "androidboot.serialno=" + serial in command.split()
     assert "snum=" + serial in command.split()
     low_panel = "old" if manifest["panel_rule"] == 0 else "boe"
-    assert "disp_reserve=" not in command and "lcd_type=" + low_panel in command.split()
+    assert f"disp_reserve={manifest['boot_logo']['width'] * manifest['boot_logo']['height'] * 4},0x{pixel_address:x}" in command.split() and "lcd_type=" + low_panel in command.split()
     assert ("maxcpus=1" in command.split()) == (manifest.get("diagnostic_maxcpus") == 1)
     assert properties["/soc@03000000/hdmi@06000000", "status"] == b"okay\0"
     offset = 2048
@@ -637,12 +680,12 @@ def verify(directory, inventory, spl=None, prepared_source=False):
     source_properties = {(path, name): value for path, name, _, value in fdt.walk(parts[4])}
     allowed = {(path, name) for path, name in properties if path == "/dram"}
     allowed |= {("/chosen", name) for name in ("bootargs", "linux,initrd-start", "linux,initrd-end",
-                                               "baseos,native-boot", "baseos,native-timing")}
+                                               "baseos,native-boot", "baseos,native-timing", "baseos,boot-display")}
     allowed |= {("/memory@40000000", "reg")}
+    allowed |= {("/soc@03000000/disp@01000000", n) for n in ("boot_disp", "boot_disp1", "boot_disp2")}
     changed = {key for key in source_properties.keys() | properties.keys() if source_properties.get(key) != properties.get(key)}
     assert changed <= allowed, changed - allowed
-    assert all(value == bytes(len(value)) for (path, name), value in properties.items()
-               if "/disp@" in path and name.startswith(("boot_disp", "boot_fb")))
+    assert all(properties["/soc@03000000/disp@01000000", n] == struct.pack(">I", v) for n, v in manifest["early_display"]["handoff"].items())
     if not prepared_source:
         live_properties = {(path, name): value for path, name, _, value in fdt.walk((inventory / "live.dtb").read_bytes())}
         live_allowed = allowed | {key for key in live_properties if "/disp@" in key[0] and key[1].startswith(("boot_disp", "boot_fb"))}
@@ -671,6 +714,15 @@ def verify(directory, inventory, spl=None, prepared_source=False):
         assert prepare() == expected
         refusals.append({"record_offset": offset, "error": expected})
     if record_version == 2:
+        for ram in (0x10000000, 0x20000000, 0xc0000000):
+            bad = bytearray(record)
+            struct.pack_into("<Q", bad, 16, ram)
+            struct.pack_into("<I", bad, 80, (ram >> 20 << 16) | (words[7] & 0xffff))
+            struct.pack_into("<I", bad, 196, 0)
+            struct.pack_into("<I", bad, 196, fnv(bad))
+            m.mem_write(0x4a300000, bytes(bad))
+            assert prepare() == 1
+            refusals.append({"unproven_ram_bytes": ram, "checksum_recomputed": True, "error": 1})
         for offset, value in ((4, 1), (8, 232), (232, 6), (236, 3)):
             bad = bytearray(record)
             struct.pack_into("<I", bad, offset, value)
@@ -695,6 +747,7 @@ def verify(directory, inventory, spl=None, prepared_source=False):
         assert prepare() == expected
         m.mem_write(0x45000000 + offset, image[offset:offset + 4])
         refusals.append({"image_offset": offset, "error": expected})
+    m.mem_write(0x4a300300, bytes(80))
     # Both strap outcomes execute the real policy renderer without decoding again.
     panels = []
     for level in (0, 1):
@@ -729,6 +782,7 @@ def verify(directory, inventory, spl=None, prepared_source=False):
     logo = verify_logo(m, sym, manifest, verified_tree, directory)
     logo["missing_logo_main_call_verified"] = True
     early_display = verify_display(m, sym, manifest, verified_tree, directory, record, ticks)
+    logo["prepared_fdt_sha256"] = hashlib.sha256((directory / "verified-logo-kernel.dtb").read_bytes()).hexdigest()
     report = {"passed": True, "loader_sha256": manifest["loader_sha256"],
               "image_sha256": manifest["image_sha256"], "kernel_sha256": hashlib.sha256(expected_kernel).hexdigest(),
               "kernel_bytes_exact": len(expected_kernel), "final_call_r0_r3": list(map(hex, calls[0])),
@@ -756,6 +810,7 @@ def verify(directory, inventory, spl=None, prepared_source=False):
               "display_register_accesses": 0, "sram_release_unrelated_bits_preserved": True,
               "entry_checksum_witness_verified": manifest.get("entry_checksum_witness", False),
               "kernel_exception_witness_verified": manifest.get("kernel_exception_witness", False),
+              "early_display_modeled_in_focused_test": True, "full_display_verifier": "verify-loader-display.py",
               "cache_coherency_modeled": False, "vendor_smc_dispatch_verified": False}
     if spl:
         report["spl_sha256"] = spl_manifest["spl_sha256"]

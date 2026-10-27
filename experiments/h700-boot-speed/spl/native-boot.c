@@ -212,7 +212,8 @@ int baseos_vendor_handoff(struct blk_desc *card, u32 *result, const u8 *stock)
     result[40] = dram_probe_attempts;
     result[41] = dram_probe_selected_type;
     baseos_checkpoint(card, 31);
-    if (gd->ram_size < 0x10000000ul || baseos_native_cache_on()) return -1;
+    if ((gd->ram_size != 0x40000000ul && gd->ram_size != 0x80000000ul) ||
+        baseos_native_cache_on()) return -1;
     asm volatile("mrs %0, cntpct_el0" : "=r"(reading));
     struct baseos_native_display *display = (void *)BASEOS_NATIVE_DISPLAY_ADDRESS;
     memset(display, 0, sizeof(*display));

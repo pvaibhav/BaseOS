@@ -38,7 +38,8 @@ static inline int baseos_display_valid(const struct baseos_native_display *recor
     if (!occupied) return 0;
     if (record->magic != BASEOS_NATIVE_DISPLAY_MAGIC || record->version != 1 ||
         record->bytes != sizeof(*record) || record->panel > 1 ||
-        record->logo_bytes < 54 || record->logo_bytes > BASEOS_NATIVE_LOGO_CAPACITY ||
+        (record->logo_bytes && record->logo_bytes < 54) || record->logo_bytes > BASEOS_NATIVE_LOGO_CAPACITY ||
+        (!record->logo_bytes && record->logo_fnv) ||
         record->reserved[0] || record->reserved[1] || !record->shown_ticks ||
         baseos_display_hash(record) != record->fnv) return -1;
     for (unsigned i = 0; i < 32; ++i)

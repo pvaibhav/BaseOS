@@ -16,7 +16,8 @@ int baseos_native_cache_on(void)
         root[i] = 0;
         /* Attr0 Device-nGnRnE, AF, XN. No peripheral execution. */
         low[i] = ((u64)i << 21) | (1ull << 54) | 0x401;
-        /* First 256 MiB is the bounded working arena; Attr1 Normal WBWA. */
+        /* First 256 MiB is the bounded working arena; Attr1 Normal WBWA.
+         * SPL stages the BMP here. Only A32 accesses the high logo pixels. */
         dram[i] = i < 128 ? (0x40000000ull + ((u64)i << 21)) | 0x705 : 0;
     }
     low[0] = 0x705; /* SRAM code, BSS, restore buffer and stack. */

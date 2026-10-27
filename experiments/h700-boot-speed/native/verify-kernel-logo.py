@@ -27,9 +27,10 @@ def pair_address(blob,at,add):
  assert p.mnemonic=='adrp' and q.mnemonic=='add'
  return ((p.operands[1].imm&MASK)+q.operands[2].imm)&MASK
 
-def run_case(directory,width,height,present=True,source_bpp=32,legacy_reserve=False,crop=None,pixels=None,property_value=None,warm=False):
+def run_case(directory,width,height,present=True,source_bpp=32,legacy_reserve=False,crop=None,pixels=None,property_value=None,warm=False,physical_address=None):
  manifest=json.loads((directory/'manifest.json').read_text());blob=(directory/'kernel.bin').read_bytes()
  assert sha(blob)==manifest['kernel_sha256']==manifest['source_kernel_sha256']
+ if physical_address is None:physical_address=0x80000000-manifest['boot_logo']['framebuffer_from_ram_end']
  cf=blob.find(COPY_PREFIX);rq=blob.find(REQUEST_PREFIX)
  assert cf>=0 and rq==cf+0x640 and blob.find(COPY_PREFIX,cf+1)<0 and blob.find(REQUEST_PREFIX,rq+1)<0
  fbi=pair_address(blob,rq+0x1c,rq+0x44)
@@ -52,7 +53,7 @@ def run_case(directory,width,height,present=True,source_bpp=32,legacy_reserve=Fa
  length=width*height*4
  m.mem_write(source,pixels)
  crop=crop or(0,0,width,height)
- value=(f'4b000000,{width:x},{height:x},{source_bpp:x},{width*4:x},'
+ value=(f'{physical_address:x},{width:x},{height:x},{source_bpp:x},{width*4:x},'
         +','.join(f'{v:x}' for v in crop)).encode()+b'\0'
  if property_value is not None:value=property_value
  m.mem_write(text,value)
@@ -62,8 +63,8 @@ def run_case(directory,width,height,present=True,source_bpp=32,legacy_reserve=Fa
  w64(managers,manager);w64(manager+0xf8,callback)
  w64(memstart,0x40000000)
  for offset,v in [(0,0),(0xc,width),(0x10,height),(0x14,width),(0x18,height)]:w32(args+offset,v)
- if legacy_reserve:w32(fbi+0x270,length);w32(fbi+0x274,0x4b000000)
  properties,copies,layer_callbacks,flushes,frees,mappings=[],[],[],[],[],[]
+ reserves=[]
  freed=[False]
  operations={}
  def cstr(p):return bytes(m.mem_read(p,256)).split(b'\0',1)[0]
@@ -108,13 +109,13 @@ def run_case(directory,width,height,present=True,source_bpp=32,legacy_reserve=Fa
   assert reg(0)==manager and reg(2)==1
   layer_callbacks.append(bytes(m.mem_read(reg(1),0xb8)).hex());return 0
  def map_source():
-  pages=(length+4095)//4096
+  pages=(length+(physical_address&4095)+4095)//4096
   assert reg(0)==array and reg(1)==pages and reg(2)==4,'unexpected vmap arguments'
-  expected_page=0xffffffbf00000000+((0x4b000000-0x40000000)//4096)*64
+  expected_page=0xffffffbf00000000+((physical_address-0x40000000)//4096)*64
   page_pointers=struct.unpack('<'+'Q'*pages,m.mem_read(array,pages*8))
   assert page_pointers==tuple(expected_page+i*64 for i in range(pages)),'vmap pages differ from owned source PA'
-  mappings.append(dict(physical_address=0x4b000000,page_count=pages))
-  return source
+  mappings.append(dict(physical_address=physical_address,page_count=pages))
+  return source-(physical_address&4095)
  def memblock_free():
   frees.append([reg(0),reg(1)]);freed[0]=True;return 0
  register(prop,'property',parse_string)
@@ -132,6 +133,8 @@ def run_case(directory,width,height,present=True,source_bpp=32,legacy_reserve=Fa
   register(target(blob,rq+offset),name,fn)
  reserve=target(blob,cf+0x5dc)
  register(target(blob,reserve-BASE+0x3c),'memblock_free',memblock_free)
+ def memblock_reserve():reserves.append([reg(0),reg(1)]);return 0
+ register(target(blob,reserve-BASE+0x34),'memblock_reserve',memblock_reserve)
  register(callback,'layer',layer)
  display_sizes=[]
  if warm:
@@ -144,6 +147,32 @@ def run_case(directory,width,height,present=True,source_bpp=32,legacy_reserve=Fa
  # Reject MMIO accesses structurally: only kernel and modeled heap are mapped.
  for pc,(name,fn) in operations.items():m.hook_add(u.UC_HOOK_CODE,returns(fn),begin=pc,end=pc)
  m.reg_write(a.UC_ARM64_REG_SP,HEAP+0x1f00000)
+ if legacy_reserve:
+  # Locate the real __setup entry, rather than importing a lab kernel's PCs.
+  virtual_base=0xffffff8008080000
+  string=blob.index(b'disp_reserve\0')
+  pointer=struct.pack('<Q',virtual_base+string)
+  setup=blob.index(pointer);assert blob.find(pointer,setup+1)<0
+  # The unrelocated Image stores setup pointers in R_AARCH64_RELATIVE addends.
+  setup_address,relocation=struct.unpack_from('<QQ',blob,setup-16)
+  assert relocation==0x403
+  function_relocation=blob.index(struct.pack('<Q',setup_address+8))
+  kind,function=struct.unpack_from('<QQ',blob,function_relocation+8)
+  assert kind==0x403
+  early=function-virtual_base
+  assert blob[early:early+4]==bytes.fromhex('fd7bbca9')
+  assert pair_address(blob,early+0x40,early+0x44)==fbi
+  assert target(blob,early+0x6c)==reserve
+  # Execute early_disp_reserve and its real get_options numeric parser. Only
+  # the external memblock operation and printk are modeled at the boundary.
+  reserve_text=text+0x100
+  m.mem_write(reserve_text,f'{length},0x{physical_address:x}'.encode()+b'\0')
+  m.reg_write(a.UC_ARM64_REG_X0,reserve_text)
+  m.reg_write(a.UC_ARM64_REG_LR,RETURN)
+  m.emu_start(BASE+early,RETURN,count=100000)
+  assert m.reg_read(a.UC_ARM64_REG_PC)==RETURN and m.reg_read(a.UC_ARM64_REG_X0)==0
+  assert struct.unpack('<II',m.mem_read(fbi+0x270,8))==(length,physical_address)
+  assert reserves==[[physical_address,length]],reserves
  fbinit_prefix=bytes.fromhex('fd7bb9a900400091fd030091f55b02a9')
  fi=blob.find(fbinit_prefix)
  assert fi>=0 and blob.find(fbinit_prefix,fi+1)<0
@@ -175,7 +204,7 @@ def run_case(directory,width,height,present=True,source_bpp=32,legacy_reserve=Fa
  assert actual==bytes(expected)
  assert len(copies)==(crop_height if successful else 0)
  assert len(mappings)==(1 if successful else 0)
- expected_frees=[[0x4b000000,length]] if successful and legacy_reserve else []
+ expected_frees=[[physical_address,length]] if successful and legacy_reserve else []
  assert frees==expected_frees,frees
  return dict(target=manifest['target'],kernel_sha256=sha(blob),copy_entry=hex(BASE+cf),
              copy_body_sha256=sha(blob[cf:rq]),request_entry=hex(BASE+rq),
@@ -184,6 +213,7 @@ def run_case(directory,width,height,present=True,source_bpp=32,legacy_reserve=Fa
              source_bpp=source_bpp,crop=list(crop),framebuffer_format_zero_fields=format_fields,pixels_copied_exact=successful,copy_rows=len(copies),
              layer_submitted=True,cache_flush_requested=True,memblock_free_calls=frees,
              legacy_disp_reserve_populated=legacy_reserve,no_source_reads_after_free=True,mmio_accesses=0,
+             early_disp_reserve_executed=legacy_reserve,memblock_reserve_calls=reserves,
              source_pixels_sha256=sha(pixels),destination_pixels_sha256=sha(actual),source_mappings=mappings,
              warm_display_size_calls=display_sizes)
 
@@ -270,25 +300,28 @@ def generated_case(directory,dtb_path,pixel_path,warm=False):
  fields=raw[:-1].decode('ascii').split(',')
  assert len(fields)==9 and all(re.fullmatch(r'(?:0[xX])?[0-9a-fA-F]+',v) for v in fields),'invalid nine-field hex tuple'
  numbers=[int(v,16) for v in fields]
- expected=[0x4b000000,width,height,32,width*4,0,0,width,height]
+ manifest=json.loads((directory/'manifest.json').read_text())
+ ram=struct.unpack('>QQ',props['/memory@40000000','reg'])[1]
+ physical_address=0x40000000+ram-manifest['boot_logo']['framebuffer_from_ram_end']
+ expected=[physical_address,width,height,32,width*4,0,0,width,height]
  assert numbers==expected,('boot_fb0 does not describe the owned full-frame ARGB32 source',numbers,expected)
  assert len(pixels)==width*height*4,'pixel byte count differs from geometry'
  assert all(pixels[i]==255 for i in range(3,len(pixels),4)),'pixel alpha must be opaque'
  reserved=reservations(blob)
- assert any(base<=numbers[0] and numbers[0]+len(pixels)<=base+length for base,length in reserved),'source pixels are not FDT-reserved'
+ assert not any(base<numbers[0]+len(pixels) and numbers[0]<base+length for base,length in reserved),'source must not be permanently FDT-reserved'
  commandlines=[v.rstrip(b'\0').decode('ascii') for (path,name),v in props.items() if name=='bootargs']
- assert len(commandlines)==1 and not any(v.startswith('disp_reserve=') for v in commandlines[0].split()),'disp_reserve must not be supplied'
+ assert len(commandlines)==1 and [v for v in commandlines[0].split() if v.startswith('disp_reserve=')]==[f'disp_reserve={len(pixels)},0x{physical_address:x}'],'stock disp_reserve differs'
  manifest=json.loads((directory/'manifest.json').read_text())
  generation=bytes.fromhex(manifest['generation']);assert len(generation)==32
  markers=[v for (path,name),v in props.items() if name=='baseos,native-boot']
  assert markers==[generation],'FDT native generation differs from manifest'
  if warm:warm_status=validate_warm_status(directory,props,display,pixels)
  else:assert ('/chosen','baseos,boot-display') not in props,'cold FDT carries warm display status'
- result=run_case(directory,width,height,pixels=pixels,property_value=raw,warm=warm)
+ result=run_case(directory,width,height,pixels=pixels,property_value=raw,warm=warm,legacy_reserve=True,physical_address=physical_address)
  result.update(input_mode='generated-fdt-and-pixels',fdt_path=str(dtb_path.resolve()),
                fdt_sha256=sha(blob),pixels_path=str(pixel_path.resolve()),
                manifest_sha256=sha((directory/'manifest.json').read_bytes()),generation=manifest['generation'],
-               source_reservations=reserved,source_held_reserved_for_boot=True)
+               source_reservations=reserved,source_held_reserved_for_boot=False,source_freed_after_copy=True)
  result['handoff_mode']='warm' if warm else 'cold'
  if warm:result['warm_status']=warm_status
  return result
@@ -302,8 +335,8 @@ def prepared_cases(fleet):
  assert {p.name for p in directories}==expected,'all-prepared requires the exact eleven target directories'
  for directory in directories:
   dtb_path=directory/'verified-kernel.dtb';dtb=dtb_path.read_bytes()
-  _,_,width,height=display_properties(dtb)
-  result=run_case(directory,width,height)
+  _,_,width,height=display_properties(dtb,True)
+  result=run_case(directory,width,height,legacy_reserve=True,warm=True)
   result.update(input_mode='synthetic-source-prepared-geometry',prepared_fdt_sha256=sha(dtb),
                 manifest_sha256=sha((directory/'manifest.json').read_bytes()))
   rows.append(result)

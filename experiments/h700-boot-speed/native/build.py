@@ -79,7 +79,32 @@ def model_policy(target, inventory):
     logo = {"partition_lba": logo_partition[0], "partition_sectors": logo_partition[1],
             "width": profile["bootlogo_width"], "height": profile["bootlogo_height"],
             "source": "mutable p2 BOOTLOGO.BMP; FAT16/FAT32; physical 24-bit BMP",
-            "kernel_handoff": "boot_fb0 pixels; vendor warm metadata after early ready; owned pixel reservation held for boot"}
+            "kernel_handoff": "stock allocation, warm display and disp_reserve; kernel copies and frees the source"}
+    handoff = json.loads((HERE / "vendor-handoff.json").read_text())
+    allocation = handoff["models"][target]
+    assert handoff["version"] == 1 and handoff["ram_bytes"] == [0x40000000, 0x80000000]
+    assert allocation["package_sha256"] == sha(package)
+    assert allocation["environment_sha256"] == sha((inventory / "env.bin").read_bytes())
+    source_prefix = (ROOT / "work" / target / "boot-prefix.img").read_bytes()
+    assert allocation["prefix_sha256"] == sha(source_prefix)
+    assert prefix == source_prefix[:len(prefix)], "inventory GPT differs from the proven release input"
+    logo["framebuffer_from_ram_end"] = allocation["framebuffer_from_ram_end"]
+    logo["proven_ram_bytes"] = handoff["ram_bytes"]
+    for ram in handoff["ram_bytes"]:
+        address = 0x40000000 + ram - logo["framebuffer_from_ram_end"]
+        assert allocation["allocations"][str(ram)] == address
+        assert 0x50000000 <= address < address + logo["width"] * logo["height"] * 4 <= 0x40000000 + ram
+        # Bound whole arenas, including stacks/tables, rather than today's payload
+        # lengths. Future growth inside an arena cannot invalidate this proof.
+        arenas = {"kernel": (0x40080000, 0x42000000), "initrd": (0x42000000, 0x42100000),
+                  "SPL firmware staging": (0x42e00000, 0x42f00000), "FDT": (0x44000000, 0x44100000),
+                  "image": (0x45000000, 0x46000000), "BL31 reservation": (0x48000000, 0x49000000),
+                  "loader, stack and A32 tables": (0x4a000000, 0x4a100000),
+                  "DTBO and TOC DTB": (0x4a100000, 0x4a300000), "records": (0x4a300000, 0x4a304000),
+                  "SPL A64 tables": (0x4a400000, 0x4a403000), "BMP": (0x4b400000, 0x4b800000)}
+        for name, (start, end) in arenas.items():
+            assert address + 0x400000 <= start or end <= address, (name, ram, address)
+    logo["nonoverlap_arenas"] = arenas
     assert 0 < logo["width"] * logo["height"] * 4 <= 0x400000
     values = {key.decode(): value.decode() for key, value in env.items()}
     values.update(partitions=":".join(partitions), snum="@SERIAL@")
@@ -95,7 +120,7 @@ def model_policy(target, inventory):
     command += (" androidboot.mode=normal androidboot.serialno=@SERIAL@"
                 " androidboot.hardware=sun50iw9p1 boot_type=1 androidboot.boot_type=1"
                 " androidboot.secure_os_exist=0 gpt=1 " + vendor_version_message(toc_items(package)["u-boot"]) +
-                " bootreason=@BOOTREASON@ lcd_type=@PANEL@ @ANDROID@")
+                " disp_reserve=@RESERVE@ bootreason=@BOOTREASON@ lcd_type=@PANEL@ @ANDROID@")
     strap = contract["vendor_pe6_lcd_type"]
     rule = {("old", "old"): 0, ("boe", "boe"): 1, ("old", "boe"): 2}[strap["high"], strap["low"]]
     panel_contract = json.loads((HERE / "panel-contract.json").read_text())
@@ -272,6 +297,7 @@ char *strrchr(const char *, int);
                HERE / "build-display.py", HERE / "early-display.c", HERE / "display-engine.json",
                HERE / "display-handoff.json",
                HERE / "panel-init.json", HERE / "panel-spi9.h", SPL / "native-display.h",
+               HERE / "vendor-handoff.json", HERE / "derive-handoff.py",
                ROOT / "devices.json", ROOT / "tools/device_profile.py",
                HERE / "kernel-trace64.S", HERE / "check-entry64.c",
                HERE / "kernel-fault64.S",
@@ -299,12 +325,16 @@ char *strrchr(const char *, int);
               f"#define BASEOS_LOGO_PARTITION_SECTORS {policy['boot_logo']['partition_sectors']}u\n"
               f"#define BASEOS_LOGO_WIDTH {policy['boot_logo']['width']}u\n"
               f"#define BASEOS_LOGO_HEIGHT {policy['boot_logo']['height']}u\n"
+              f"#define BASEOS_LOGO_RAM_END_OFFSET {policy['boot_logo']['framebuffer_from_ram_end']}u\n"
               f"#define BASEOS_DISPLAY_BOOT_DISP 0x{policy['early_display']['handoff']['boot_disp']:x}u\n"
               f"#define BASEOS_DISPLAY_BOOT_DISP1 0x{policy['early_display']['handoff']['boot_disp1']:x}u\n"
               f"#define BASEOS_DISPLAY_BOOT_DISP2 0x{policy['early_display']['handoff']['boot_disp2']:x}u\n"
               f"#define BASEOS_IMAGE_BYTES {len(image)}u\n#define BASEOS_IMAGE_FNV 0x{fnv(image):08x}u\n"
               f"static const unsigned char baseos_generation[32] = {{{','.join(map(str,generation))}}};\n"
               f"static const char baseos_bootargs_template[] = {json.dumps(policy['bootargs_template'])};\n"
+              "static const char *const baseos_display_reserve[2] = {" +
+              ",".join(json.dumps(f"{policy['boot_logo']['width'] * policy['boot_logo']['height'] * 4},0x{0x40000000 + ram - policy['boot_logo']['framebuffer_from_ram_end']:x}")
+                        for ram in policy["boot_logo"]["proven_ram_bytes"]) + "};\n" +
               "static const char *const baseos_dram_properties[24] = {" +
               ",".join(json.dumps(name) for name in binding.DRAM_PROPERTIES) + "};\n")
     (output / "native-generated.h").write_text(header)

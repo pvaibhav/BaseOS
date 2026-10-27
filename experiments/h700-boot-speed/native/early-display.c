@@ -122,6 +122,23 @@ static int scanline_advances(void)
     return -1;
 }
 
+/* Pixel production has no display side effects; invalid input leaves RAM alone. */
+__attribute__((noinline)) int baseos_prepare_pixels(const struct baseos_native_logo *logo)
+{
+    const unsigned char *bmp = (void *)BASEOS_NATIVE_LOGO_BMP_ADDRESS;
+    if (!BASEOS_NATIVE_LOGO_PIXEL_ADDRESS) return -1;
+    if (!logo->magic && !logo->bytes && !logo->fnv && !logo->reserved) {
+        memset((void *)BASEOS_NATIVE_LOGO_PIXEL_ADDRESS, 0, BASEOS_LOGO_WIDTH * BASEOS_LOGO_HEIGHT * 4u);
+        return 0;
+    }
+    if (logo->magic != BASEOS_NATIVE_LOGO_MAGIC || logo->reserved ||
+        logo->bytes > BASEOS_NATIVE_LOGO_CAPACITY || !logo->bytes ||
+        baseos_logo_hash(bmp, logo->bytes) != logo->fnv ||
+        !baseos_logo_pixels(bmp, logo->bytes, BASEOS_LOGO_WIDTH, BASEOS_LOGO_HEIGHT,
+                            (void *)BASEOS_NATIVE_LOGO_PIXEL_ADDRESS, BASEOS_NATIVE_LOGO_CAPACITY)) return -1;
+    return 1;
+}
+
 /* After the panel stream starts, every remaining vendor wait is a deadline. The
  * loader polls between kernel decode slices, so the waits overlap the decode while
  * each step still runs in vendor order and no earlier than its minimum wait. */
@@ -223,19 +240,14 @@ int baseos_early_display_finish(void)
 }
 
 /* Convert, release SRAM C, prepare DE/TCON, take the panel out of reset and start its
- * stream. Returns the panel, -2 for a missing or malformed logo (cold path, nothing
- * touched) or -1 after a display step failed. */
+ * stream. A missing logo uses the vendor's zero-filled framebuffer and the same
+ * warm display path. A malformed descriptor/BMP refuses boot. */
 int baseos_early_display_start(const struct baseos_native_logo *logo)
 {
     struct baseos_native_display *record = (void *)BASEOS_NATIVE_DISPLAY_ADDRESS;
     memset(record, 0, sizeof(*record));
-    const unsigned char *bmp = (void *)BASEOS_NATIVE_LOGO_BMP_ADDRESS;
     size_t pixel_bytes = BASEOS_LOGO_WIDTH * BASEOS_LOGO_HEIGHT * 4u;
-    if (logo->magic != BASEOS_NATIVE_LOGO_MAGIC || logo->reserved ||
-        logo->bytes > BASEOS_NATIVE_LOGO_CAPACITY || !logo->bytes ||
-        baseos_logo_hash(bmp, logo->bytes) != logo->fnv ||
-        !baseos_logo_pixels(bmp, logo->bytes, BASEOS_LOGO_WIDTH, BASEOS_LOGO_HEIGHT,
-                            (void *)BASEOS_NATIVE_LOGO_PIXEL_ADDRESS, BASEOS_NATIVE_LOGO_CAPACITY)) return -2;
+    if (baseos_prepare_pixels(logo) < 0) return -2;
     clean_pixels(pixel_bytes);
     release_display_sram();
     if (apply(baseos_display_prepare, sizeof(baseos_display_prepare) / sizeof(*baseos_display_prepare))) return -1;

@@ -84,6 +84,7 @@ def build(output, target, policy, generation):
               f"#define BASEOS_PANEL_PULL_UP {int(policy['panel_pull_up'])}\n"
               f"#define BASEOS_LOGO_WIDTH {policy['boot_logo']['width']}u\n"
               f"#define BASEOS_LOGO_HEIGHT {policy['boot_logo']['height']}u\n"
+              f"#define BASEOS_LOGO_RAM_END_OFFSET {policy['boot_logo']['framebuffer_from_ram_end']}u\n"
               "static const unsigned char baseos_generation[32] = {" +
               ",".join(map(str, generation)) + "};\n")
     fallback = panel["old"] or panel["boe"]
