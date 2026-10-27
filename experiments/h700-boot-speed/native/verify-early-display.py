@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Execute a linked early-display A64 helper with explicit peripheral models.
+"""Execute the legacy early-display A64 prototype with explicit peripheral models.
 
 Use NATIVE_DIR --output FRESH_DIR. This is host-only instruction replay, not a
 panel or timing qualification. Clang is not needed; Capstone/Unicorn are needed.
+Current releases draw in A32 and use verify-loader-display.py. This verifier
+requires the separate A64 helper artifact and cannot qualify a release build.
 """
 import argparse
 import hashlib
@@ -20,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.dont_write_bytecode = True
 HELPER, HELPER_CAP = 0x4a500000, 0x40000
-RECORD, DESC, PIXELS, BMP, CAP = 0x4a300300, 0x4a300200, 0x4b000000, 0x4b400000, 0x400000
+RECORD, DESC, BMP, CAP = 0x4a300300, 0x4a300200, 0x4b400000, 0x400000
 STACK, STOP = 0x4e00ff00, 0x4f000000
 PHASES = ('prepare', 'publish', 'enable', 'backlight')
 KINDS = {'update': 0, 'write': 1, 'framebuffer': 2, 'delay_us': 3, 'poll': 4, 'barrier': 5}
@@ -120,7 +122,7 @@ def prepared_bmp(target, width, height):
 
 
 def reference_pixels(bmp, width, height):
-    """Independent physical canvas oracle, including opaque black centering."""
+    """Independent physical canvas oracle, including stock's zero padding."""
     stored_width, stored_height = struct.unpack_from('<ii', bmp, 18)
     rows = abs(stored_height)
     require(0 < stored_width <= width and 0 < rows <= height, 'BMP raster exceeds physical canvas')
@@ -128,7 +130,7 @@ def reference_pixels(bmp, width, height):
     offset = struct.unpack_from('<I', bmp, 10)[0]
     stride = (stored_width * 3 + 3) & ~3
     require(offset + rows * stride <= len(bmp), 'BMP raster truncated')
-    pixels = bytearray(b'\x00\x00\x00\xff' * (width * height))
+    pixels = bytearray(width * height * 4)
     left, top = (width - stored_width) // 2, (height - rows) // 2
     for y in range(rows):
         source_row = y if stored_height < 0 else rows - 1 - y
@@ -225,8 +227,12 @@ class Replay:
         m.mem_protect(HELPER, HELPER_CAP, u.UC_PROT_READ | u.UC_PROT_EXEC)
         m.mem_map(RECORD & ~0xfff, 0x1000)
         m.mem_write(RECORD & ~0xfff, b'\xa5' * 0x1000)
-        m.mem_map(PIXELS, CAP * 2)
-        m.mem_write(PIXELS, b'\xa5' * (CAP * 2))
+        PIXELS = 0x80000000 - self.policy['boot_logo']['framebuffer_from_ram_end']
+        page = PIXELS & ~4095
+        m.mem_map(page, (PIXELS + CAP - page + 4095) & ~4095)
+        m.mem_write(PIXELS, b'\xa5' * CAP)
+        m.mem_map(BMP, CAP)
+        m.mem_write(0x4a300010, struct.pack('<Q', 0x40000000))
         m.mem_map(0x4e000000, 0x10000)
         m.mem_map(STOP, 0x1000)
         source = bytearray(self.bmp)
@@ -381,7 +387,7 @@ class Replay:
         def ram_write(uc, access, address, size, value, context):
             nonlocal pixel_writes, last_pixel, magic_publication
             next_event()
-            if PIXELS <= address < BMP:
+            if PIXELS <= address < PIXELS + CAP:
                 require(address + size <= pixel_end, 'pixel write outside physical raster')
                 require(not clean, 'pixel write after cache cleaning started')
                 pixel_writes += 1; last_pixel = seq
@@ -445,7 +451,7 @@ class Replay:
 
         m.hook_add(u.UC_HOOK_MEM_READ, mmio_read, begin=0x01000000, end=0x0fffffff)
         m.hook_add(u.UC_HOOK_MEM_WRITE, mmio_write, begin=0x01000000, end=0x0fffffff)
-        m.hook_add(u.UC_HOOK_MEM_WRITE, ram_write, begin=PIXELS, end=BMP - 1)
+        m.hook_add(u.UC_HOOK_MEM_WRITE, ram_write, begin=PIXELS, end=PIXELS + CAP - 1)
         m.hook_add(u.UC_HOOK_MEM_WRITE, ram_write, begin=RECORD & ~0xfff, end=(RECORD & ~0xfff) + 0xfff)
         special = {address for address, ins in self.instructions.items() if ins.mnemonic in ('mrs', 'msr', 'dc', 'ic', 'tlbi', 'dmb', 'dsb', 'isb', 'smc', 'hvc', 'wfi')}
         if fault == 'counter-stuck':

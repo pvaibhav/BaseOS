@@ -23,7 +23,7 @@ FIRMWARE_INPUTS = [
                             "monitor-probe64.S", "initcall64.S", "panel-probe.h", "panel-contract.json",
                             "boot-logo-file.h", "boot-logo-pixels.h", "build-display.py", "early-display.c",
                             "display-engine.json", "display-handoff.json", "panel-init.json", "panel-spi9.h",
-                            "lz4-stream.c", "lz4-stream.h")
+                            "lz4-stream.c", "lz4-stream.h", "vendor-handoff.json", "derive-handoff.py")
 ] + [
     HERE.parent / "spl" / name for name in
     ("native-handoff.h", "native-logo.h", "native-display.h", "native-panel.h", "native-boot.c", "native-cache.c",
@@ -118,9 +118,9 @@ def prepared_inputs(target, contract):
                 "prefix.bin": prefix, "boot0.bin": boot0, "env.bin": env}
 
 
-def inventory_for(target, output, compatibility, resume):
+def inventory_for(target, output, compatibility, resume, prepared_only=False):
     prepared, data = prepared_inputs(target, compatibility["targets"][target])
-    if target in LIVE_TARGETS:
+    if target in LIVE_TARGETS and not prepared_only:
         inventory = ROOT / "work/h700-loader" / (target + "-inventory-v1")
         inventory_path = inventory / "inventory.json"
         lab = next(item for item in compatibility["lab_devices"] if item["target"] == target)
@@ -210,7 +210,8 @@ def check_artifact(target, inventory, directory, contract, panel):
     assert 0 < logo["width"] * logo["height"] * 4 <= 0x400000
     for macro, value in {"BASEOS_LOGO_PARTITION_SECTOR": logo["partition_lba"],
                          "BASEOS_LOGO_PARTITION_SECTORS": logo["partition_sectors"],
-                         "BASEOS_LOGO_WIDTH": logo["width"], "BASEOS_LOGO_HEIGHT": logo["height"]}.items():
+                         "BASEOS_LOGO_WIDTH": logo["width"], "BASEOS_LOGO_HEIGHT": logo["height"],
+                         "BASEOS_LOGO_RAM_END_OFFSET": logo["framebuffer_from_ram_end"]}.items():
         assert re.search(rf"^#define {macro} {value}u$", generated, re.M), (target, macro)
     assert (directory / "native-logo.h").read_bytes() == (HERE.parent / "spl/native-logo.h").read_bytes()
     assert (directory / "native-display.h").read_bytes() == (HERE.parent / "spl/native-display.h").read_bytes()
@@ -257,6 +258,8 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("--target", action="append", help="restrict to named models; default all eleven")
     parser.add_argument("--resume", action="store_true", help="reuse immutable builds after rechecking all source pins")
+    parser.add_argument("--prepared-only", action="store_true", help="use proven release inputs for every model; validate live stock separately with verify-handoff-parity.py")
+    parser.add_argument("--release-root", type=Path, help="verify existing build-release.py TARGET outputs, including their pinned prepared inventories")
     args = parser.parse_args()
     output = args.output.resolve()
     assert not output.exists() or args.resume, "use a new output directory or --resume"
@@ -294,12 +297,20 @@ def main():
         assert source_hashes() == frozen, "firmware inputs changed during fleet generation"
         assert verifier_hashes() == frozen_verifiers, "verifiers changed during fleet generation"
         print(json.dumps({"target": target, "stage": "build"}), flush=True)
-        inventory, provenance = inventory_for(target, output, compatibility, args.resume)
-        directory = output / "loaders" / target
+        if args.release_root:
+            inventory = args.release_root.resolve() / target / "inventory"
+            directory = args.release_root.resolve() / target / "native"
+            prepared, data = prepared_inputs(target, compatibility["targets"][target])
+            assert all((inventory / name).read_bytes() == value for name, value in data.items())
+            provenance = {"kind": "prepared-source", **prepared, "new_hardware_observation": False, "live_fdt_available": False}
+            assert (directory / "manifest.json").is_file(), "release build is incomplete"
+        else:
+            inventory, provenance = inventory_for(target, output, compatibility, args.resume, args.prepared_only)
+            directory = output / "loaders" / target
         if not directory.exists():
             run([HERE / "build.py", target, inventory, directory], output / "logs" / (target + ".build.log"))
         else:
-            assert args.resume and (directory / "manifest.json").is_file(), "partial build needs a fresh output"
+            assert (args.resume or args.release_root) and (directory / "manifest.json").is_file(), "partial build needs a fresh output"
         panel = panel_contract["models"][target]
         manifest = check_artifact(target, inventory, directory, compatibility["targets"][target], panel)
         write_json(directory / "provenance.json", provenance)
@@ -326,9 +337,9 @@ def main():
         assert proof["verifier_sha256"] == file_sha(HERE / "verify.py")
         assert proof["final_call_r0_r3"] == ["0x8000ff04", "0x40080000", "0x44000000", "0x1"]
         assert proof["panel_results"] == [panel["low"], panel["high"]]
-        expected_writes = 6 + int(panel["pull_up"]) if panel["rule"] == 2 else 0
-        assert len(proof["panel_gpio_writes"]) == expected_writes
-        assert len(proof["panel_sample_ticks"]) == int(panel["rule"] == 2)
+        assert proof["early_display_modeled_in_focused_test"]
+        assert not proof["panel_gpio_writes"] and not proof["panel_sample_ticks"]
+        assert all(row["passed"] for row in splash["cases"] if not row["fault"])
         logo = proof["boot_logo"]
         assert logo["passed"] and logo["linked_symbol"] == "baseos_prepare_logo" and not logo["kernel_decode_repeated"]
         assert logo["missing_logo_main_call_verified"]
@@ -338,10 +349,10 @@ def main():
         assert logo["pixels_sha256"] == file_sha(directory / "logo-pixels.bin")
         assert logo["descriptor_sha256"] == file_sha(directory / "logo-descriptor.bin")
         assert logo["missing_logo_fdt_sha256"] == file_sha(directory / "verified-kernel.dtb")
-        assert [sum(case["return_value"] == value for case in logo["cases"]) for value in (0, 1, -1)] == [20, 3, 2]
+        assert [sum(case["return_value"] == value for case in logo["cases"]) for value in (0, 1, -1)] == [1, 3, 21]
         assert [(case["name"], case["return_value"]) for case in logo["geometry_cases"]] == [
             ("centered-smaller-odd-stride", 1), ("centered-one-pixel", 1),
-            ("bmp-zero-width", 0), ("bmp-negative-width", 0)]
+            ("bmp-zero-width", -1), ("bmp-negative-width", -1)]
         early = proof["early_display"]
         assert early["passed"] and not early["kernel_decode_repeated"]
         assert early["no_panel_probe_or_reset"] and early["panel_display_mmio_accesses"] == 0
@@ -357,7 +368,7 @@ def main():
         print(json.dumps({"target": target, "stage": "actual logo kernel consumer"}), flush=True)
         logo_consumer_path = directory / "kernel-logo-verification.json"
         if not logo_consumer_path.exists():
-            run([HERE / "verify-kernel-logo.py", directory, "--dtb", directory / "verified-logo-kernel.dtb",
+            run([HERE / "verify-kernel-logo.py", directory, "--warm", "--dtb", directory / "verified-logo-kernel.dtb",
                  "--pixels", directory / "logo-pixels.bin", "--output", logo_consumer_path],
                 output / "logs" / (target + ".kernel-logo.log"))
         else:
@@ -371,8 +382,8 @@ def main():
         assert consumed["source_pixels_sha256"] == consumed["destination_pixels_sha256"] == logo["pixels_sha256"]
         assert consumed["manifest_sha256"] == file_sha(directory / "manifest.json")
         assert consumed["kernel_sha256"] == manifest["kernel_sha256"]
-        assert consumed["pixels_copied_exact"] and consumed["source_held_reserved_for_boot"]
-        assert consumed["handoff_mode"] == "cold" and consumed["boot_disp_sync"] == 0
+        assert consumed["pixels_copied_exact"] and consumed["source_freed_after_copy"]
+        assert consumed["handoff_mode"] == "warm" and consumed["boot_disp_sync"] == 1
         warm_consumer_path = directory / "kernel-early-logo-verification.json"
         if not warm_consumer_path.exists():
             run([HERE / "verify-kernel-logo.py", directory, "--warm", "--dtb", directory / "verified-early-logo-kernel.dtb",
@@ -401,7 +412,7 @@ def main():
         assert monitor["eret"][-1] == {"entry": "0x40080000", "spsr": "0x3c5", "x0": "0x44000000",
                                         "x1": "0x0", "x2": "0x0", "x3": "0x0"}
         report["targets"][target] = {
-            "passed": True, "directory": str(directory.relative_to(output)),
+            "passed": True, "directory": str(directory if args.release_root else directory.relative_to(output)),
             "inventory_kind": provenance["kind"], "generation": manifest["generation"],
             "kernel_sha256": manifest["kernel_sha256"], "monitor_sha256": manifest["monitor_sha256"],
             "kernel_and_monitor_source_bytes_exact": True, "panel_rule": manifest["panel_rule"],
