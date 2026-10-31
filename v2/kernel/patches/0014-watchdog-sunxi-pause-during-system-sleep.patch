@@ -1,0 +1,66 @@
+From 69f8f7a528714cf49d9ca2a99629c5d40a421ea7 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:46:22 +0000
+Subject: [PATCH 14/15] watchdog: sunxi: pause during system sleep
+
+---
+ drivers/watchdog/sunxi_wdt.c | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/drivers/watchdog/sunxi_wdt.c b/drivers/watchdog/sunxi_wdt.c
+index 7646e1359..a5e9c4572 100644
+--- a/drivers/watchdog/sunxi_wdt.c
++++ b/drivers/watchdog/sunxi_wdt.c
+@@ -54,6 +54,7 @@ struct sunxi_wdt_dev {
+ 	struct watchdog_device wdt_dev;
+ 	void __iomem *wdt_base;
+ 	const struct sunxi_wdt_reg *wdt_regs;
++	bool paused;
+ };
+ 
+ /*
+@@ -224,6 +225,28 @@ static int sunxi_wdt_start(struct watchdog_device *wdt_dev)
+ 	return 0;
+ }
+ 
++/* Userspace cannot feed the watchdog while the system sleeps: pause it. */
++static int sunxi_wdt_suspend_noirq(struct device *dev)
++{
++	struct sunxi_wdt_dev *wdt = dev_get_drvdata(dev);
++
++	wdt->paused = sunxi_wdt_is_running(&wdt->wdt_dev);
++	return wdt->paused ? sunxi_wdt_stop(&wdt->wdt_dev) : 0;
++}
++
++static int sunxi_wdt_resume_noirq(struct device *dev)
++{
++	struct sunxi_wdt_dev *wdt = dev_get_drvdata(dev);
++
++	if (!wdt->paused)
++		return 0;
++	wdt->paused = false;
++	return sunxi_wdt_start(&wdt->wdt_dev);
++}
++
++static DEFINE_NOIRQ_DEV_PM_OPS(sunxi_wdt_pm_ops, sunxi_wdt_suspend_noirq,
++			       sunxi_wdt_resume_noirq);
++
+ static const struct watchdog_info sunxi_wdt_info = {
+ 	.identity	= DRV_NAME,
+ 	.options	= WDIOF_SETTIMEOUT |
+@@ -318,6 +341,7 @@ static int sunxi_wdt_probe(struct platform_device *pdev)
+ 	watchdog_set_restart_priority(&sunxi_wdt->wdt_dev, 128);
+ 
+ 	watchdog_set_drvdata(&sunxi_wdt->wdt_dev, sunxi_wdt);
++	platform_set_drvdata(pdev, sunxi_wdt);
+ 
+ 	if (sunxi_wdt_is_running(&sunxi_wdt->wdt_dev)) {
+ 		running_timeout = sunxi_wdt_get_timeout(&sunxi_wdt->wdt_dev);
+@@ -347,6 +371,7 @@ static int sunxi_wdt_probe(struct platform_device *pdev)
+ static struct platform_driver sunxi_wdt_driver = {
+ 	.probe		= sunxi_wdt_probe,
+ 	.driver		= {
++		.pm		= pm_sleep_ptr(&sunxi_wdt_pm_ops),
+ 		.name		= DRV_NAME,
+ 		.of_match_table	= sunxi_wdt_dt_ids,
+ 	},

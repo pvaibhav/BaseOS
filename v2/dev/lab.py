@@ -157,6 +157,20 @@ def write_root(image):
     print('root written', len(data))
 
 
+SHELL = R / 'work/v2/dev/shell.bin'
+
+
+def deploy(root, image):
+    """Write ROOT to slot A from the RAM-only dev shell, then boot IMAGE."""
+    w = which()
+    if w == 'stock':
+        write_root(root); install(image); boot(); return wait()
+    if sh('[ -e /etc/init.d/rcS ] && echo root || echo shell') == 'root':
+        reload(SHELL); time.sleep(2); assert wait()
+    write_root(root)
+    reload(image); time.sleep(2); return wait()
+
+
 def heartbeat():
     while True:
         try:
@@ -177,6 +191,8 @@ def main():
         boot(); wait()
     elif cmd == 'reload':
         reload(args[0]); time.sleep(2); wait()
+    elif cmd == 'deploy':
+        deploy(args[0], args[1])
     elif cmd == 'root':
         write_root(args[0])
     elif cmd == 'quiesce':
@@ -187,8 +203,14 @@ def main():
         heartbeat()
     elif cmd == 'stock':
         assert (which() or '').startswith('dev')
-        sh('touch /run/stop')
-        print('feeding stopped; stock expected in ~20 s')
+        quiesce()
+        # A nonzero RTC pair sends the loader to stock; then reset in 0.5 s.
+        sh('mem 0x07000138 0x9f559c26 && mem 0x0700013c 0x42535031 && sync')
+        try:
+            adb('shell', 'mem 0x030090b4 0x16aa0001; mem 0x030090b8 0x16aa0001; mem 0x030090b0 0x14af', timeout=5, check=False)
+        except subprocess.TimeoutExpired:
+            pass
+        print('reset to stock')
     elif cmd == 'sh':
         print(sh(' '.join(args), timeout=300))
     else:

@@ -1,14 +1,21 @@
 #!/bin/sh
-# Stop the frontend, then release the card and /data cleanly.
+# Stop the frontend and release the card and /data cleanly before power-off,
+# restart or a deliberate reset. Waits for every user of each mount to exit.
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 : > /run/baseos/stopping
-if read -r group < /run/baseos/frontend-pgid 2>/dev/null; then
-	kill -TERM -- "-$group" 2>/dev/null
+read -r group < /run/baseos/frontend-pgid 2>/dev/null && kill -TERM -- "-$group" 2>/dev/null
+release() {
+	mountpoint -q "$1" || return 0
 	n=0
-	while kill -0 -- "-$group" 2>/dev/null && [ "$n" -lt 30 ]; do sleep 0.1; n=$((n + 1)); done
-	kill -KILL -- "-$group" 2>/dev/null
-fi
-sync
-umount /mnt/sdcard 2>/dev/null || mount -o remount,ro /mnt/sdcard
-umount /data 2>/dev/null || mount -o remount,ro /data
+	while [ -n "$(fuser -m "$1" 2>/dev/null)" ] && [ "$n" -lt 30 ]; do sleep 0.1; n=$((n + 1)); done
+	fuser -k -m "$1" >/dev/null 2>&1
+	sync
+	n=0
+	until umount "$1" 2>/dev/null; do
+		if [ "$n" -ge 30 ]; then mount -o remount,ro "$1"; echo "rcK: $1 stayed busy" > /dev/kmsg; return 1; fi
+		sleep 0.1; n=$((n + 1))
+	done
+}
+release /mnt/sdcard
+release /data
 sync

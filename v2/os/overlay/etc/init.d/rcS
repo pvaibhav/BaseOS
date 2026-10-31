@@ -26,7 +26,9 @@ ln -s /data/bluealsa /var/lib/bluealsa
 card=
 for dev in /dev/mmcblk1p1 /dev/mmcblk0p7; do
 	[ -b "$dev" ] || continue
-	mount -t vfat -o rw,utf8,noatime,shortname=mixed "$dev" /mnt/sdcard && { card=$dev; break; }
+	mount -t vfat -o rw,utf8,noatime,shortname=mixed "$dev" /mnt/sdcard 2>/dev/null ||
+		mount -t exfat -o rw,noatime,iocharset=utf8 "$dev" /mnt/sdcard 2>/dev/null || continue
+	card=$dev; break
 done
 # TF1 holds BaseOS settings even when the frontend is on TF2.
 if [ "$card" = /dev/mmcblk0p7 ]; then
@@ -45,6 +47,12 @@ chmod 644 /run/baseos/platform
 [ ! -x /usr/bin/timedatectl ] || /usr/bin/timedatectl apply
 [ -z "$card" ] || printf '%s\n' "$card" > /run/baseos/persistence-ready
 cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS-done
+# Boot succeeded: clear the loader's one-shot RTC pair so the next start is
+# BaseOS 2 again. Development boots keep it, so any reset returns to stock.
+case " $(cat /proc/cmdline) " in
+*' baseos.dev '*) ;;
+*) /usr/sbin/mem 0x07000138 0 >/dev/null && /usr/sbin/mem 0x0700013c 0 >/dev/null ;;
+esac
 # Keep the last boot's logs on /data (ext4, survives resets) for diagnosis.
 ( sleep 8; d=/data/baseos2/last-boot; mkdir -p $d && rm -f $d/* &&
   dmesg > $d/dmesg; cp /run/baseos/*.log /run/baseos/t-* $d/ 2>/dev/null; ps > $d/ps; sync ) &
