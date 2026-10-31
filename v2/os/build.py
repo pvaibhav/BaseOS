@@ -40,13 +40,14 @@ def root():
     tools = OUT / 'bin'; tools.mkdir(exist_ok=True)
     static(R / 'v2/dev/src/feeder.c', tools / 'baseos-feeder')
     static(R / 'v2/dev/src/mem.c', tools / 'mem')
+    static(R / 'v2/dev/src/pad.c', tools / 'baseos-pad')
     drop = ' '.join(DROP); dirs = ' '.join(DIRS)
     sh(f'''
 rm -rf /k/root && mkdir /k/root && cp -a /repo/{BASE}/. /k/root/
 cd /k/root
 rm -f {drop}
 cp -a /repo/v2/os/overlay/. .
-install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem usr/sbin/
+install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad usr/sbin/
 for d in {dirs}; do mkdir -p "$d"; done
 test -x usr/sbin/adbd && test -x usr/bin/busybox
 mksquashfs /k/root /k/rootfs.sqfs -noappend -all-root -comp lz4 -Xhc -b 131072 -quiet

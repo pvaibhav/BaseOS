@@ -117,10 +117,10 @@ def wait(limit=90):
 
 
 def quiesce():
-    """Stop any frontend and unmount persistent storage before a reset."""
-    sh('[ ! -x /etc/init.d/rcK ] || /etc/init.d/rcK; pkill -KILL -f [f]rontend-session; pkill -KILL -f [M]inUI.pak; pkill -KILL nextui.elf; pkill -KILL minarch.elf; sleep 0.5; sync; '
-       'for m in $(grep -E " (/mnt/root)?/(mnt/sdcard|data)[ ]|/mnt/root/mnt " /proc/mounts | cut -d" " -f2 | sort -r); '
-       'do umount $m 2>/dev/null || umount -l $m; done; sync; true')
+    """Release the card and /data before a reset. rcK freezes the frontend group
+    before killing it (NextUI's launcher powers off when NextUI exits)."""
+    sh('if [ -x /etc/init.d/rcK ]; then /etc/init.d/rcK; else '
+       'for m in /mnt/root/mnt/sdcard /mnt/root/data /mnt/card; do mountpoint -q $m && umount $m; done; fi; sync; true')
 
 
 def reload(image):
@@ -171,6 +171,20 @@ def deploy(root, image):
     reload(image); time.sleep(2); return wait()
 
 
+FSCK = Path('/private/tmp/b2/fsck')
+
+
+def fsck():
+    """Check and repair the card's FAT from the RAM-only shell (card unmounted)."""
+    if (which() or '').startswith('dev') and sh('[ -e /etc/init.d/rcS ] && echo root || echo shell') == 'root':
+        reload(SHELL); time.sleep(2); assert wait()
+    for f in ('fsck.fat', 'ld-musl-aarch64.so.1'):
+        adb('push', str(FSCK / f), '/tmp/' + f)
+    print(sh('chmod 755 /tmp/fsck.fat /tmp/ld-musl-aarch64.so.1; ! grep -q mmcblk0p7 /proc/mounts; '
+             '/tmp/ld-musl-aarch64.so.1 /tmp/fsck.fat -a -w /dev/mmcblk0p7 2>&1 | tail -3; '
+             'ls /tmp/*.REC 2>/dev/null; rm -f /tmp/fsck.fat /tmp/ld-musl-aarch64.so.1; sync; true', timeout=300))
+
+
 def heartbeat():
     while True:
         try:
@@ -193,6 +207,15 @@ def main():
         reload(args[0]); time.sleep(2); wait()
     elif cmd == 'deploy':
         deploy(args[0], args[1])
+    elif cmd == 'pad':
+        # Virtual pad: started once, detached (adb kills its own children).
+        sh('[ -p /run/pad ] || { setsid sh -c "/usr/sbin/baseos-pad </dev/null >/run/pad.log 2>&1 &" </dev/null >/dev/null 2>&1; sleep 1.5; }')
+        for b in args:
+            sh(f'echo {b.replace(":", " ")} > /run/pad')
+    elif cmd == 'bg':
+        sh('setsid sh -c ' + repr(' '.join(args) + ' </dev/null >/dev/null 2>&1 &') + ' </dev/null >/dev/null 2>&1')
+    elif cmd == 'fsck':
+        fsck()
     elif cmd == 'root':
         write_root(args[0])
     elif cmd == 'quiesce':

@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+[ ! -e /run/baseos/stopping ] || { sleep 5; exit 1; }
+[ -s /run/baseos/persistence-ready ] || { sleep 5; exit 1; }
+export BASEOS_PRESENT_TRACE=/run/baseos/present
+export PLATFORM=h700
+export LD_LIBRARY_PATH=/usr/lib/baseos-mainline:/usr/lib/aarch64-linux-gnu:/usr/lib
+export GBM_BACKENDS_PATH=/usr/lib/baseos-mainline/gbm
+SD=/mnt/sdcard
+LAUNCH= FRONTEND= LAUNCH_TYPE=script
+# v1.5.3 discovery order. (ALSA reads /etc/asound.conf through its own
+# alsa.conf; pointing ALSA_CONFIG_PATH at it would drop the hw plugins.)
+if [ -f "$SD/System/frontend" ]; then
+ LAUNCH="$SD/System/frontend"; FRONTEND=generic; LAUNCH_TYPE=binary
+elif [ -f "$SD/System/launch_frontend.sh" ]; then
+ LAUNCH="$SD/System/launch_frontend.sh"; FRONTEND=generic
+elif [ -f "$SD/System/slot" ]; then
+ LAUNCH="$SD/System/slot"; FRONTEND=slot; LAUNCH_TYPE=binary
+elif [ -f "$SD/.system/h700/paks/MinUI.pak/launch.sh" ]; then
+ LAUNCH="$SD/.system/h700/paks/MinUI.pak/launch.sh"; FRONTEND=nextui
+elif [ -f /mnt/SDCARD/spruce/scripts/runtime.sh ]; then
+ LAUNCH=/mnt/SDCARD/spruce/scripts/runtime.sh; FRONTEND=spruce
+else
+ sleep 5; exit 1
+fi
+[ "$FRONTEND" != slot ] || export SLOT_ROOT="$SD"
+cd "$SD"
+# This measures the pre-launcher exec handoff, not a visible menu.
+if [ ! -e /run/boot-clock-handoff ]; then
+ /usr/bin/boot-clock > /run/boot-clock-handoff 2>/dev/null || :
+fi
+if [ "$LAUNCH_TYPE" = binary ]; then
+ setsid /lib/ld-linux-aarch64.so.1 "$LAUNCH" &
+else
+ setsid /bin/sh "$LAUNCH" &
+fi
+child=$!
+printf '%s\n' "$child" > /run/baseos/frontend-pgid
+trap 'kill -TERM -- "-$child" 2>/dev/null || :; wait "$child" || :' TERM INT
+wait "$child" || :
+rm -f /run/baseos/frontend-pgid

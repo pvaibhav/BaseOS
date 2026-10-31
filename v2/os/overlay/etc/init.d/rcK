@@ -3,7 +3,12 @@
 # restart or a deliberate reset. Waits for every user of each mount to exit.
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 : > /run/baseos/stopping
-read -r group < /run/baseos/frontend-pgid 2>/dev/null && kill -TERM -- "-$group" 2>/dev/null
+# NextUI's launcher powers off when its frontend exits: freeze the whole
+# frontend group, then kill it, so the launcher never gets to run anything.
+if read -r group < /run/baseos/frontend-pgid 2>/dev/null; then
+	kill -STOP "-$group" 2>/dev/null
+	kill -KILL "-$group" 2>/dev/null
+fi
 release() {
 	mountpoint -q "$1" || return 0
 	n=0
