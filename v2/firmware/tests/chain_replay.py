@@ -98,6 +98,9 @@ def main():
     p.add_argument('--card', type=Path, help='card image whose boot-resource partition holds the logo')
     p.add_argument('--mbps', type=float, default=23.5, help='card read rate, MB/s')
     p.add_argument('--fw-root', type=Path, default=REPO / 'work/v2/firmware')
+    p.add_argument('--bank', type=int, choices=[0,1,2], default=2)
+    p.add_argument('--pe6', type=int, choices=[0,1], default=1)
+    p.add_argument('--fault', choices=['dram', 'generation', 'dtb'])
     p.add_argument('--tamper', choices=('stream', 'fnv'))
     args = p.parse_args()
     out_dir, build = args.fw_root / args.variant, args.fw_root / 'build' / args.variant
@@ -109,18 +112,24 @@ def main():
     payload = args.payload.read_bytes()
     card = args.card.read_bytes() if args.card else b''
     assert payload[32:64] == generation, 'payload generation differs: restamp it first'
+    if args.fault in ('generation', 'dtb'):
+        sys.path.insert(0, str(REPO / 'tools'))
+        import mainline_payload as packer
+        android, dtb = packer.parse(payload, generation)
+        payload = packer.pack(android, (REPO / 'work/v2/kernel/rg28xx.dtb').read_bytes() if args.fault == 'dtb' else dtb,
+                              bytes(32) if args.fault == 'generation' else generation)
     helper = (out_dir / 'helper.bin').read_bytes()
     hsym = elf_symbols(build / 'helper/helper.elf')
     ssym = {n: int(v, 16) for v, n in re.findall(r'^([0-9a-f]+) [a-zA-Z] (\w+)$',
                                                (build / 'spl/symbols.txt').read_text(), re.M)}
     stack_top = int(re.search(r'^CONFIG_SPL_STACK=(0x[0-9a-f]+)$',
                               (build / 'spl/u-boot-2026.10/.config').read_text(), re.M)[1], 16)
-    stream = stream_from(build / 'helper/early-display-generated.h')
+    stream = stream_from(build / 'helper/early-display-generated.h', 'boe' if manifest['target']=='rgsp' and not args.pe6 else 'old')
     ops_text = (build / 'helper/early-display-operations.h').read_text()
     polls = [tuple(int(x, 16) for x in m.groups()) for m in
              re.finditer(r'\{DISPLAY_POLL,(0x[0-9a-f]+)u,(0x[0-9a-f]+)u,(0x[0-9a-f]+)u', ops_text)]
     p4 = manifest['p4_first_lba']
-    fw_lba, image_lba, logo_lba = p4 + 40 * 2048, p4 + 48 * 2048, (204800, 270336)
+    fw_lba, image_lba, logo_lba = p4 + 40 * 2048, p4 + 48 * 2048, (json.loads((REPO / 'v2/firmware/targets.json').read_text())[manifest['target']].get('logo_lba', 204800), 270336)
 
     m = u.Uc(u.UC_ARCH_ARM64, u.UC_MODE_ARM)
     m.ctl_set_cpu_model(a.UC_CPU_ARM64_A53)
@@ -136,13 +145,18 @@ def main():
     result = 0x41002000
     m.mem_write(result + 46 * 4, struct.pack('<I', 16))
     params = [0] * 32
-    params[1], params[7] = 8, 1024 << 16  # LPDDR4, 1024 MiB (checked by the helper)
+    if manifest['target'] == 'rgsp':
+        bank_text = (build / 'spl/u-boot-2026.10/arch/arm/mach-sunxi/dram-candidates.h').read_text().split('dram_vendor_candidates[][32] = {')[1]
+        banks = [[int(x,16) for x in re.findall(r'0x([0-9a-f]+)u',row)] for row in re.findall(r'\{([^}]+)\}',bank_text)]
+        params = banks[args.bank]
+        assert len(params) == 32
+    params[1], params[7] = (99 if args.fault == 'dram' else (7 if manifest['target']=='rgsp' and args.bank < 2 else 8)), 1024 << 16  # LPDDR4, 1024 MiB (checked by the helper)
     m.mem_write(0x41004000, struct.pack('<32I', *params))
     for idx, val in enumerate((0x41003000, result, 0)):
         m.reg_write(system.xreg(idx), val)
     m.mem_write(0x41003000 + 136, struct.pack('<Q', ssym['mmc_bread']))  # blk_desc.block_read
     m.reg_write(a.UC_ARM64_REG_X30, 0x58000)
-    m.mem_write(ssym['dram_probe_selected_type'], struct.pack('<I', 8))
+    m.mem_write(ssym['dram_probe_selected_type'], struct.pack('<I', params[1]))
     m.mem_write(ssym['dram_probe_attempts'], struct.pack('<I', 1))
     for ad, val in ((0x07000138, cookie), (0x0700013c, 0x42535031), (0x030090b4, 1), (0x030090b8, 0xb1)):
         m.mem_write(ad, struct.pack('<I', val))
@@ -166,6 +180,23 @@ def main():
 
     def code(mc, pc, size, ctx):
         if pc == 0x40000000:
+            dtb_head = bytes(mc.mem_read(0x4a200000,8))
+            dtb_size = struct.unpack_from('>I',dtb_head,4)[0]
+            assert 0 < dtb_size < 0x100000
+            fdt_spec = importlib.util.spec_from_file_location('final_fdt', REPO / 'experiments/h700-boot-speed/fdt.py')
+            fdt_mod = importlib.util.module_from_spec(fdt_spec); fdt_spec.loader.exec_module(fdt_mod)
+            props = {(path,key): value for path,key,_,value in fdt_mod.walk(bytes(mc.mem_read(0x4a200000,dtb_size)))}
+            for key in ('baseos,boot-display','baseos,panel','baseos,bootreason','baseos,dram','baseos,native-boot'):
+                assert ('/chosen',key) in props, key
+            expected_panel = b'boe\0' if manifest['target']=='rgsp' and not args.pe6 else b'old\0'
+            assert props['/chosen','baseos,panel'] == expected_panel
+            fb = next(path for path,key in props if path.startswith('/chosen/framebuffer@') and key=='status')
+            assert props[fb,'status'] == b'okay\0'
+            width,height = (720,480) if manifest['target']=='rgsp' else (480,640)
+            for key,value in (('width',width),('height',height),('stride',width*4)):
+                assert props[fb,key] == struct.pack('>I',value)
+            assert props['/memory@40000000','reg'] == struct.pack('>QQ',0x40000000,0x40000000)
+            st['final_dtb'] = dict(bytes=dtb_size,panel=expected_panel[:-1].decode(),width=width,height=height,stride=width*4)
             st['outcome'] = 'bl31'
             st['bl31'] = dict(clock=st['clock'], x=[mc.reg_read(system.xreg(i)) for i in range(4)])
             mc.emu_stop()
@@ -263,6 +294,8 @@ def main():
 
     def read(mc, access, ad, size, value, ctx):
         old = int.from_bytes(mc.mem_read(ad, size), 'little')
+        if ad == 0x0300b0a0:
+            old = (old & ~(1 << 6)) | (args.pe6 << 6)
         if ad == 0x065110fc:
             scan[0] += 1
             old = (scan[0] & 0xfff) << 16
@@ -296,8 +329,15 @@ def main():
     except u.UcError as error:
         raise AssertionError((str(error), hex(m.reg_read(a.UC_ARM64_REG_PC)), st['phase'])) from error
 
-    report = check(st, stream, hsym, ssym, generation, args, payload)
-    (out_dir / f'chain-{args.payload.stem}{"-tamper-" + args.tamper if args.tamper else ""}.json').write_text(json.dumps(report, indent=2) + '\n')
+    if args.fault:
+        assert st['outcome'] in ('spl-refused', 'helper-fault'), st['outcome']
+        assert bytes(m.mem_read(0x07000138,8)) == struct.pack('<II',cookie,0x42535031)
+        report = dict(emulated=True, fault=args.fault, outcome=st['outcome'], pending_retained=True,
+                      recovery='watchdog reset then capsule selects stock; reset not simulated here')
+    else:
+        report = check(st, stream, hsym, ssym, generation, args, payload)
+        report.update(emulated=True, pe6=args.pe6, bank=args.bank, logo_present=bool(card))
+    (out_dir / f'chain-bank-{args.bank}-pe6-{args.pe6}-{args.fault or str(bool(card))}-{args.payload.stem}{"-tamper-" + args.tamper if args.tamper else ""}.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
 
 
@@ -360,13 +400,14 @@ def check(st, stream, hsym, ssym, generation, args, payload):
     assert all(f['by'] == 'helper' for f in frames) if args.tamper else True
     for i, need in enumerate(minimum):
         assert waits[i + 1] - waits[i] >= need * TICKS_PER_MS, ('reset step wait', i, ms(waits[i + 1] - waits[i]))
+    enable = next(c for c, pc, ad, v in st['mmio'] if ad == 0x06511040 and v & 0x80000000)
     delays, fi = [], 0
     for op in stream:
         if op & 0x8000:
-            gap = frames[fi]['start'] - frames[fi - 1]['end']
+            gap = (frames[fi]['start'] if fi < len(frames) else enable) - frames[fi - 1]['end']
             assert gap >= (op & 0x7fff) * TICKS_PER_MS, ('stream delay', op & 0x7fff, ms(gap))
             delays.append(dict(after_frame=fi, need_ms=op & 0x7fff, got_ms=ms(gap),
-                               sent_after_by=frames[fi]['by']))
+                               sent_after_by=frames[fi]['by'] if fi < len(frames) else 'tcon-enable'))
         else:
             fi += 1
     enable = next(c for c, pc, ad, v in st['mmio'] if ad == 0x06511040 and v & 0x80000000)
@@ -383,7 +424,7 @@ def check(st, stream, hsym, ssym, generation, args, payload):
         assert by_spl == len([op for op in stream[:nxt] if not op & 0x8000]), 'record disagrees with the trace'
     t0 = loaded  # SPL finished reading the payload
     return dict(
-        variant=args.variant, payload=str(args.payload), payload_bytes=len(payload),
+        variant=args.variant, payload=str(args.payload), payload_bytes=len(payload), final_dtb=st.get('final_dtb'),
         logo='stock BOOTLOGO.BMP from ' + str(args.card) if args.card else 'none (black frame)',
         card_mb_per_s=args.mbps, outcome='reached BL31 entry, x0=0x4a300400',
         logo_record_at_handoff=st['handoff']['logo_record'],

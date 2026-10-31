@@ -1,0 +1,3 @@
+# Linux-only helper/capsule tools. Build once, then compilation is offline.
+FROM ghcr.io/loveretro/h700-toolchain@sha256:c9d160c407570a771683e6a471757b44f6e155a7df7d1804c70f901ee3890da3
+RUN apt-get update -qq && apt-get install -y -qq clang lld && rm -rf /var/lib/apt/lists/*

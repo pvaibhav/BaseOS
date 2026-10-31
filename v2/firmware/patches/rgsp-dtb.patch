@@ -1,0 +1,19 @@
+--- a/experiments/h700-mainline/helper/helper.c
++++ b/experiments/h700-mainline/helper/helper.c
+@@ -12,6 +12,7 @@
+ int baseos_u2_record(const struct baseos_native_record *r)
+ {
+  return r->magic==BASEOS_NATIVE_MAGIC && r->version==2 && r->bytes==sizeof(*r) &&
++ (r->dram_type==7 || r->dram_type==8) &&
+  r->model==BASEOS_MODEL_ID && r->record_fnv==record_hash(r) &&
+  !memcmp(r->generation,baseos_generation,32) &&
+  (r->ram_bytes==0x40000000ull || r->ram_bytes==0x80000000ull) &&
+@@ -37,6 +38,8 @@
+  if(fdt_totalsize(im+d)!=db || fdt_num_mem_rsv(im+d) ||
+  fdt_first_property_offset(im+d,0)!=-FDT_ERR_NOTFOUND ||
+  fdt_first_subnode(im+d,0)!=-FDT_ERR_NOTFOUND) return 3;
++ const void *dtb=a->image+p->dtb_offset;
++ if(fdt_check_full(dtb,p->dtb_bytes) || fdt_node_check_compatible(dtb,0,"anbernic,rgsp")) return 3;
+ #ifndef BASEOS_U2_HOST
+  if(baseos_early_display_start((void *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS)<0) return 4;
+ #endif

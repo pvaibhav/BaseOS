@@ -59,6 +59,13 @@ def last_json(text):
 
 
 def main(variants):
+    if 'v2-rgsp' in variants:
+        result = subprocess.run([sys.executable, HERE / 'rgsp.py'])
+        if result.returncode:
+            return result.returncode
+        variants = [v for v in variants if v != 'v2-rgsp']
+        if not variants:
+            return 0
     LOGS.mkdir(parents=True, exist_ok=True)
     results = {}
     repo = lambda p: '/repo/' + str(Path(p).relative_to(ROOT))

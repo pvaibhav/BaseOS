@@ -69,6 +69,13 @@ elif [ -n "$card" ]; then
 fi
 [ ! -x /usr/bin/timedatectl ] || /usr/bin/timedatectl apply
 [ -z "$card" ] || printf '%s\n' "$card" > /run/baseos/persistence-ready
+# Drivers that nothing needs during startup: load them once the frontend is
+# on its way. Per model: USB host, rumble, external clock, Wi-Fi, Bluetooth.
+case "$(tr '\0' '\n' < /proc/device-tree/compatible | head -1)" in
+anbernic,rgsp) mods="ehci-platform ohci-platform gpio-vibra rtc-pcf8563 rtw88_8821cs hci_uart" ;;
+*) mods="ehci-platform ohci-platform" ;;
+esac
+( sleep 3; modprobe -a $mods ) </dev/null >/dev/null 2>&1 &
 # Platform events and automatic audio routing (baseos events, baseos audio).
 /usr/sbin/baseos-events --daemon </dev/null >/dev/null 2>&1 &
 cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS-done

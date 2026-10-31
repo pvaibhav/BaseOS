@@ -93,3 +93,45 @@
 	hp-det-gpios = <&pio 8 3 GPIO_ACTIVE_HIGH>; /* PI3 */
 	status = "okay";
 };
+
+/*
+ * USB-C port 0, wired the same on the RG28XX and RG SP (stock usbc0). PI16
+ * switches the power chip's 5 V boost onto the port for host mode. PI4 is not
+ * a plain ID line (stock leaves role detection to the power chip; reading it
+ * as ID put an RG28XX on a computer into host mode), so the port stays a USB
+ * device until host mode is chosen explicitly.
+ */
+&axp717 {
+    usb_power: usb-power {};
+    regulators {
+        reg_boost: boost {
+            regulator-name = "usb-boost";
+            regulator-min-microvolt = <5000000>;
+            regulator-max-microvolt = <5200000>;
+        };
+    };
+};
+
+&{/} {
+    reg_usb_vbus: regulator-usb-vbus {
+        compatible = "regulator-fixed";
+        regulator-name = "usb-vbus";
+        regulator-min-microvolt = <5000000>;
+        regulator-max-microvolt = <5000000>;
+        vin-supply = <&reg_boost>;
+        gpio = <&pio 8 16 GPIO_ACTIVE_HIGH>;
+        enable-active-high;
+    };
+};
+
+&usbphy {
+    usb0_vbus-supply = <&reg_usb_vbus>;
+    usb0_vbus_power-supply = <&usb_power>;
+};
+
+&usbotg {
+    dr_mode = "peripheral";
+};
+
+&ehci0 { status = "okay"; };
+&ohci0 { status = "okay"; };

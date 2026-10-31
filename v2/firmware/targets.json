@@ -1,0 +1,27 @@
+{
+  "rg28xx": {
+    "boot0_sha256": "8d66e173337cb56efee600c0f840fd59832f2a359c287c7f12b4743d8035888b",
+    "package_sha256": "ffabd96eae65a94b0a0dc6ce33db7314688b3ead6169d09553b463a8e58fd490",
+    "model_id": 1,
+    "logo": [
+      480,
+      640
+    ],
+    "framebuffer_from_ram_end": 68012032,
+    "panel_rule": 0,
+    "pull_up": false
+  },
+  "rgsp": {
+    "boot0_sha256": "42dfb84e8d2f116ed26af92f60a94a8f010c8120b84c310771a681de333df5d3",
+    "package_sha256": "f6664df7c8960297f2e690c10345220471f37282eb564355df1872fcd855cd15",
+    "model_id": 11,
+    "logo": [
+      720,
+      480
+    ],
+    "framebuffer_from_ram_end": 68007936,
+    "panel_rule": 2,
+    "pull_up": true,
+    "compatible": "anbernic,rgsp"
+  }
+}

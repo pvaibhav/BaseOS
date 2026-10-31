@@ -1,0 +1,138 @@
+From dc779df6051c8a21c8c372b47064f54326d5ad4d Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 17:19:51 +0000
+Subject: [PATCH 35/35] rg28xx/rgsp: power LED, shared USB port setup, USB
+ stays a device
+
+The RG28XX power LED (stock work_led on PI12) is a GPIO LED; BaseOS turns
+it off with the screen. Both boards share the USB-C port wiring, so its
+5 V switch moves into the common overlay. PI4 is not a plain ID line:
+reading it as one put an RG28XX on a computer into host mode, so the port
+stays a USB device until host mode is chosen explicitly.
+---
+ .../sun50i-h700-anbernic-rg28xx-baseos.dts    | 14 +++++++
+ drivers/of/baseos-rg28xx.dtso                 | 42 +++++++++++++++++++
+ drivers/of/baseos-rgsp.dtso                   | 34 ---------------
+ 3 files changed, 56 insertions(+), 34 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+index 91a0d8c02..3f1c8e8c4 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+ /dts-v1/;
++#include <dt-bindings/leds/common.h>
+ #include "sun50i-h616.dtsi"
+ #include "sun50i-h616-cpu-opp.dtsi"
+ #include <dt-bindings/gpio/gpio.h>
+@@ -308,3 +309,16 @@ &tcon_lcd0 {
+ 
+ 
+ #include "sun50i-h700-anbernic-rg28xx-phandles.dtsi"
++
++/ {
++    /* The power LED (stock work_led); BaseOS turns it off with the screen. */
++    leds {
++        compatible = "gpio-leds";
++        led-power {
++            function = LED_FUNCTION_POWER;
++            color = <LED_COLOR_ID_GREEN>;
++            gpios = <&pio 8 12 GPIO_ACTIVE_HIGH>;
++            default-state = "keep";
++        };
++    };
++};
+diff --git a/drivers/of/baseos-rg28xx.dtso b/drivers/of/baseos-rg28xx.dtso
+index e71b34b9a..3d9438cc5 100644
+--- a/drivers/of/baseos-rg28xx.dtso
++++ b/drivers/of/baseos-rg28xx.dtso
+@@ -93,3 +93,45 @@ &codec {
+ 	hp-det-gpios = <&pio 8 3 GPIO_ACTIVE_HIGH>; /* PI3 */
+ 	status = "okay";
+ };
++
++/*
++ * USB-C port 0, wired the same on the RG28XX and RG SP (stock usbc0). PI16
++ * switches the power chip's 5 V boost onto the port for host mode. PI4 is not
++ * a plain ID line (stock leaves role detection to the power chip; reading it
++ * as ID put an RG28XX on a computer into host mode), so the port stays a USB
++ * device until host mode is chosen explicitly.
++ */
++&axp717 {
++    usb_power: usb-power {};
++    regulators {
++        reg_boost: boost {
++            regulator-name = "usb-boost";
++            regulator-min-microvolt = <5000000>;
++            regulator-max-microvolt = <5200000>;
++        };
++    };
++};
++
++&{/} {
++    reg_usb_vbus: regulator-usb-vbus {
++        compatible = "regulator-fixed";
++        regulator-name = "usb-vbus";
++        regulator-min-microvolt = <5000000>;
++        regulator-max-microvolt = <5000000>;
++        vin-supply = <&reg_boost>;
++        gpio = <&pio 8 16 GPIO_ACTIVE_HIGH>;
++        enable-active-high;
++    };
++};
++
++&usbphy {
++    usb0_vbus-supply = <&reg_usb_vbus>;
++    usb0_vbus_power-supply = <&usb_power>;
++};
++
++&usbotg {
++    dr_mode = "peripheral";
++};
++
++&ehci0 { status = "okay"; };
++&ohci0 { status = "okay"; };
+diff --git a/drivers/of/baseos-rgsp.dtso b/drivers/of/baseos-rgsp.dtso
+index 696a2063a..6d935090c 100644
+--- a/drivers/of/baseos-rgsp.dtso
++++ b/drivers/of/baseos-rgsp.dtso
+@@ -51,38 +51,4 @@ rtc_ext: rtc@51 {
+     };
+ };
+ 
+-&axp717 {
+-    usb_power: usb-power {};
+-    regulators {
+-        reg_boost: boost {
+-            regulator-name = "usb-boost";
+-            regulator-min-microvolt = <5000000>;
+-            regulator-max-microvolt = <5200000>;
+-        };
+-    };
+-};
+-
+-&{/} {
+-    reg_usb_vbus: regulator-usb-vbus {
+-        compatible = "regulator-fixed";
+-        regulator-name = "usb-vbus";
+-        regulator-min-microvolt = <5000000>;
+-        regulator-max-microvolt = <5000000>;
+-        vin-supply = <&reg_boost>;
+-        gpio = <&pio 8 16 GPIO_ACTIVE_HIGH>;
+-        enable-active-high;
+-    };
+-};
+-
+-&usbphy {
+-    usb0_id_det-gpios = <&pio 8 4 GPIO_ACTIVE_HIGH>;
+-    usb0_vbus-supply = <&reg_usb_vbus>;
+-    usb0_vbus_power-supply = <&usb_power>;
+-};
+-
+-&usbotg {
+-    dr_mode = "otg";
+-};
+ 
+-&ehci0 { status = "okay"; };
+-&ohci0 { status = "okay"; };

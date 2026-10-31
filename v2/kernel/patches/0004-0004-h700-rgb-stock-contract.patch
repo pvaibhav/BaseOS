@@ -1,7 +1,7 @@
 From 8dd622f020a5665cae237624fc2d158884a7f4bf Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:05:10 +0000
-Subject: [PATCH 04/34] 0004-h700-rgb-stock-contract
+Subject: [PATCH 04/35] 0004-h700-rgb-stock-contract
 
 ---
  .../display/allwinner,sun4i-a10-tcon.yaml     |  29 +++++

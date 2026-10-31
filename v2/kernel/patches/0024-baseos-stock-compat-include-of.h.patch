@@ -1,7 +1,7 @@
 From 7ee21a77fd540f5fcb1556eddd031b7ff1114981 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 14:43:40 +0000
-Subject: [PATCH 24/34] baseos-stock-compat: include of.h
+Subject: [PATCH 24/35] baseos-stock-compat: include of.h
 
 ---
  drivers/misc/baseos-stock-compat.c | 1 +

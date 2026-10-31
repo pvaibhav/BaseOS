@@ -18,6 +18,8 @@ model_field() { echo "$MODELS" | awk -F: -v m="$(model)" -v f="$1" '$1==m {print
 has() { case " $(model_field 4) " in *" $1 "*) return 0;; esac; return 1; }
 
 BL=/sys/class/backlight/backlight
+# The power LED is lit while the screen is on, as on the stock firmware.
+power_led() { [ ! -w /sys/class/leds/green:power/brightness ] || echo "$1" > /sys/class/leds/green:power/brightness; }
 BAT=/sys/class/power_supply/axp2202-battery
 USBPSY=/sys/class/power_supply/axp2202-usb
 
@@ -117,9 +119,10 @@ display)
 	brightness)
 		read -r max < $BL/max_brightness
 		if [ $# -lt 2 ]; then read -r v < $BL/brightness; echo "brightness=$((v * 100 / max))"; exit; fi
-		percent "$2"; echo $(($2 * max / 100)) > $BL/brightness ;;
+		percent "$2"; echo $(($2 * max / 100)) > $BL/brightness
+		[ "$2" -eq 0 ] && power_led 0 || power_led 1 ;;
 	power)
-		case "$2" in on) echo 0 > $BL/bl_power ;; off) echo 4 > $BL/bl_power ;; *) usage ;; esac ;;
+		case "$2" in on) echo 0 > $BL/bl_power; power_led 1 ;; off) echo 4 > $BL/bl_power; power_led 0 ;; *) usage ;; esac ;;
 	output) [ "$2" = lcd ] || [ "$2" = auto ] || unavailable "HDMI" ;;
 	*) usage ;;
 	esac ;;

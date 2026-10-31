@@ -70,6 +70,8 @@ TFA_GIT = ROOT / 'work/mainline/firmware/source'
 TFA_PIN = json.loads((ROOT / 'firmware/tf-a/source.json').read_text())
 IMAGE = 'ghcr.io/loveretro/h700-toolchain@' + TFA_PIN['toolchain_image'].split('@')[1]
 TARGET = 'rg28xx'
+OUTPUT_NAME = None
+CONTAINER_CLANG = None
 
 # Compiled sources, copied into a private tree per variant and patched there.
 TREE_FILES = [
@@ -131,6 +133,8 @@ VARIANTS = {
                 patches=['helper-allow-pmic.patch', 'early-panel.patch'], expect={}),
     # v2a without the early panel stream: the fallback if v2a's display start
     # misbehaves on hardware. Panel handling is exactly E1's.
+    'v2-rgsp': dict(generation=None, tfa_log_level='0', tfa_patches=['tfa-allow-pmic.patch'],
+                    patches=['helper-allow-pmic.patch', 'rgsp-dtb.patch'], expect={}),
     'v2a-ab': dict(generation=None, tfa_log_level='0', tfa_patches=['tfa-allow-pmic.patch'],
                    patches=['helper-allow-pmic.patch'], expect={}),
 }
@@ -155,7 +159,19 @@ def load(name, path):
 
 
 def run(*cmd, **kw):
+    if CONTAINER_CLANG and str(cmd[0]) in ('/usr/bin/clang-18', '/usr/bin/ld.lld-18'):
+        cwd = kw.pop('cwd', ROOT)
+        kw.pop('env', None)
+        cmd = ['docker', 'run', '--rm', '--network=none', '-v', f'{ROOT}:{ROOT}',
+               '-w', str(cwd), CONTAINER_CLANG, *cmd]
     subprocess.run([str(c) for c in cmd], check=True, **kw)
+
+
+def compiler_hash(path):
+    if not CONTAINER_CLANG:
+        return sha_file(path)
+    return subprocess.check_output(['docker', 'run', '--rm', '--network=none', CONTAINER_CLANG,
+                                    'sha256sum', str(path)], text=True).split()[0]
 
 
 def log(msg): print(msg, flush=True)
@@ -218,7 +234,15 @@ def stage_tree(variant, out):
 def model_policy():
     native = load('v2fw_native_policy', ROOT / NATIVE / 'build.py')
     native.INPUT_WORK = PREPARED
-    return native.model_policy(TARGET, INVENTORY)
+    policy = native.model_policy(TARGET, INVENTORY)
+    spec = json.loads((HERE / 'targets.json').read_text())[TARGET]
+    assert sha_file(INVENTORY / 'boot0.bin') == spec['boot0_sha256']
+    assert policy['package_sha256'] == spec['package_sha256']
+    assert policy['model_id'] == spec['model_id']
+    assert [policy['boot_logo'][k] for k in ('width', 'height')] == spec['logo']
+    assert policy['boot_logo']['framebuffer_from_ram_end'] == spec['framebuffer_from_ram_end']
+    assert (policy['panel_rule'], policy['panel_pull_up']) == (spec['panel_rule'], spec['pull_up'])
+    return policy
 
 
 def string_shim():
@@ -242,8 +266,15 @@ def generation_for(variant, tree, policy, clang, lld):
         'model_policy': policy, 'uboot_archive': UBOOT_SHA,
         'stock_boot0': sha_file(INVENTORY / 'boot0.bin'), 'handoff_package': sha_file(HANDOFF_PACKAGE),
         'spl_dram_edits': sha_file(ROOT / SPL / 'build-early-mmc.py'),
-        'toolchains': {'image': IMAGE, 'clang': sha_file(clang), 'lld': sha_file(lld)},
+        'toolchains': {'image': IMAGE, 'clang': compiler_hash(clang), 'lld': compiler_hash(lld)},
     }
+    if TARGET != 'rg28xx':
+        identity['target_generator'] = {n: sha_file(HERE / n) for n in ('build.py', 'targets.json', 'layout.py', 'Containerfile')}
+        identity['compiler_image'] = CONTAINER_CLANG
+        identity['policy_generators'] = {n: sha_file(ROOT / n) for n in
+            ('devices.json', 'tools/device_profile.py', NATIVE + '/build.py',
+             NATIVE + '/panel-contract.json', NATIVE + '/vendor-handoff.json',
+             'experiments/h700-boot-speed/evidence/compatibility.json')}
     generation = hashlib.sha256(canonical(identity)).digest()
     assert fnv(generation), 'zero cookie: change any input'
     return generation
@@ -293,7 +324,7 @@ def build_helper(tree, build, policy, generation, clang, lld, env):
     """Helper: EL3 stage at 0x4a000000. Host clang, rustup ld.lld."""
     h, nat, spl = tree / HELPER, tree / NATIVE, tree / SPL
     inputs = {'sources': {rel: sha_file(tree / rel) for rel in TREE_FILES}, 'generation': generation.hex(),
-              'policy': policy, 'recipe': RECIPE, 'clang': sha_file(clang), 'lld': sha_file(lld)}
+              'policy': policy, 'recipe': RECIPE, 'clang': compiler_hash(clang), 'lld': compiler_hash(lld)}
 
     def stage(out):
         lib = out / 'libfdt'
@@ -310,7 +341,7 @@ def build_helper(tree, build, policy, generation, clang, lld, env):
         display.build(out, TARGET, policy, generation)
         (out / 'native-generated.h').write_text('#include "early-display-generated.h"\n'
                                                 f'#define BASEOS_MODEL_ID {policy["model_id"]}u\n')
-        u3 = load('v2fw_u3', ROOT / 'experiments/h700-mainline/u3-join/build-helper.py')
+        u3 = load('v2fw_u3', HERE / 'layout.py')
         (out / 'u3-layout.h').write_text(u3.layout_header({'model_policy': policy}))
         include = tree / 'experiments/h700-mainline/include'
         sources = [h / 'entry64.S', h / 'helper.c', h / 'fdt-final.c', h / 'panel.c', nat / 'early-display.c',
@@ -416,6 +447,15 @@ def build_spl(variant, tree, build, policy, generation, firmware, regions, helpe
         edits = load('v2fw_spl_edits', ROOT / SPL / 'build-early-mmc.py')
         edits.HERE = spl  # dram-select.c and dram-retry64.S come from the variant tree
         edits.native_dram(src, boot0)
+        if TARGET == 'rgsp':
+            dram = arch / 'dram_sun50i_h616.c'
+            text = dram.read_text()
+            loop = 'while ((readl(SUNXI_DRAM_PHY0_BASE + 0x184) & val) != val) {'
+            assert text.count(loop) == 2
+            text = text.replace(loop, 'for (unsigned int budget=1000000; '
+                '(readl(SUNXI_DRAM_PHY0_BASE + 0x184) & val) != val;) {\n'
+                '\t\tif (!--budget) dram_panic("read calibration timeout");')
+            dram.write_text(text)
         makefile.write_text(makefile.read_text() + '\nifdef CONFIG_XPL_BUILD\nobj-y += baseos_vendor_handoff.o '
                             'native-cache.o native-cache-off.o\nendif\n')
         shutil.copyfile(spl / 'native-boot.c', arch / 'baseos_vendor_handoff.c')
@@ -483,8 +523,8 @@ def build_capsule(tree, build, spl_bin, generation, clang, lld, env):
     assert cookie, 'zero cookie'
     cap = tree / 'experiments/h700-boot-speed/native/capsule'
     inputs = {'sources': {rel: sha_file(tree / rel) for rel in TREE_FILES}, 'spl': sha(spl_bin),
-              'stock': sha(stock), 'cookie': cookie, 'recipe': RECIPE, 'clang': sha_file(clang),
-              'lld': sha_file(lld)}
+              'stock': sha(stock), 'cookie': cookie, 'recipe': RECIPE, 'clang': compiler_hash(clang),
+              'lld': compiler_hash(lld)}
 
     def stage(out):
         (out / 'stock.bin').write_bytes(stock)
@@ -533,7 +573,7 @@ def build_variant(variant):
     if tree.exists():
         shutil.rmtree(tree)
     stage_tree(variant, tree)
-    clang, lld, env = host_tools()
+    clang, lld, env = host_tools() if TARGET == 'rg28xx' else (Path('/usr/bin/clang-18'), Path('/usr/bin/ld.lld-18'), dict(os.environ))
     policy = model_policy()
     generation = generation_for(variant, tree, policy, clang, lld)
     cookie = fnv(generation)
@@ -546,7 +586,7 @@ def build_variant(variant):
     spl_bin = (spl / 'spl.bin').read_bytes()
     capsule = build_capsule(tree, build, spl_bin, generation, clang, lld, env)
 
-    out = WORK / variant
+    out = WORK / (OUTPUT_NAME or variant)
     out.mkdir(parents=True, exist_ok=True)
     files = {'bl31.bin': tfa / 'bl31.bin', 'helper.bin': helper / 'helper.bin', 'spl.bin': spl / 'spl.bin',
              'capsule.egon.bin': capsule / 'capsule.egon.bin'}
@@ -596,14 +636,30 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('what', choices=[*VARIANTS, 'all', 'restamp'])
     parser.add_argument('paths', nargs='*', help='restamp: IN OUT')
+    parser.add_argument('--target', choices=['rg28xx', 'rgsp'], default='rg28xx')
+    parser.add_argument('--output-name', help='private comparison output directory')
     parser.add_argument('--variant', default='v2a', choices=list(VARIANTS))
     args = parser.parse_args()
+    global TARGET, INVENTORY, HANDOFF_PACKAGE, OUTPUT_NAME, CONTAINER_CLANG
+    TARGET = args.target
+    OUTPUT_NAME = args.output_name
+    if OUTPUT_NAME and not re.fullmatch(r'[a-zA-Z0-9-]+', OUTPUT_NAME):
+        parser.error('output-name must be a simple directory name')
+    INVENTORY = INVENTORY.parent / TARGET
+    HANDOFF_PACKAGE = PREPARED / TARGET / 'boot-gzip/boot-package.bin'
+    if TARGET == 'rgsp':
+        if args.what != 'v2-rgsp':
+            parser.error('rgsp requires variant v2-rgsp')
+        CONTAINER_CLANG = subprocess.check_output(['docker', 'image', 'inspect',
+            'baseos-v2-firmware-clang:local', '--format', '{{.Id}}'], text=True).strip()
+    elif args.what == 'v2-rgsp':
+        parser.error('v2-rgsp requires --target rgsp')
     if args.what == 'restamp':
         if len(args.paths) != 2:
             parser.error('restamp needs IN and OUT')
         restamp(*args.paths, args.variant)
         return
-    for variant in (VARIANTS if args.what == 'all' else [args.what]):
+    for variant in ([v for v in VARIANTS if v != 'v2-rgsp'] if args.what == 'all' else [args.what]):
         build_variant(variant)
 
 

@@ -60,6 +60,9 @@ rm -f {drop}
 cp -a /repo/v2/os/overlay/. .
 install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe /repo/work/v2/os/bin/baseos-events /repo/work/v2/os/bin/baseos-prefetch /repo/work/v2/os/bin/baseos-charger usr/sbin/
 for d in {dirs}; do mkdir -p "$d"; done
+# Kernel modules (USB host, rumble, radios...), loaded per model by rcS.
+mkdir -p usr/lib/modules && cp -a /repo/work/v2/kernel/modules/lib/modules/. usr/lib/modules/
+rm -f usr/lib/modules/*/build usr/lib/modules/*/source
 # Graphics: Mesa (built with its shader cache, v2/graphics/mesa-cache.sh) is the
 # system GL stack; BaseOS's KMS SDL lives in /usr/lib/baseos2.
 M=usr/lib/baseos-mainline A=usr/lib/aarch64-linux-gnu G=/repo/work/v2/mesa-cache/runtime
@@ -82,22 +85,30 @@ cp /k/rootfs.sqfs /repo/work/v2/os/rootfs.sqfs
 ''')
 
 
-def payload(cmdline_extra, dtb_path=None):
+def payload(cmdline_extra, dtb_path=None, firmware='v2a'):
+    global OUT
+    fw = R / 'work/v2/firmware' / firmware
+    generation = bytes.fromhex((fw / 'generation.txt').read_text().strip())
+    target = json.loads((fw / 'manifest.json').read_text())['target']
+    if firmware != 'v2a':
+        OUT = OUT / firmware
+    OUT.mkdir(parents=True, exist_ok=True)
+    logo = LOGO if target == 'rg28xx' else LOGO.parent.parent / target / 'bootlogo.bmp'
     static(R / 'v2/os/firststage.c', OUT / 'firststage')
     D = stat.S_IFDIR | 0o755
     initrd = gzip.compress(dev.write_newc([
         ('dev', D, b'', (0, 0)),
         ('dev/console', stat.S_IFCHR | 0o600, b'', (5, 1)),
         ('init', stat.S_IFREG | 0o755, (OUT / 'firststage').read_bytes(), (0, 0)),
-        ('logo.bmp', stat.S_IFREG | 0o644, LOGO.read_bytes(), (0, 0)),
+        ('logo.bmp', stat.S_IFREG | 0o644, logo.read_bytes(), (0, 0)),
     ]), compresslevel=9, mtime=0)
     boot, _ = dev.payload.parse(dev.PROVEN.read_bytes(), dev.E1)
     segs = dev.android.split(boot)[0]
-    dtb = Path(dtb_path or R / 'work/v2/kernel/rg28xx.dtb').read_bytes()
+    dtb = Path(dtb_path or R / f'work/v2/kernel/{target}.dtb').read_bytes()
     if cmdline_extra:
         dtb = set_bootargs_extra(dtb, cmdline_extra)
     kernel = dev.bol4((R / 'work/v2/kernel/Image').read_bytes())
-    image = dev.payload.pack(dev.android.join(boot[:2048], [kernel, initrd, b'', b'', segs[4]], b''), dtb, dev.G)
+    image = dev.payload.pack(dev.android.join(boot[:2048], [kernel, initrd, b'', b'', segs[4]], b''), dtb, generation)
     (OUT / 'image.bin').write_bytes(image)
     print(json.dumps(dict(image=len(image), kernel=len(kernel), initrd=len(initrd), sha256=dev.sha(image))))
 
@@ -105,7 +116,7 @@ def payload(cmdline_extra, dtb_path=None):
 def set_bootargs_extra(dtb, extra):
     """Append to /chosen/bootargs (fdtget/fdtput: no shell quoting involved)."""
     tmp = OUT / 'tmp.dtb'; tmp.write_bytes(dtb)
-    path = '/repo/work/v2/os/tmp.dtb'
+    path = '/repo/' + str(tmp.relative_to(R))
     run = lambda *a: subprocess.run(['docker', 'exec', 'v2-kbuild', *a], check=True,
                                     capture_output=True, text=True).stdout.strip()
     run('fdtput', '-t', 's', path, '/chosen', 'bootargs', run('fdtget', path, '/chosen', 'bootargs') + ' ' + extra)
@@ -118,9 +129,10 @@ if __name__ == '__main__':
     ap.add_argument('what', choices=['root', 'payload', 'all'])
     ap.add_argument('--dev', action='store_true', help='host-heartbeat watchdog (baseos.dev)')
     ap.add_argument('--args', default='', help='extra kernel arguments')
+    ap.add_argument('--firmware', default='v2a', choices=['e1', 'v2a', 'v2a-ab', 'v2-rgsp'], help='firmware generation and target; non-default output in work/v2/os/VARIANT')
     ap.add_argument('--dtb', help='DTB instead of work/v2/kernel/rg28xx.dtb')
     a = ap.parse_args()
     if a.what in ('root', 'all'):
         root()
     if a.what in ('payload', 'all'):
-        payload(' '.join(x for x in ('baseos.dev' if a.dev else '', a.args) if x), a.dtb)
+        payload(' '.join(x for x in ('baseos.dev' if a.dev else '', a.args) if x), a.dtb, a.firmware)

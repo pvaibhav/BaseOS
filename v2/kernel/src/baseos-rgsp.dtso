@@ -51,38 +51,4 @@
     };
 };
 
-&axp717 {
-    usb_power: usb-power {};
-    regulators {
-        reg_boost: boost {
-            regulator-name = "usb-boost";
-            regulator-min-microvolt = <5000000>;
-            regulator-max-microvolt = <5200000>;
-        };
-    };
-};
 
-&{/} {
-    reg_usb_vbus: regulator-usb-vbus {
-        compatible = "regulator-fixed";
-        regulator-name = "usb-vbus";
-        regulator-min-microvolt = <5000000>;
-        regulator-max-microvolt = <5000000>;
-        vin-supply = <&reg_boost>;
-        gpio = <&pio 8 16 GPIO_ACTIVE_HIGH>;
-        enable-active-high;
-    };
-};
-
-&usbphy {
-    usb0_id_det-gpios = <&pio 8 4 GPIO_ACTIVE_HIGH>;
-    usb0_vbus-supply = <&reg_usb_vbus>;
-    usb0_vbus_power-supply = <&usb_power>;
-};
-
-&usbotg {
-    dr_mode = "otg";
-};
-
-&ehci0 { status = "okay"; };
-&ohci0 { status = "okay"; };

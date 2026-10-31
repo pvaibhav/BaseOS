@@ -1,7 +1,7 @@
 From 09b89845d8db57f7a821490a14bec58ae87f4c04 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 16:24:35 +0000
-Subject: [PATCH 32/34] arm64: dts: allwinner: rg28xx: scale GPU on the
+Subject: [PATCH 32/35] arm64: dts: allwinner: rg28xx: scale GPU on the
  retained system rail
 
 Use the stock 456-600 MHz points at the retained 940 mV shared GPU/system voltage. Stock 648 MHz needs 960 mV and is excluded. Keep a 432 MHz floor so Panfrost probe and idle polling leave the loader clock alone; do not assign PLL rates at boot.
