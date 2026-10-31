@@ -16,6 +16,10 @@ cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS
 # SDL scans /dev/input by mtime without udev; give it a nonzero one.
 touch -c -d @1 /dev/input
 mount -t debugfs -o nodev,noexec,nosuid debugfs /sys/kernel/debug
+# Why the power chip switched on (button, charger, ...): kept with the boot logs
+# while charger-boot handling is being worked out.
+{ grep -E '^(20|21):' /sys/kernel/debug/regmap/0-0034/registers; grep -o 'bootreason=[a-z]*' /proc/cmdline; } \
+	> /run/baseos/t-power-on 2>/dev/null
 
 /usr/sbin/baseos-watchdog </dev/null >/run/baseos/watchdog.log 2>&1 &
 /usr/sbin/baseos-usb </dev/null >/run/baseos/usb.log 2>&1 &
