@@ -1,7 +1,7 @@
 From 0652165486f15890663c2d2b005f9ae9fb6b4526 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 14:47:31 +0000
-Subject: [PATCH 26/33] Revert "misc: BaseOS stock compatibility (/dev/disp
+Subject: [PATCH 26/34] Revert "misc: BaseOS stock compatibility (/dev/disp
  brightness, power key first, i2c-5)"
 
 This reverts commit a246fc479a3ed3efe11f29dc9a747cb0ff7f86a6.

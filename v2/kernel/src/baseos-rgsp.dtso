@@ -1,0 +1,88 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/* The RG SP shares the RG28XX power chip and audio wiring. */
+#include "baseos-rg28xx.dtso"
+
+&battery {
+    charge-full-design-microamp-hours = <3500000>;
+};
+
+&reg_aldo4 {
+    regulator-min-microvolt = <1800000>;
+    regulator-max-microvolt = <1800000>;
+};
+
+&axp717 {
+    regulators {
+        reg_cldo4: cldo4 {
+            regulator-name = "vcc-radio";
+            regulator-min-microvolt = <3300000>;
+            regulator-max-microvolt = <3300000>;
+            /* Bluetooth shares this rail with Wi-Fi. */
+            regulator-always-on;
+            regulator-boot-on;
+        };
+        reg_aldo1: aldo1 {
+            regulator-name = "tf2-io";
+            regulator-min-microvolt = <3300000>;
+            regulator-max-microvolt = <3300000>;
+        };
+    };
+};
+
+&mmc1 {
+    vmmc-supply = <&reg_cldo4>;
+    vqmmc-supply = <&reg_aldo4>;
+};
+
+&mmc2 {
+    vqmmc-supply = <&reg_aldo1>;
+};
+
+&pio {
+    vcc-pg-supply = <&reg_aldo4>;
+};
+
+&r_i2c {
+    #address-cells = <1>;
+    #size-cells = <0>;
+    rtc_ext: rtc@51 {
+        compatible = "nxp,pcf8563";
+        reg = <0x51>;
+    };
+};
+
+&axp717 {
+    usb_power: usb-power {};
+    regulators {
+        reg_boost: boost {
+            regulator-name = "usb-boost";
+            regulator-min-microvolt = <5000000>;
+            regulator-max-microvolt = <5200000>;
+        };
+    };
+};
+
+&{/} {
+    reg_usb_vbus: regulator-usb-vbus {
+        compatible = "regulator-fixed";
+        regulator-name = "usb-vbus";
+        regulator-min-microvolt = <5000000>;
+        regulator-max-microvolt = <5000000>;
+        vin-supply = <&reg_boost>;
+        gpio = <&pio 8 16 GPIO_ACTIVE_HIGH>;
+        enable-active-high;
+    };
+};
+
+&usbphy {
+    usb0_id_det-gpios = <&pio 8 4 GPIO_ACTIVE_HIGH>;
+    usb0_vbus-supply = <&reg_usb_vbus>;
+    usb0_vbus_power-supply = <&usb_power>;
+};
+
+&usbotg {
+    dr_mode = "otg";
+};
+
+&ehci0 { status = "okay"; };
+&ohci0 { status = "okay"; };

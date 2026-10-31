@@ -1,7 +1,7 @@
 From ae5f9f43f4ea61e618300903deba83da18dabf60 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:05:10 +0000
-Subject: [PATCH 06/33] 0006-de33-syscon-dependencies
+Subject: [PATCH 06/34] 0006-de33-syscon-dependencies
 
 ---
  drivers/clk/sunxi-ng/Kconfig  | 1 +

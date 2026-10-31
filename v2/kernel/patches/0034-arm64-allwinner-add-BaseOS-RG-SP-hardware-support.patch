@@ -1,0 +1,305 @@
+From 8706b8df27987b943924d89c6b7aaff1f47cde9d Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 17:01:05 +0000
+Subject: [PATCH 34/34] arm64: allwinner: add BaseOS RG SP hardware support
+
+---
+ arch/arm64/boot/dts/allwinner/Makefile        |   3 +
+ .../sun50i-h700-anbernic-rgsp-baseos.dts      | 133 ++++++++++++++++++
+ drivers/of/Makefile                           |   2 +-
+ drivers/of/baseos-overlay.c                   |  16 ++-
+ drivers/of/baseos-rgsp.dtso                   |  88 ++++++++++++
+ 5 files changed, 237 insertions(+), 5 deletions(-)
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
+ create mode 100644 drivers/of/baseos-rgsp.dtso
+
+diff --git a/arch/arm64/boot/dts/allwinner/Makefile b/arch/arm64/boot/dts/allwinner/Makefile
+index 1b4ff9331..4e9f9dcc9 100644
+--- a/arch/arm64/boot/dts/allwinner/Makefile
++++ b/arch/arm64/boot/dts/allwinner/Makefile
+@@ -1,3 +1,4 @@
++DTC_FLAGS_sun50i-h700-anbernic-rgsp-baseos := -@
+ DTC_FLAGS_sun50i-h700-anbernic-rg28xx-baseos := -@
+ # SPDX-License-Identifier: GPL-2.0
+ # Enables support for device-tree overlays for named devices
+@@ -69,3 +70,5 @@ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-a527-cubie-a5e.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-h728-x96qpro+.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-avaota-a1.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-orangepi-4a.dtb
++
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rgsp-baseos.dtb
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
+new file mode 100644
+index 000000000..6a3bc1002
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
+@@ -0,0 +1,133 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Keep the loader's display phandles and the stock input layout. */
++#include "sun50i-h700-anbernic-rg28xx-baseos.dts"
++#include <dt-bindings/input/gpio-keys.h>
++#include <dt-bindings/input/linux-event-codes.h>
++#include <dt-bindings/leds/common.h>
++
++/ {
++    model = "BaseOS Anbernic RG SP";
++    compatible = "anbernic,rgsp", "allwinner,sun50i-h700";
++
++    chosen {
++        framebuffer@0 {
++            width = <720>;
++            height = <480>;
++            stride = <2880>;
++        };
++    };
++
++    gpio-keys-lid {
++        compatible = "gpio-keys";
++        pinctrl-names = "default";
++        pinctrl-0 = <&lid_pin>;
++        lid-switch {
++            label = "Lid Switch";
++            gpios = <&pio 4 7 GPIO_ACTIVE_LOW>;
++            linux,input-type = <EV_SW>;
++            linux,code = <SW_LID>;
++            wakeup-source;
++            wakeup-event-action = <EV_ACT_DEASSERTED>;
++        };
++    };
++
++    vibrator {
++        compatible = "gpio-vibrator";
++        enable-gpios = <&pio 7 2 GPIO_ACTIVE_HIGH>;
++    };
++
++    leds {
++        compatible = "gpio-leds";
++        led-power {
++            function = LED_FUNCTION_POWER;
++            color = <LED_COLOR_ID_GREEN>;
++            gpios = <&pio 8 12 GPIO_ACTIVE_HIGH>;
++            default-state = "keep";
++        };
++        led-status {
++            function = LED_FUNCTION_STATUS;
++            color = <LED_COLOR_ID_GREEN>;
++            gpios = <&pio 8 11 GPIO_ACTIVE_HIGH>;
++            default-state = "keep";
++        };
++    };
++
++    wifi_pwrseq: wifi-pwrseq {
++        compatible = "mmc-pwrseq-simple";
++        clocks = <&rtc CLK_OSC32K_FANOUT>;
++        clock-names = "ext_clock";
++        pinctrl-names = "default";
++        pinctrl-0 = <&x32clk_fanout_pin>;
++        /* Stock supplies the radio through CLDO4, without a reset GPIO. */
++    };
++
++    reg_tf2: regulator-tf2 {
++        compatible = "regulator-fixed";
++        regulator-name = "tf2-power";
++        regulator-min-microvolt = <3300000>;
++        regulator-max-microvolt = <3300000>;
++        vin-supply = <&reg_sd_boot>;
++        gpio = <&pio 4 4 GPIO_ACTIVE_HIGH>;
++        enable-active-high;
++        startup-delay-us = <1000>;
++    };
++};
++
++&panel {
++    compatible = "baseos,rgsp-panel";
++    baseos,panel = "old";
++};
++
++&pio {
++    lid_pin: lid-pin {
++        pins = "PE7";
++        function = "gpio_in";
++        bias-pull-up;
++    };
++    tf2_pins: tf2-pins {
++        pins = "PC5", "PC6", "PC8", "PC10", "PC13", "PC15";
++        function = "mmc2";
++        drive-strength = <30>;
++        bias-pull-up;
++    };
++};
++
++&mmc1 {
++    mmc-pwrseq = <&wifi_pwrseq>;
++    bus-width = <4>;
++    max-frequency = <50000000>;
++    non-removable;
++    no-mmc;
++    no-sd;
++    keep-power-in-suspend;
++    status = "okay";
++};
++
++&mmc2 {
++    pinctrl-0 = <&tf2_pins>;
++    vmmc-supply = <&reg_tf2>;
++    bus-width = <4>;
++    max-frequency = <50000000>;
++    cd-gpios = <&pio 4 22 GPIO_ACTIVE_LOW>;
++    no-mmc;
++    no-sdio;
++    no-1-8-v;
++    /delete-property/ mmc-ddr-3_3v;
++    /delete-property/ cap-mmc-highspeed;
++    status = "okay";
++};
++
++&uart1 {
++    pinctrl-names = "default";
++    pinctrl-0 = <&uart1_pins>, <&uart1_rts_cts_pins>;
++    uart-has-rtscts;
++    status = "okay";
++    bluetooth {
++        compatible = "realtek,rtl8821cs-bt", "realtek,rtl8723bs-bt";
++        enable-gpios = <&pio 6 19 GPIO_ACTIVE_HIGH>;
++        device-wake-gpios = <&pio 6 17 GPIO_ACTIVE_HIGH>;
++        host-wake-gpios = <&pio 6 16 GPIO_ACTIVE_HIGH>;
++    };
++};
++
++&tcon_lcd0 { allwinner,dclk-sel = <2>; };
+diff --git a/drivers/of/Makefile b/drivers/of/Makefile
+index 8965a8e88..56d3fb635 100644
+--- a/drivers/of/Makefile
++++ b/drivers/of/Makefile
+@@ -25,4 +25,4 @@ obj-$(CONFIG_OF_OVERLAY_KUNIT_TEST) += overlay-test.o
+ overlay-test-y := overlay_test.o kunit_overlay_test.dtbo.o
+ 
+ obj-$(CONFIG_OF_UNITTEST) += unittest-data/
+-obj-$(CONFIG_BASEOS_BOARD_OVERLAY) += baseos-overlay.o baseos-rg28xx.dtbo.o
++obj-$(CONFIG_BASEOS_BOARD_OVERLAY) += baseos-overlay.o baseos-rg28xx.dtbo.o baseos-rgsp.dtbo.o
+diff --git a/drivers/of/baseos-overlay.c b/drivers/of/baseos-overlay.c
+index 3269080be..9ba04228f 100644
+--- a/drivers/of/baseos-overlay.c
++++ b/drivers/of/baseos-overlay.c
+@@ -9,15 +9,23 @@
+ 
+ extern u8 __dtbo_baseos_rg28xx_begin[], __dtbo_baseos_rg28xx_end[];
+ 
++extern u8 __dtbo_baseos_rgsp_begin[], __dtbo_baseos_rgsp_end[];
++
+ static int __init baseos_overlay_init(void)
+ {
+ 	int id = 0, ret;
++	u8 *begin, *end;
+ 
+-	if (!of_machine_is_compatible("anbernic,rg28xx"))
++	if (of_machine_is_compatible("anbernic,rgsp")) {
++		begin = __dtbo_baseos_rgsp_begin;
++		end = __dtbo_baseos_rgsp_end;
++	} else if (of_machine_is_compatible("anbernic,rg28xx")) {
++		begin = __dtbo_baseos_rg28xx_begin;
++		end = __dtbo_baseos_rg28xx_end;
++	} else {
+ 		return 0;
+-	ret = of_overlay_fdt_apply(__dtbo_baseos_rg28xx_begin,
+-				   __dtbo_baseos_rg28xx_end - __dtbo_baseos_rg28xx_begin,
+-				   &id, NULL);
++	}
++	ret = of_overlay_fdt_apply(begin, end - begin, &id, NULL);
+ 	pr_info("baseos: board overlay %s (%d)\n", ret ? "failed" : "applied", ret);
+ 	return 0;
+ }
+diff --git a/drivers/of/baseos-rgsp.dtso b/drivers/of/baseos-rgsp.dtso
+new file mode 100644
+index 000000000..696a2063a
+--- /dev/null
++++ b/drivers/of/baseos-rgsp.dtso
+@@ -0,0 +1,88 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* The RG SP shares the RG28XX power chip and audio wiring. */
++#include "baseos-rg28xx.dtso"
++
++&battery {
++    charge-full-design-microamp-hours = <3500000>;
++};
++
++&reg_aldo4 {
++    regulator-min-microvolt = <1800000>;
++    regulator-max-microvolt = <1800000>;
++};
++
++&axp717 {
++    regulators {
++        reg_cldo4: cldo4 {
++            regulator-name = "vcc-radio";
++            regulator-min-microvolt = <3300000>;
++            regulator-max-microvolt = <3300000>;
++            /* Bluetooth shares this rail with Wi-Fi. */
++            regulator-always-on;
++            regulator-boot-on;
++        };
++        reg_aldo1: aldo1 {
++            regulator-name = "tf2-io";
++            regulator-min-microvolt = <3300000>;
++            regulator-max-microvolt = <3300000>;
++        };
++    };
++};
++
++&mmc1 {
++    vmmc-supply = <&reg_cldo4>;
++    vqmmc-supply = <&reg_aldo4>;
++};
++
++&mmc2 {
++    vqmmc-supply = <&reg_aldo1>;
++};
++
++&pio {
++    vcc-pg-supply = <&reg_aldo4>;
++};
++
++&r_i2c {
++    #address-cells = <1>;
++    #size-cells = <0>;
++    rtc_ext: rtc@51 {
++        compatible = "nxp,pcf8563";
++        reg = <0x51>;
++    };
++};
++
++&axp717 {
++    usb_power: usb-power {};
++    regulators {
++        reg_boost: boost {
++            regulator-name = "usb-boost";
++            regulator-min-microvolt = <5000000>;
++            regulator-max-microvolt = <5200000>;
++        };
++    };
++};
++
++&{/} {
++    reg_usb_vbus: regulator-usb-vbus {
++        compatible = "regulator-fixed";
++        regulator-name = "usb-vbus";
++        regulator-min-microvolt = <5000000>;
++        regulator-max-microvolt = <5000000>;
++        vin-supply = <&reg_boost>;
++        gpio = <&pio 8 16 GPIO_ACTIVE_HIGH>;
++        enable-active-high;
++    };
++};
++
++&usbphy {
++    usb0_id_det-gpios = <&pio 8 4 GPIO_ACTIVE_HIGH>;
++    usb0_vbus-supply = <&reg_usb_vbus>;
++    usb0_vbus_power-supply = <&usb_power>;
++};
++
++&usbotg {
++    dr_mode = "otg";
++};
++
++&ehci0 { status = "okay"; };
++&ohci0 { status = "okay"; };

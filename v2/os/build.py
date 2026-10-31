@@ -51,13 +51,14 @@ def root():
     static(R / 'v2/dev/src/firstframe.c', tools / 'baseos-firstframe')
     static(R / 'v2/os/baseos-events.c', tools / 'baseos-events')
     static(R / 'v2/os/baseos-prefetch.c', tools / 'baseos-prefetch')
+    static(R / 'v2/os/baseos-charger.c', tools / 'baseos-charger')
     drop = ' '.join(DROP); dirs = ' '.join(DIRS)
     sh(f'''
 rm -rf /k/root && mkdir /k/root && cp -a /repo/{BASE}/. /k/root/
 cd /k/root
 rm -f {drop}
 cp -a /repo/v2/os/overlay/. .
-install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe /repo/work/v2/os/bin/baseos-events /repo/work/v2/os/bin/baseos-prefetch usr/sbin/
+install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe /repo/work/v2/os/bin/baseos-events /repo/work/v2/os/bin/baseos-prefetch /repo/work/v2/os/bin/baseos-charger usr/sbin/
 for d in {dirs}; do mkdir -p "$d"; done
 # Graphics: Mesa (built with its shader cache, v2/graphics/mesa-cache.sh) is the
 # system GL stack; BaseOS's KMS SDL lives in /usr/lib/baseos2.

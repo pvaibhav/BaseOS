@@ -16,16 +16,36 @@ cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS
 # SDL scans /dev/input by mtime without udev; give it a nonzero one.
 touch -c -d @1 /dev/input
 mount -t debugfs -o nodev,noexec,nosuid debugfs /sys/kernel/debug
-# Why the power chip switched on (button, charger, ...): kept with the boot logs
-# while charger-boot handling is being worked out.
-{ grep -E '^(20|21):' /sys/kernel/debug/regmap/0-0034/registers; grep -o 'bootreason=[a-z]*' /proc/cmdline; } \
-	> /run/baseos/t-power-on 2>/dev/null
 
 /usr/sbin/baseos-watchdog </dev/null >/run/baseos/watchdog.log 2>&1 &
 /usr/sbin/baseos-usb </dev/null >/run/baseos/usb.log 2>&1 &
 
 mount -t ext4 -o rw,noatime /dev/mmcblk0p6 /data 2>/dev/null || mount -t tmpfs tmpfs /data
 mkdir -p /data/bluetooth /data/bluealsa
+# Started by plugging in a charger while off: switch off again and let the
+# power chip charge, as BaseOS 1.x does (docs/11-charger-only-boot.md). Holding
+# MENU, the /data/no-charger-off opt-out, an unset clock or a switch-off less
+# than two minutes ago (a possible loop) wait for a one-second POWER hold
+# instead, with the screen off.
+case " $(cat /proc/cmdline) " in *' bootreason=charger '*)
+	now=$(cat /sys/class/rtc/rtc0/since_epoch 2>/dev/null) last=$(cat /data/charger-off-stamp 2>/dev/null)
+	case "$now" in ''|*[!0-9]*) now=0 ;; esac
+	case "$last" in ''|*[!0-9]*) last=0 ;; esac
+	if ! /usr/sbin/baseos-charger menu-held && [ ! -e /data/no-charger-off ] &&
+	   [ "$now" -gt 1700000000 ] && [ $((now - last)) -ge 120 ]; then
+		# Confirm the boot to the loader first (see the end of this file), or
+		# the next start would be the stock system.
+		case " $(cat /proc/cmdline) " in *' baseos.dev '*) ;;
+		*) /usr/sbin/mem 0x07000138 0 >/dev/null && /usr/sbin/mem 0x0700013c 0 >/dev/null ;; esac
+		echo "$now" > /data/charger-off-stamp && sync && umount /data && poweroff -f
+	fi
+	bl=/sys/class/backlight/backlight gov=/sys/devices/system/cpu/cpufreq/policy0/scaling_governor
+	read -r b < $bl/brightness; read -r g < $gov
+	echo 0 > $bl/brightness; echo powersave > $gov
+	until /usr/sbin/baseos-charger wait-power; do sleep 60; done
+	echo "$b" > $bl/brightness; echo "$g" > $gov
+	;;
+esac
 # A stable machine id (D-Bus wants one); kept on /data so it survives updates.
 [ -s /data/machine-id ] || tr -d - < /proc/sys/kernel/random/uuid > /data/machine-id
 cp /data/machine-id /run/machine-id
@@ -40,10 +60,6 @@ for dev in /dev/mmcblk1p1 /dev/mmcblk0p7; do
 		mount -t exfat -o rw,noatime,iocharset=utf8 "$dev" /mnt/sdcard 2>/dev/null || continue
 	card=$dev; break
 done
-# Read the parts of the card the last boot needed (folder listings above all)
-# in big background batches, before the frontend asks for them. Only after the
-# mount: mounting changes the block size, which empties the card's cache.
-[ -n "$card" ] && [ -s /data/boot-prefetch ] && /usr/sbin/baseos-prefetch replay /data/boot-prefetch &
 # TF1 holds BaseOS settings even when the frontend is on TF2.
 if [ "$card" = /dev/mmcblk0p7 ]; then
 	/usr/sbin/baseos-config /mnt/sdcard/baseos.conf
@@ -64,8 +80,7 @@ case " $(cat /proc/cmdline) " in
 esac
 # Keep the last boot's logs on /data (ext4, survives resets) for diagnosis.
 ( sleep 8; d=/data/baseos2/last-boot; mkdir -p $d && rm -f $d/* &&
-  dmesg > $d/dmesg; cp /run/baseos/*.log /run/baseos/t-* $d/ 2>/dev/null; ps > $d/ps
-  { date; cat /run/baseos/t-power-on; } >> /data/baseos2/power-on.log; sync ) &
+  dmesg > $d/dmesg; cp /run/baseos/*.log /run/baseos/t-* $d/ 2>/dev/null; ps > $d/ps; sync ) &
 # Note what this boot read from the card's file system for the next boot's
 # prefetch. (Prefetching the root image as well brought nothing.)
 [ -z "$card" ] || ( sleep 8; nice -n 19 /usr/sbin/baseos-prefetch record /data/boot-prefetch "$card" ) &

@@ -26,8 +26,10 @@ fi
 [ "$FRONTEND" != slot ] || export SLOT_ROOT="$SD"
 cd "$SD"
 # This measures the pre-launcher exec handoff, not a visible menu.
+first_start=
 if [ ! -e /run/boot-clock-handoff ]; then
  /usr/bin/boot-clock > /run/boot-clock-handoff 2>/dev/null || :
+ first_start=1
 fi
 # Development only: /data/baseos2/frontend-wrap (e.g. strace) wraps the launch.
 WRAP=
@@ -38,6 +40,11 @@ else
  setsid $WRAP /bin/sh "$LAUNCH" &
 fi
 child=$!
+# First start after boot: read the parts of the card the last boot needed
+# (folder listings above all) in big background batches while the frontend
+# sets itself up. Not earlier: the card is then busy with system startup.
+[ -z "$first_start" ] || [ ! -s /data/boot-prefetch ] ||
+ /usr/sbin/baseos-prefetch replay /data/boot-prefetch </dev/null >/dev/null 2>&1 &
 printf '%s\n' "$child" > /run/baseos/frontend-pgid
 trap 'kill -TERM -- "-$child" 2>/dev/null || :; wait "$child" || :' TERM INT
 wait "$child" || :
