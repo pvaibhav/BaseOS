@@ -1,7 +1,7 @@
 From 12ae7d790c4d6279854ac484af68acfb60469689 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 20:18:03 +0000
-Subject: [PATCH 42/42] Revert "Add explicit USB-C host role with peripheral
+Subject: [PATCH 42/43] Revert "Add explicit USB-C host role with peripheral
  boot default"
 
 It broke the normal device mode: the MUSB glue ignored cable events, so the

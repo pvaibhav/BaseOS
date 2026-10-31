@@ -1,7 +1,7 @@
 From 69f8f7a528714cf49d9ca2a99629c5d40a421ea7 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:46:22 +0000
-Subject: [PATCH 14/42] watchdog: sunxi: pause during system sleep
+Subject: [PATCH 14/43] watchdog: sunxi: pause during system sleep
 
 ---
  drivers/watchdog/sunxi_wdt.c | 25 +++++++++++++++++++++++++

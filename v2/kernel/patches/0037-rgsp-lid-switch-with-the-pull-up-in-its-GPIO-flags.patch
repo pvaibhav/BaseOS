@@ -1,7 +1,7 @@
 From 35dab0f150ca5a2cf7c883673aa217051dc842e1 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 17:59:43 +0000
-Subject: [PATCH 37/42] rgsp: lid switch with the pull-up in its GPIO flags
+Subject: [PATCH 37/43] rgsp: lid switch with the pull-up in its GPIO flags
 
 A pinctrl claim on PE7 next to the GPIO made the GPIO request fail, so the
 lid switch never appeared (found on the first RG SP boot).

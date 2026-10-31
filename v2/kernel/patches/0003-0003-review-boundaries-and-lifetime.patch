@@ -1,7 +1,7 @@
 From 37cf1784daae737e2a3efae16b256626ef9c76a2 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:05:10 +0000
-Subject: [PATCH 03/42] 0003-review-boundaries-and-lifetime
+Subject: [PATCH 03/43] 0003-review-boundaries-and-lifetime
 
 ---
  .../arm64/boot/dts/allwinner/sun50i-h616.dtsi |  3 -

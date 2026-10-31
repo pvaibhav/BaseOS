@@ -1,7 +1,7 @@
 From b7d2ee7559252625c64a90fdf4eeed67470ab506 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:09:41 +0000
-Subject: [PATCH 09/42] watchdog: sunxi: let a configured timeout replace the
+Subject: [PATCH 09/43] watchdog: sunxi: let a configured timeout replace the
  firmware one
 
 ---

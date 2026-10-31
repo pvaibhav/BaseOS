@@ -1,0 +1,35 @@
+From d286f8b9d8cfeb39326916cd08a1a8c13305402d Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 21:37:32 +0000
+Subject: [PATCH 43/43] h700: 1512 MHz for CPU speed grades 0 and 2, as the
+ stock firmware
+
+The stock firmware offers 1512 MHz on a grade-2 RG SP and runs it at
+1.160 V; the mainline H616 table stops grades 0 and 2 at 1416 MHz. Grade 4
+is left out (no stock evidence).
+---
+ .../allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts  | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+index c9d6038d9..66fbdde57 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -315,6 +315,17 @@ &tcon_lcd0 {
+  * matching voltage first, so the boot code never runs on a lowered voltage.
+  */
+ &{/opp-table-cpu/opp-1008000000} { opp-suspend; };
++/*
++ * 1512 MHz for speed grades 0 and 2 as well, at 1.16 V: the stock firmware
++ * offers it on a grade-2 RG SP and was seen running it at 1.160 V. The
++ * mainline table (from H616 data) stops these grades at 1416 MHz. Grade 4,
++ * the slowest silicon, is left out (no stock evidence).
++ */
++&{/opp-table-cpu/opp-1512000000} {
++	opp-supported-hw = <0x2f>;
++	opp-microvolt-speed0 = <1160000>;
++	opp-microvolt-speed2 = <1160000>;
++};
+ 
+ 
+ #include "sun50i-h700-anbernic-rg28xx-phandles.dtsi"

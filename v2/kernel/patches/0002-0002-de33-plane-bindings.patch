@@ -1,7 +1,7 @@
 From b904f3d9e8d15520d32c770a0db590c3472f6367 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:05:10 +0000
-Subject: [PATCH 02/42] 0002-de33-plane-bindings
+Subject: [PATCH 02/43] 0002-de33-plane-bindings
 
 ---
  .../allwinner,sun50i-h616-de33-planes.yaml    | 21 +++++++++++++++++++
