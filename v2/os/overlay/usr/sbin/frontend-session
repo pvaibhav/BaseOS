@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+# Mesa keeps compiled GL shaders on the internal data partition, so they are
+# compiled once instead of on every start.
+export MESA_SHADER_CACHE_DIR=/data/mesa-shader-cache MESA_SHADER_CACHE_MAX_SIZE=32M
 [ ! -e /run/baseos/stopping ] || { sleep 5; exit 1; }
 [ -s /run/baseos/persistence-ready ] || { sleep 5; exit 1; }
 SD=/mnt/sdcard

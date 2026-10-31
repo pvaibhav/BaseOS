@@ -21,9 +21,6 @@ mount -t debugfs -o nodev,noexec,nosuid debugfs /sys/kernel/debug
 /usr/sbin/baseos-usb </dev/null >/run/baseos/usb.log 2>&1 &
 
 mount -t ext4 -o rw,noatime /dev/mmcblk0p6 /data 2>/dev/null || mount -t tmpfs tmpfs /data
-# Read the parts of the card the last boot needed in big background batches
-# (folder listings especially), before the frontend asks for them.
-[ -s /data/boot-prefetch ] && /usr/sbin/baseos-prefetch replay /data/boot-prefetch &
 mkdir -p /data/bluetooth /data/bluealsa
 # A stable machine id (D-Bus wants one); kept on /data so it survives updates.
 [ -s /data/machine-id ] || tr -d - < /proc/sys/kernel/random/uuid > /data/machine-id
@@ -39,6 +36,10 @@ for dev in /dev/mmcblk1p1 /dev/mmcblk0p7; do
 		mount -t exfat -o rw,noatime,iocharset=utf8 "$dev" /mnt/sdcard 2>/dev/null || continue
 	card=$dev; break
 done
+# Read the parts of the card the last boot needed (folder listings above all)
+# in big background batches, before the frontend asks for them. Only after the
+# mount: mounting changes the block size, which empties the card's cache.
+[ -n "$card" ] && [ -s /data/boot-prefetch ] && /usr/sbin/baseos-prefetch replay /data/boot-prefetch &
 # TF1 holds BaseOS settings even when the frontend is on TF2.
 if [ "$card" = /dev/mmcblk0p7 ]; then
 	/usr/sbin/baseos-config /mnt/sdcard/baseos.conf
@@ -60,7 +61,6 @@ esac
 # Keep the last boot's logs on /data (ext4, survives resets) for diagnosis.
 ( sleep 8; d=/data/baseos2/last-boot; mkdir -p $d && rm -f $d/* &&
   dmesg > $d/dmesg; cp /run/baseos/*.log /run/baseos/t-* $d/ 2>/dev/null; ps > $d/ps; sync ) &
-# Note what this boot read from the card (card data and the root image) for
-# the next boot's prefetch.
-( sleep 8; nice -n 19 /usr/sbin/baseos-prefetch record /data/boot-prefetch \
-  /dev/mmcblk0p7 /dev/mmcblk0:222298112:536870912 ) &
+# Note what this boot read from the card's file system for the next boot's
+# prefetch. (Prefetching the root image as well brought nothing.)
+[ -z "$card" ] || ( sleep 8; nice -n 19 /usr/sbin/baseos-prefetch record /data/boot-prefetch "$card" ) &

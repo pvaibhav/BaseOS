@@ -1,7 +1,7 @@
 From 13e16d5800a96f6a310a7f0d74d0838f429b0ef6 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 15:28:04 +0000
-Subject: [PATCH 31/31] Revert "rg28xx: linear backlight scale like the vendor
+Subject: [PATCH 31/33] Revert "rg28xx: linear backlight scale like the vendor
  driver"
 
 This reverts commit 30d7c03a5dfa7546a54d28ad2c951f031d12a3d4.

@@ -152,7 +152,7 @@ static int replay(const char *list)
 			snprintf(open_path, sizeof(open_path), "%s", path);
 		}
 		if (fd >= 0)
-			posix_fadvise(fd, off, len, POSIX_FADV_WILLNEED);
+			readahead(fd, off, len);
 	}
 	fclose(f);
 	return 0;

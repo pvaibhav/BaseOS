@@ -1,0 +1,45 @@
+From c35b67f6965d25117b0025390f475ff4cedc0bed Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 16:47:58 +0000
+Subject: [PATCH 33/33] arm64: dts: allwinner: rg28xx: run the GPU up to 648
+ MHz like stock
+
+The stock firmware runs the GPU at 648 MHz with the shared rail at 0.94 V;
+its 0.96 V table entry is never applied. Add the same top speed.
+---
+ .../allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+index 1ae31aec0..91a0d8c02 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -189,13 +189,13 @@ gpu_opp_table: opp-table-gpu {
+         compatible = "operating-points-v2";
+ 
+         /*
+-         * Stock uses 0.90 V from 420 to 600 MHz. Keep the shared GPU/system
+-         * rail at its loader voltage of 0.94 V. The voltage range lets OPP
+-         * use that fixed supply without trying to lower it.
++         * The stock speeds. The shared GPU/system rail stays at the loader's
++         * 0.94 V, as on the stock firmware, which runs 648 MHz on it (its
++         * table lists 0.96 V for 648 MHz but nothing ever sets it; measured
++         * on the stock OS). The voltage range lets OPP use the fixed supply.
+          *
+          * 432 MHz keeps probe and idle polling at the loader clock; using
+          * the stock 420 MHz floor would change the PLL during boot.
+-         * Stock 648 MHz needs 0.96 V, so it is left out.
+          */
+         opp-432000000 {
+             opp-hz = /bits/ 64 <432000000>;
+@@ -217,6 +217,10 @@ opp-600000000 {
+             opp-hz = /bits/ 64 <600000000>;
+             opp-microvolt = <900000 900000 940000>;
+         };
++        opp-648000000 {
++            opp-hz = /bits/ 64 <648000000>;
++            opp-microvolt = <940000 940000 940000>;
++        };
+     };
+ 
+     reg_gpu_sys_retained: regulator-gpu-sys-retained {

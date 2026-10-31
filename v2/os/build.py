@@ -59,13 +59,14 @@ rm -f {drop}
 cp -a /repo/v2/os/overlay/. .
 install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe /repo/work/v2/os/bin/baseos-events /repo/work/v2/os/bin/baseos-prefetch usr/sbin/
 for d in {dirs}; do mkdir -p "$d"; done
-# Graphics: Mesa is the system GL stack; BaseOS's KMS SDL lives in /usr/lib/baseos2.
-M=usr/lib/baseos-mainline A=usr/lib/aarch64-linux-gnu
-for f in libEGL.so.1.0.0 libGLESv2.so.2.0.0 libgallium-26.2.5.so libgbm.so.1.0.0 libdrm.so.2.125.0; do mv $M/$f $A/; done
+# Graphics: Mesa (built with its shader cache, v2/graphics/mesa-cache.sh) is the
+# system GL stack; BaseOS's KMS SDL lives in /usr/lib/baseos2.
+M=usr/lib/baseos-mainline A=usr/lib/aarch64-linux-gnu G=/repo/work/v2/mesa-cache/runtime
+for f in libEGL.so.1.0.0 libGLESv2.so.2.0.0 libgallium-26.2.5.so libgbm.so.1.0.0 libdrm.so.2.125.0; do cp $G/$f $A/; done
 ln -sf libEGL.so.1.0.0 $A/libEGL.so.1; ln -sf libEGL.so.1 $A/libEGL.so
 ln -sf libGLESv2.so.2.0.0 $A/libGLESv2.so.2; ln -sf libGLESv2.so.2 $A/libGLESv2.so
 ln -sf libgbm.so.1.0.0 $A/libgbm.so.1; ln -sf libdrm.so.2.125.0 $A/libdrm.so.2
-mkdir -p usr/lib/gbm usr/lib/baseos2 && mv $M/gbm/dri_gbm.so usr/lib/gbm/
+mkdir -p usr/lib/gbm usr/lib/baseos2 && cp $G/gbm/dri_gbm.so usr/lib/gbm/
 cp /repo/work/mainline/u4g/devel/usr/lib/libSDL2-2.0.so.0.2800.5 usr/lib/baseos2/
 ln -s libSDL2-2.0.so.0.2800.5 usr/lib/baseos2/libSDL2-2.0.so.0
 rm -rf $M

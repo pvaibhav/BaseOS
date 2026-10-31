@@ -1,7 +1,7 @@
 From b7554ae80fd6f44b59dbaa88518b9125a8fcc3c2 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:05:10 +0000
-Subject: [PATCH 01/31] 0001-h700-lcd-foundation
+Subject: [PATCH 01/33] 0001-h700-lcd-foundation
 
 ---
  .../bus/allwinner,sun50i-a64-de2.yaml         |    7 +-

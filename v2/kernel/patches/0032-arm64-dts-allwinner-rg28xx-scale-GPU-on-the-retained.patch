@@ -1,0 +1,73 @@
+From 09b89845d8db57f7a821490a14bec58ae87f4c04 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 16:24:35 +0000
+Subject: [PATCH 32/33] arm64: dts: allwinner: rg28xx: scale GPU on the
+ retained system rail
+
+Use the stock 456-600 MHz points at the retained 940 mV shared GPU/system voltage. Stock 648 MHz needs 960 mV and is excluded. Keep a 432 MHz floor so Panfrost probe and idle polling leave the loader clock alone; do not assign PLL rates at boot.
+---
+ .../sun50i-h700-anbernic-rg28xx-baseos.dts    | 39 +++++++++++++++++--
+ 1 file changed, 36 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+index 9baa33f11..1ae31aec0 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -3,8 +3,6 @@
+ #include "sun50i-h616.dtsi"
+ #include "sun50i-h616-cpu-opp.dtsi"
+ #include <dt-bindings/gpio/gpio.h>
+-/* Pinned 7.3.1 CCU onecell index; private header, not a stable binding ID. */
+-#define BASEOS_H616_PLL_GPU 8
+ 
+ / {
+     model = "BaseOS RG28XX host-only joined KMS candidate";
+@@ -180,12 +178,47 @@ &mmc0 {
+ &r_i2c { status = "disabled"; };
+ 
+ 
+-/* Frequency-only: dedicated PLL, no OPP table or PMIC control. */
++/* Keep the loader clock until the GPU has work to do. */
+ &gpu {
++    operating-points-v2 = <&gpu_opp_table>;
+     mali-supply = <&reg_gpu_sys_retained>;
+     status = "okay";
+ };
+ / {
++    gpu_opp_table: opp-table-gpu {
++        compatible = "operating-points-v2";
++
++        /*
++         * Stock uses 0.90 V from 420 to 600 MHz. Keep the shared GPU/system
++         * rail at its loader voltage of 0.94 V. The voltage range lets OPP
++         * use that fixed supply without trying to lower it.
++         *
++         * 432 MHz keeps probe and idle polling at the loader clock; using
++         * the stock 420 MHz floor would change the PLL during boot.
++         * Stock 648 MHz needs 0.96 V, so it is left out.
++         */
++        opp-432000000 {
++            opp-hz = /bits/ 64 <432000000>;
++            opp-microvolt = <900000 900000 940000>;
++        };
++        opp-456000000 {
++            opp-hz = /bits/ 64 <456000000>;
++            opp-microvolt = <900000 900000 940000>;
++        };
++        opp-504000000 {
++            opp-hz = /bits/ 64 <504000000>;
++            opp-microvolt = <900000 900000 940000>;
++        };
++        opp-552000000 {
++            opp-hz = /bits/ 64 <552000000>;
++            opp-microvolt = <900000 900000 940000>;
++        };
++        opp-600000000 {
++            opp-hz = /bits/ 64 <600000000>;
++            opp-microvolt = <900000 900000 940000>;
++        };
++    };
++
+     reg_gpu_sys_retained: regulator-gpu-sys-retained {
+         compatible = "regulator-fixed";
+         regulator-name = "retained-vdd-gpu-sys";
