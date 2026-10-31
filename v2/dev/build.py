@@ -64,12 +64,23 @@ def write_newc(entries):
     return bytes(out + bytes(-len(out) % 512))
 
 
+def tools():
+    """Static aarch64 helpers for the dev initramfs (musl, built in OrbStack)."""
+    import subprocess
+    src = Path(__file__).resolve().parent / 'src'
+    dst = Path(__file__).resolve().parent / 'initramfs/sbin'
+    subprocess.run(['docker', 'run', '--rm', '-v', f'{src}:/s:ro', '-v', f'{dst}:/o', 'alpine:3.20', 'sh', '-c',
+                    'apk add -q gcc musl-dev linux-headers >/dev/null && for t in feeder mem; do '
+                    'gcc -static -Os -s -Wall -Werror -o /o/$t /s/$t.c || exit 1; done'], check=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--kernel', help='arm64 Image (default: proven U4-K)')
     ap.add_argument('--dtb', help='DTB (default: proven U5)')
     ap.add_argument('--out', default=str(OUT / 'image.bin'))
     a = ap.parse_args()
+    tools()
     proven = PROVEN.read_bytes()
     assert sha(proven) == PROVEN_SHA, 'proven payload changed'
     boot, dtb = payload.parse(proven, G)
