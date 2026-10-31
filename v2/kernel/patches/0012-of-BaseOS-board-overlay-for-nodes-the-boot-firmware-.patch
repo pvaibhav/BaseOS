@@ -1,7 +1,7 @@
 From 7793615c65121bfdb5df473cb21d00575f292604 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:34:39 +0000
-Subject: [PATCH 12/35] of: BaseOS board overlay for nodes the boot firmware
+Subject: [PATCH 12/36] of: BaseOS board overlay for nodes the boot firmware
  refuses (RG28XX PMIC, battery, CPU supply, audio)
 
 ---

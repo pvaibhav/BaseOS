@@ -133,5 +133,7 @@
     dr_mode = "peripheral";
 };
 
-&ehci0 { status = "okay"; };
-&ohci0 { status = "okay"; };
+/*
+ * The host controllers stay off: once their drivers load they take the port
+ * from the USB device side (adb). They are for an explicit host mode.
+ */

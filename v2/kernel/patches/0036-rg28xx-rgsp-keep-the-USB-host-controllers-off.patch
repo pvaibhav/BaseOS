@@ -1,0 +1,25 @@
+From 87af4ab7a9e5d9dff4a5a7ccd13b01778791a5cd Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 17:33:09 +0000
+Subject: [PATCH 36/36] rg28xx/rgsp: keep the USB host controllers off
+
+Loading their drivers took the USB-C port from the device side and cut
+adb off. They are for an explicit host mode.
+---
+ drivers/of/baseos-rg28xx.dtso | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/of/baseos-rg28xx.dtso b/drivers/of/baseos-rg28xx.dtso
+index 3d9438cc5..076a913d5 100644
+--- a/drivers/of/baseos-rg28xx.dtso
++++ b/drivers/of/baseos-rg28xx.dtso
+@@ -133,5 +133,7 @@ &usbotg {
+     dr_mode = "peripheral";
+ };
+ 
+-&ehci0 { status = "okay"; };
+-&ohci0 { status = "okay"; };
++/*
++ * The host controllers stay off: once their drivers load they take the port
++ * from the USB device side (adb). They are for an explicit host mode.
++ */
