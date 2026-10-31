@@ -1,0 +1,708 @@
+From 967ad23393af0c19897bf090d0df92adc85e2694 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 19:54:39 +0000
+Subject: [PATCH 40/40] arm64: dts: add BaseOS support for remaining Anbernic
+ H700 models
+
+---
+ arch/arm64/boot/dts/allwinner/Makefile        |  23 +++-
+ .../sun50i-h700-anbernic-baseos-radio.dtsi    | 115 ++++++++++++++++++
+ .../sun50i-h700-anbernic-baseos-sticks.dtsi   |  82 +++++++++++++
+ .../sun50i-h700-anbernic-rg34xx-baseos.dts    |  11 ++
+ .../sun50i-h700-anbernic-rg34xxsp-baseos.dts  |  29 +++++
+ .../sun50i-h700-anbernic-rg35xxh-baseos.dts   |  41 +++++++
+ ...sun50i-h700-anbernic-rg35xxplus-baseos.dts |  11 ++
+ .../sun50i-h700-anbernic-rg35xxpro-baseos.dts |  41 +++++++
+ .../sun50i-h700-anbernic-rg35xxsp-baseos.dts  |  24 ++++
+ .../sun50i-h700-anbernic-rg40xxh-baseos.dts   |  17 +++
+ .../sun50i-h700-anbernic-rg40xxv-baseos.dts   |  18 +++
+ .../sun50i-h700-anbernic-rgcubexx-baseos.dts  |  17 +++
+ drivers/of/Makefile                           |   2 +
+ drivers/of/baseos-overlay.c                   |  37 ++++++
+ drivers/of/baseos-rg34xx.dtso                 |   3 +
+ drivers/of/baseos-rg34xxsp.dtso               |   3 +
+ drivers/of/baseos-rg35xxh.dtso                |   3 +
+ drivers/of/baseos-rg35xxplus.dtso             |   3 +
+ drivers/of/baseos-rg35xxpro.dtso              |   3 +
+ drivers/of/baseos-rg35xxsp.dtso               |   3 +
+ drivers/of/baseos-rg40xxh.dtso                |   3 +
+ drivers/of/baseos-rg40xxv.dtso                |   3 +
+ drivers/of/baseos-rgcubexx.dtso               |   3 +
+ 23 files changed, 494 insertions(+), 1 deletion(-)
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-baseos-radio.dtsi
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-baseos-sticks.dtsi
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg34xx-baseos.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg34xxsp-baseos.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxh-baseos.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxplus-baseos.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxpro-baseos.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxsp-baseos.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg40xxh-baseos.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg40xxv-baseos.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgcubexx-baseos.dts
+ create mode 100644 drivers/of/baseos-rg34xx.dtso
+ create mode 100644 drivers/of/baseos-rg34xxsp.dtso
+ create mode 100644 drivers/of/baseos-rg35xxh.dtso
+ create mode 100644 drivers/of/baseos-rg35xxplus.dtso
+ create mode 100644 drivers/of/baseos-rg35xxpro.dtso
+ create mode 100644 drivers/of/baseos-rg35xxsp.dtso
+ create mode 100644 drivers/of/baseos-rg40xxh.dtso
+ create mode 100644 drivers/of/baseos-rg40xxv.dtso
+ create mode 100644 drivers/of/baseos-rgcubexx.dtso
+
+diff --git a/arch/arm64/boot/dts/allwinner/Makefile b/arch/arm64/boot/dts/allwinner/Makefile
+index 4e9f9dcc9..d292fb4a8 100644
+--- a/arch/arm64/boot/dts/allwinner/Makefile
++++ b/arch/arm64/boot/dts/allwinner/Makefile
+@@ -15,7 +15,8 @@ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-olinuxino.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-olinuxino-emmc.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-orangepi-win.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-pine64-lts.dtb
+-dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-pine64-plus.dtb sun50i-a64-pine64.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-pine64-plus.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-pine64.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-pinebook.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-pinephone-1.0.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-a64-pinephone-1.1.dtb
+@@ -72,3 +73,23 @@ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-avaota-a1.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun55i-t527-orangepi-4a.dtb
+ 
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rgsp-baseos.dtb
++
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg34xx-baseos.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg34xxsp-baseos.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg35xxplus-baseos.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg35xxh-baseos.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg35xxpro-baseos.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg35xxsp-baseos.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg40xxh-baseos.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg40xxv-baseos.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rgcubexx-baseos.dtb
++
++DTC_FLAGS_sun50i-h700-anbernic-rg34xx-baseos := -@
++DTC_FLAGS_sun50i-h700-anbernic-rg34xxsp-baseos := -@
++DTC_FLAGS_sun50i-h700-anbernic-rg35xxplus-baseos := -@
++DTC_FLAGS_sun50i-h700-anbernic-rg35xxh-baseos := -@
++DTC_FLAGS_sun50i-h700-anbernic-rg35xxpro-baseos := -@
++DTC_FLAGS_sun50i-h700-anbernic-rg35xxsp-baseos := -@
++DTC_FLAGS_sun50i-h700-anbernic-rg40xxh-baseos := -@
++DTC_FLAGS_sun50i-h700-anbernic-rg40xxv-baseos := -@
++DTC_FLAGS_sun50i-h700-anbernic-rgcubexx-baseos := -@
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-baseos-radio.dtsi b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-baseos-radio.dtsi
+new file mode 100644
+index 000000000..f596cb35c
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-baseos-radio.dtsi
+@@ -0,0 +1,115 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Keep the loader's display phandles and the stock input layout. */
++#include "sun50i-h700-anbernic-rg28xx-baseos.dts"
++#include <dt-bindings/input/gpio-keys.h>
++#include <dt-bindings/input/linux-event-codes.h>
++#include <dt-bindings/leds/common.h>
++
++/ {
++    vibrator {
++        compatible = "gpio-vibrator";
++        enable-gpios = <&pio 7 2 GPIO_ACTIVE_HIGH>;
++    };
++
++    leds {
++        compatible = "gpio-leds";
++        led-power {
++            function = LED_FUNCTION_POWER;
++            color = <LED_COLOR_ID_GREEN>;
++            gpios = <&pio 8 12 GPIO_ACTIVE_HIGH>;
++            default-state = "keep";
++        };
++        led-status {
++            function = LED_FUNCTION_STATUS;
++            color = <LED_COLOR_ID_GREEN>;
++            gpios = <&pio 8 11 GPIO_ACTIVE_HIGH>;
++            default-state = "keep";
++        };
++    };
++
++    wifi_pwrseq: wifi-pwrseq {
++        compatible = "mmc-pwrseq-simple";
++        clocks = <&rtc CLK_OSC32K_FANOUT>;
++        clock-names = "ext_clock";
++        pinctrl-names = "default";
++        pinctrl-0 = <&x32clk_fanout_pin>;
++        /* CLDO4 radio supply; boards with PG18 reset override this node. */
++    };
++
++    reg_tf2: regulator-tf2 {
++        compatible = "regulator-fixed";
++        regulator-name = "tf2-power";
++        regulator-min-microvolt = <3300000>;
++        regulator-max-microvolt = <3300000>;
++        vin-supply = <&reg_sd_boot>;
++        gpio = <&pio 4 4 GPIO_ACTIVE_HIGH>;
++        enable-active-high;
++        startup-delay-us = <1000>;
++    };
++};
++
++&pio {
++    tf2_pins: tf2-pins {
++        pins = "PC5", "PC6", "PC8", "PC10", "PC13", "PC15";
++        function = "mmc2";
++        drive-strength = <30>;
++        bias-pull-up;
++    };
++};
++
++&mmc1 {
++    mmc-pwrseq = <&wifi_pwrseq>;
++    bus-width = <4>;
++    max-frequency = <50000000>;
++    non-removable;
++    no-mmc;
++    no-sd;
++    keep-power-in-suspend;
++    status = "okay";
++};
++
++&mmc2 {
++    pinctrl-0 = <&tf2_pins>;
++    vmmc-supply = <&reg_tf2>;
++    bus-width = <4>;
++    max-frequency = <50000000>;
++    cd-gpios = <&pio 4 22 GPIO_ACTIVE_LOW>;
++    no-mmc;
++    no-sdio;
++    no-1-8-v;
++    /delete-property/ mmc-ddr-3_3v;
++    /delete-property/ cap-mmc-highspeed;
++    status = "okay";
++};
++
++&uart1 {
++    pinctrl-names = "default";
++    pinctrl-0 = <&uart1_pins>, <&uart1_rts_cts_pins>;
++    uart-has-rtscts;
++    status = "okay";
++    bluetooth {
++        compatible = "realtek,rtl8821cs-bt", "realtek,rtl8723bs-bt";
++        enable-gpios = <&pio 6 19 GPIO_ACTIVE_HIGH>;
++        device-wake-gpios = <&pio 6 17 GPIO_ACTIVE_HIGH>;
++        host-wake-gpios = <&pio 6 16 GPIO_ACTIVE_HIGH>;
++    };
++};
++
++/* Stock declares a PCF8563 on these boards; make it the persistent RTC.
++ * No external alarm IRQ wiring is established. The SoC RTC supplies clocks.
++ */
++&r_i2c {
++    #address-cells = <1>;
++    #size-cells = <0>;
++    rtc_ext: rtc@51 {
++        compatible = "nxp,pcf8563";
++        reg = <0x51>;
++    };
++};
++
++/ {
++    aliases {
++        rtc0 = &rtc_ext;
++        rtc1 = &rtc;
++    };
++};
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-baseos-sticks.dtsi b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-baseos-sticks.dtsi
+new file mode 100644
+index 000000000..8ac849d0b
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-baseos-sticks.dtsi
+@@ -0,0 +1,82 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* ADC/mux wiring from the upstream RG35XX H.
++ * Copyright (C) 2024 Ryan Walklin <ryan@testtoast.com>.
++ * Copyright (C) 2024 Chris Morgan <macroalpha82@gmail.com>.
++ */
++/ {
++	adc-joystick {
++		compatible = "adc-joystick";
++		io-channels = <&adc_mux 0>,
++			      <&adc_mux 1>,
++			      <&adc_mux 2>,
++			      <&adc_mux 3>;
++		poll-interval = <16>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		axis_x: axis@0 {
++			reg = <0>;
++			abs-flat = <32>;
++			abs-fuzz = <32>;
++			abs-range = <4096 0>;
++			linux,code = <ABS_X>;
++		};
++
++		axis_y: axis@1 {
++			reg = <1>;
++			abs-flat = <32>;
++			abs-fuzz = <32>;
++			abs-range = <0 4096>;
++			linux,code = <ABS_Y>;
++		};
++
++		axis_rx: axis@2 {
++			reg = <2>;
++			abs-flat = <32>;
++			abs-fuzz = <32>;
++			abs-range = <0 4096>;
++			linux,code = <ABS_RX>;
++		};
++
++		axis_ry: axis@3 {
++			reg = <3>;
++			abs-flat = <32>;
++			abs-fuzz = <32>;
++			abs-range = <4096 0>;
++			linux,code = <ABS_RY>;
++		};
++	};
++
++	adc_mux: adc-mux {
++		compatible = "io-channel-mux";
++		channels = "left_x", "left_y", "right_x", "right_y";
++		#io-channel-cells = <1>;
++		io-channels = <&gpadc 0>;
++		io-channel-names = "parent";
++		mux-controls = <&gpio_mux>;
++		settle-time-us = <100>;
++	};
++
++	gpio_mux: mux-controller {
++		compatible = "gpio-mux";
++		mux-gpios = <&pio 8 1 GPIO_ACTIVE_LOW>,
++			    <&pio 8 2 GPIO_ACTIVE_LOW>;
++		#mux-control-cells = <0>;
++	};
++
++};
++
++&gpadc {
++    #address-cells = <1>;
++    #size-cells = <0>;
++    status = "okay";
++    channel@0 { reg = <0>; };
++};
++&pio {
++    /* Stock amux-en-gpios: PI0 output high, shared by all analog boards. */
++    joystick-enable { gpio-hog; gpios = <8 0 GPIO_ACTIVE_HIGH>; output-high; line-name = "joystick-mux-enable"; };
++};
++&{/gpio-keys} {
++    key-l3 { gpios = <&pio 4 8 17>; linux,code = <0x139>; };
++    key-r3 { gpios = <&pio 4 9 17>; linux,code = <0x13c>; };
++};
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg34xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg34xx-baseos.dts
+new file mode 100644
+index 000000000..bfba0570d
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg34xx-baseos.dts
+@@ -0,0 +1,11 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Build-only board support: untested on hardware. */
++#include "sun50i-h700-anbernic-baseos-radio.dtsi"
++/ {
++    model = "BaseOS RG34XX";
++    compatible = "anbernic,rg34xx", "allwinner,sun50i-h700";
++    chosen { framebuffer@0 { width = <720>; height = <480>; stride = <2880>; }; };
++};
++&panel { compatible = "baseos,rg34xx-panel"; baseos,panel = "old"; };
++&tcon_lcd0 { allwinner,dclk-sel = <2>; };
++&wifi_pwrseq { reset-gpios = <&pio 6 18 GPIO_ACTIVE_LOW>; post-power-on-delay-ms = <200>; };
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg34xxsp-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg34xxsp-baseos.dts
+new file mode 100644
+index 000000000..46029972e
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg34xxsp-baseos.dts
+@@ -0,0 +1,29 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Build-only board support: untested on hardware. */
++#include "sun50i-h700-anbernic-baseos-radio.dtsi"
++#include "sun50i-h700-anbernic-baseos-sticks.dtsi"
++/ {
++    model = "BaseOS RG34XX SP";
++    compatible = "anbernic,rg34xxsp", "allwinner,sun50i-h700";
++    chosen { framebuffer@0 { width = <720>; height = <480>; stride = <2880>; }; };
++    gpio-keys-lid {
++        compatible = "gpio-keys";
++        /* The pull-up comes with the GPIO flags: a pinctrl claim on PE7 as
++         * well made the GPIO request fail. */
++        lid-switch {
++            label = "Lid Switch";
++            gpios = <&pio 4 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
++            linux,input-type = <EV_SW>;
++            linux,code = <SW_LID>;
++            wakeup-source;
++            wakeup-event-action = <EV_ACT_DEASSERTED>;
++        };
++    };
++
++};
++&panel { compatible = "baseos,rg34xxsp-panel"; baseos,panel = "old"; };
++&tcon_lcd0 { allwinner,dclk-sel = <2>; };
++&axis_x { abs-range = <4096 0>; };
++&axis_y { abs-range = <4096 0>; };
++&axis_rx { abs-range = <4096 0>; };
++&axis_ry { abs-range = <4096 0>; };
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxh-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxh-baseos.dts
+new file mode 100644
+index 000000000..c9ac9559e
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxh-baseos.dts
+@@ -0,0 +1,41 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Build-only board support: untested on hardware. */
++#include "sun50i-h700-anbernic-baseos-radio.dtsi"
++#include "sun50i-h700-anbernic-baseos-sticks.dtsi"
++/ {
++    model = "BaseOS RG35XX H";
++    compatible = "anbernic,rg35xxh", "allwinner,sun50i-h700";
++    chosen { framebuffer@0 { width = <640>; height = <480>; stride = <2560>; }; };
++};
++&panel { compatible = "baseos,rg35xxh-panel"; baseos,panel = "old"; };
++&tcon_lcd0 { allwinner,dclk-sel = <0>; };
++&wifi_pwrseq { reset-gpios = <&pio 6 18 GPIO_ACTIVE_LOW>; post-power-on-delay-ms = <200>; };
++&axis_x { abs-range = <4096 0>; };
++&axis_y { abs-range = <0 4096>; };
++&axis_rx { abs-range = <0 4096>; };
++&axis_ry { abs-range = <4096 0>; };
++
++/* Separate USB host connector: upstream H PE5 -> PI7 power chain. */
++/ {
++	reg_vcc3v8_usb: regulator-vcc3v8-usb {
++		compatible = "regulator-fixed";
++		enable-active-high;
++		gpio = <&pio 4 5 GPIO_ACTIVE_HIGH>; /* PE5 */
++		regulator-min-microvolt = <3800000>;
++		regulator-max-microvolt = <3800000>;
++		regulator-name = "vcc3v8-usb";
++	};
++
++	reg_vcc5v0_usb: regulator-vcc5v0-usb {
++		compatible = "regulator-fixed";
++		enable-active-high;
++		gpio = <&pio 8 7 GPIO_ACTIVE_HIGH>; /* PI7 */
++		regulator-min-microvolt = <5000000>;
++		regulator-max-microvolt = <5000000>;
++		regulator-name = "vcc5v0-usb";
++		vin-supply = <&reg_vcc3v8_usb>;
++	};
++};
++&ehci1 { status = "okay"; };
++&ohci1 { status = "okay"; };
++&usbphy { usb1_vbus-supply = <&reg_vcc5v0_usb>; };
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxplus-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxplus-baseos.dts
+new file mode 100644
+index 000000000..ba90e904f
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxplus-baseos.dts
+@@ -0,0 +1,11 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Build-only board support: untested on hardware. */
++#include "sun50i-h700-anbernic-baseos-radio.dtsi"
++/ {
++    model = "BaseOS RG35XX Plus / RG35XX 2024";
++    compatible = "anbernic,rg35xxplus", "allwinner,sun50i-h700";
++    chosen { framebuffer@0 { width = <640>; height = <480>; stride = <2560>; }; };
++};
++&panel { compatible = "baseos,rg35xxplus-panel"; baseos,panel = "old"; };
++&tcon_lcd0 { allwinner,dclk-sel = <0>; };
++&wifi_pwrseq { reset-gpios = <&pio 6 18 GPIO_ACTIVE_LOW>; post-power-on-delay-ms = <200>; };
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxpro-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxpro-baseos.dts
+new file mode 100644
+index 000000000..014869d17
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxpro-baseos.dts
+@@ -0,0 +1,41 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Build-only board support: untested on hardware. */
++#include "sun50i-h700-anbernic-baseos-radio.dtsi"
++#include "sun50i-h700-anbernic-baseos-sticks.dtsi"
++/ {
++    model = "BaseOS RG35XX Pro";
++    compatible = "anbernic,rg35xxpro", "allwinner,sun50i-h700";
++    chosen { framebuffer@0 { width = <640>; height = <480>; stride = <2560>; }; };
++};
++&panel { compatible = "baseos,rg35xxpro-panel"; baseos,panel = "old"; };
++&tcon_lcd0 { allwinner,dclk-sel = <0>; };
++&wifi_pwrseq { reset-gpios = <&pio 6 18 GPIO_ACTIVE_LOW>; post-power-on-delay-ms = <200>; };
++&axis_x { abs-range = <4096 0>; };
++&axis_y { abs-range = <4096 0>; };
++&axis_rx { abs-range = <0 4096>; };
++&axis_ry { abs-range = <0 4096>; };
++
++/* Separate USB host connector: upstream H PE5 -> PI7 power chain. */
++/ {
++	reg_vcc3v8_usb: regulator-vcc3v8-usb {
++		compatible = "regulator-fixed";
++		enable-active-high;
++		gpio = <&pio 4 5 GPIO_ACTIVE_HIGH>; /* PE5 */
++		regulator-min-microvolt = <3800000>;
++		regulator-max-microvolt = <3800000>;
++		regulator-name = "vcc3v8-usb";
++	};
++
++	reg_vcc5v0_usb: regulator-vcc5v0-usb {
++		compatible = "regulator-fixed";
++		enable-active-high;
++		gpio = <&pio 8 7 GPIO_ACTIVE_HIGH>; /* PI7 */
++		regulator-min-microvolt = <5000000>;
++		regulator-max-microvolt = <5000000>;
++		regulator-name = "vcc5v0-usb";
++		vin-supply = <&reg_vcc3v8_usb>;
++	};
++};
++&ehci1 { status = "okay"; };
++&ohci1 { status = "okay"; };
++&usbphy { usb1_vbus-supply = <&reg_vcc5v0_usb>; };
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxsp-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxsp-baseos.dts
+new file mode 100644
+index 000000000..1e02b3b62
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xxsp-baseos.dts
+@@ -0,0 +1,24 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Build-only board support: untested on hardware. */
++#include "sun50i-h700-anbernic-baseos-radio.dtsi"
++/ {
++    model = "BaseOS RG35XX SP";
++    compatible = "anbernic,rg35xxsp", "allwinner,sun50i-h700";
++    chosen { framebuffer@0 { width = <640>; height = <480>; stride = <2560>; }; };
++    gpio-keys-lid {
++        compatible = "gpio-keys";
++        /* The pull-up comes with the GPIO flags: a pinctrl claim on PE7 as
++         * well made the GPIO request fail. */
++        lid-switch {
++            label = "Lid Switch";
++            gpios = <&pio 4 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
++            linux,input-type = <EV_SW>;
++            linux,code = <SW_LID>;
++            wakeup-source;
++            wakeup-event-action = <EV_ACT_DEASSERTED>;
++        };
++    };
++
++};
++&panel { compatible = "baseos,rg35xxsp-panel"; baseos,panel = "old"; };
++&tcon_lcd0 { allwinner,dclk-sel = <0>; };
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg40xxh-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg40xxh-baseos.dts
+new file mode 100644
+index 000000000..1204b69bb
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg40xxh-baseos.dts
+@@ -0,0 +1,17 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Build-only board support: untested on hardware. */
++#include "sun50i-h700-anbernic-baseos-radio.dtsi"
++#include "sun50i-h700-anbernic-baseos-sticks.dtsi"
++/ {
++    model = "BaseOS RG40XX H";
++    compatible = "anbernic,rg40xxh", "allwinner,sun50i-h700";
++    chosen { framebuffer@0 { width = <640>; height = <480>; stride = <2560>; }; };
++};
++&panel { compatible = "baseos,rg40xxh-panel"; baseos,panel = "old"; };
++&tcon_lcd0 { allwinner,dclk-sel = <0>; };
++&wifi_pwrseq { reset-gpios = <&pio 6 18 GPIO_ACTIVE_LOW>; post-power-on-delay-ms = <200>; };
++&{/vibrator} { enable-gpios = <&pio 8 13 GPIO_ACTIVE_HIGH>; };
++&axis_x { abs-range = <4096 0>; };
++&axis_y { abs-range = <4096 0>; };
++&axis_rx { abs-range = <4096 0>; };
++&axis_ry { abs-range = <4096 0>; };
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg40xxv-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg40xxv-baseos.dts
+new file mode 100644
+index 000000000..d86f9d489
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg40xxv-baseos.dts
+@@ -0,0 +1,18 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Build-only board support: untested on hardware. */
++#include "sun50i-h700-anbernic-baseos-radio.dtsi"
++#include "sun50i-h700-anbernic-baseos-sticks.dtsi"
++/ {
++    model = "BaseOS RG40XX V";
++    compatible = "anbernic,rg40xxv", "allwinner,sun50i-h700";
++    chosen { framebuffer@0 { width = <640>; height = <480>; stride = <2560>; }; };
++};
++&panel { compatible = "baseos,rg40xxv-panel"; baseos,panel = "old"; };
++&tcon_lcd0 { allwinner,dclk-sel = <0>; };
++&wifi_pwrseq { reset-gpios = <&pio 6 18 GPIO_ACTIVE_LOW>; post-power-on-delay-ms = <200>; };
++&{/vibrator} { enable-gpios = <&pio 8 13 GPIO_ACTIVE_HIGH>; };
++&axis_x { abs-range = <4096 0>; };
++&axis_y { abs-range = <4096 0>; };
++/* Stock duplicates H and advertises two sticks/clicks; only the populated left stick is exposed. */
++&{/adc-joystick} { io-channels = <&adc_mux 0>, <&adc_mux 1>; /delete-node/ axis@2; /delete-node/ axis@3; };
++&{/gpio-keys} { /delete-node/ key-r3; };
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgcubexx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgcubexx-baseos.dts
+new file mode 100644
+index 000000000..e7645b136
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgcubexx-baseos.dts
+@@ -0,0 +1,17 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/* Build-only board support: untested on hardware. */
++#include "sun50i-h700-anbernic-baseos-radio.dtsi"
++#include "sun50i-h700-anbernic-baseos-sticks.dtsi"
++/ {
++    model = "BaseOS RG CubeXX";
++    compatible = "anbernic,rgcubexx", "allwinner,sun50i-h700";
++    chosen { framebuffer@0 { width = <720>; height = <720>; stride = <2880>; }; };
++};
++&panel { compatible = "baseos,rgcubexx-panel"; baseos,panel = "boe"; };
++&tcon_lcd0 { allwinner,dclk-sel = <0>; };
++&wifi_pwrseq { reset-gpios = <&pio 6 18 GPIO_ACTIVE_LOW>; post-power-on-delay-ms = <200>; };
++&{/vibrator} { enable-gpios = <&pio 8 13 GPIO_ACTIVE_HIGH>; };
++&axis_x { abs-range = <4096 0>; };
++&axis_y { abs-range = <4096 0>; };
++&axis_rx { abs-range = <4096 0>; };
++&axis_ry { abs-range = <4096 0>; };
+diff --git a/drivers/of/Makefile b/drivers/of/Makefile
+index 56d3fb635..d2a74a39f 100644
+--- a/drivers/of/Makefile
++++ b/drivers/of/Makefile
+@@ -26,3 +26,5 @@ overlay-test-y := overlay_test.o kunit_overlay_test.dtbo.o
+ 
+ obj-$(CONFIG_OF_UNITTEST) += unittest-data/
+ obj-$(CONFIG_BASEOS_BOARD_OVERLAY) += baseos-overlay.o baseos-rg28xx.dtbo.o baseos-rgsp.dtbo.o
++
++obj-$(CONFIG_BASEOS_BOARD_OVERLAY) += baseos-rg34xx.dtbo.o baseos-rg34xxsp.dtbo.o baseos-rg35xxplus.dtbo.o baseos-rg35xxh.dtbo.o baseos-rg35xxpro.dtbo.o baseos-rg35xxsp.dtbo.o baseos-rg40xxh.dtbo.o baseos-rg40xxv.dtbo.o baseos-rgcubexx.dtbo.o
+diff --git a/drivers/of/baseos-overlay.c b/drivers/of/baseos-overlay.c
+index a13ecc774..f51b12449 100644
+--- a/drivers/of/baseos-overlay.c
++++ b/drivers/of/baseos-overlay.c
+@@ -30,6 +30,16 @@ extern u8 __dtbo_baseos_rg28xx_begin[], __dtbo_baseos_rg28xx_end[];
+ 
+ extern u8 __dtbo_baseos_rgsp_begin[], __dtbo_baseos_rgsp_end[];
+ 
++extern u8 __dtbo_baseos_rg34xx_begin[], __dtbo_baseos_rg34xx_end[];
++extern u8 __dtbo_baseos_rg34xxsp_begin[], __dtbo_baseos_rg34xxsp_end[];
++extern u8 __dtbo_baseos_rg35xxplus_begin[], __dtbo_baseos_rg35xxplus_end[];
++extern u8 __dtbo_baseos_rg35xxh_begin[], __dtbo_baseos_rg35xxh_end[];
++extern u8 __dtbo_baseos_rg35xxpro_begin[], __dtbo_baseos_rg35xxpro_end[];
++extern u8 __dtbo_baseos_rg35xxsp_begin[], __dtbo_baseos_rg35xxsp_end[];
++extern u8 __dtbo_baseos_rg40xxh_begin[], __dtbo_baseos_rg40xxh_end[];
++extern u8 __dtbo_baseos_rg40xxv_begin[], __dtbo_baseos_rg40xxv_end[];
++extern u8 __dtbo_baseos_rgcubexx_begin[], __dtbo_baseos_rgcubexx_end[];
++
+ static int __init baseos_overlay_init(void)
+ {
+ 	int id = 0, ret;
+@@ -41,6 +51,33 @@ static int __init baseos_overlay_init(void)
+ 	} else if (of_machine_is_compatible("anbernic,rg28xx")) {
+ 		begin = __dtbo_baseos_rg28xx_begin;
+ 		end = __dtbo_baseos_rg28xx_end;
++	} else if (of_machine_is_compatible("anbernic,rg34xx")) {
++		begin = __dtbo_baseos_rg34xx_begin;
++		end = __dtbo_baseos_rg34xx_end;
++	} else if (of_machine_is_compatible("anbernic,rg34xxsp")) {
++		begin = __dtbo_baseos_rg34xxsp_begin;
++		end = __dtbo_baseos_rg34xxsp_end;
++	} else if (of_machine_is_compatible("anbernic,rg35xxplus")) {
++		begin = __dtbo_baseos_rg35xxplus_begin;
++		end = __dtbo_baseos_rg35xxplus_end;
++	} else if (of_machine_is_compatible("anbernic,rg35xxh")) {
++		begin = __dtbo_baseos_rg35xxh_begin;
++		end = __dtbo_baseos_rg35xxh_end;
++	} else if (of_machine_is_compatible("anbernic,rg35xxpro")) {
++		begin = __dtbo_baseos_rg35xxpro_begin;
++		end = __dtbo_baseos_rg35xxpro_end;
++	} else if (of_machine_is_compatible("anbernic,rg35xxsp")) {
++		begin = __dtbo_baseos_rg35xxsp_begin;
++		end = __dtbo_baseos_rg35xxsp_end;
++	} else if (of_machine_is_compatible("anbernic,rg40xxh")) {
++		begin = __dtbo_baseos_rg40xxh_begin;
++		end = __dtbo_baseos_rg40xxh_end;
++	} else if (of_machine_is_compatible("anbernic,rg40xxv")) {
++		begin = __dtbo_baseos_rg40xxv_begin;
++		end = __dtbo_baseos_rg40xxv_end;
++	} else if (of_machine_is_compatible("anbernic,rgcubexx")) {
++		begin = __dtbo_baseos_rgcubexx_begin;
++		end = __dtbo_baseos_rgcubexx_end;
+ 	} else {
+ 		return 0;
+ 	}
+diff --git a/drivers/of/baseos-rg34xx.dtso b/drivers/of/baseos-rg34xx.dtso
+new file mode 100644
+index 000000000..ed6601bab
+--- /dev/null
++++ b/drivers/of/baseos-rg34xx.dtso
+@@ -0,0 +1,3 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++#include "baseos-rgsp.dtso"
++&battery { charge-full-design-microamp-hours = <3500000>; };
+diff --git a/drivers/of/baseos-rg34xxsp.dtso b/drivers/of/baseos-rg34xxsp.dtso
+new file mode 100644
+index 000000000..e6118ba91
+--- /dev/null
++++ b/drivers/of/baseos-rg34xxsp.dtso
+@@ -0,0 +1,3 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++#include "baseos-rgsp.dtso"
++&battery { charge-full-design-microamp-hours = <3300000>; };
+diff --git a/drivers/of/baseos-rg35xxh.dtso b/drivers/of/baseos-rg35xxh.dtso
+new file mode 100644
+index 000000000..9003211be
+--- /dev/null
++++ b/drivers/of/baseos-rg35xxh.dtso
+@@ -0,0 +1,3 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++#include "baseos-rgsp.dtso"
++&battery { charge-full-design-microamp-hours = <3000000>; };
+diff --git a/drivers/of/baseos-rg35xxplus.dtso b/drivers/of/baseos-rg35xxplus.dtso
+new file mode 100644
+index 000000000..9003211be
+--- /dev/null
++++ b/drivers/of/baseos-rg35xxplus.dtso
+@@ -0,0 +1,3 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++#include "baseos-rgsp.dtso"
++&battery { charge-full-design-microamp-hours = <3000000>; };
+diff --git a/drivers/of/baseos-rg35xxpro.dtso b/drivers/of/baseos-rg35xxpro.dtso
+new file mode 100644
+index 000000000..9003211be
+--- /dev/null
++++ b/drivers/of/baseos-rg35xxpro.dtso
+@@ -0,0 +1,3 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++#include "baseos-rgsp.dtso"
++&battery { charge-full-design-microamp-hours = <3000000>; };
+diff --git a/drivers/of/baseos-rg35xxsp.dtso b/drivers/of/baseos-rg35xxsp.dtso
+new file mode 100644
+index 000000000..9003211be
+--- /dev/null
++++ b/drivers/of/baseos-rg35xxsp.dtso
+@@ -0,0 +1,3 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++#include "baseos-rgsp.dtso"
++&battery { charge-full-design-microamp-hours = <3000000>; };
+diff --git a/drivers/of/baseos-rg40xxh.dtso b/drivers/of/baseos-rg40xxh.dtso
+new file mode 100644
+index 000000000..cf23879e6
+--- /dev/null
++++ b/drivers/of/baseos-rg40xxh.dtso
+@@ -0,0 +1,3 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++#include "baseos-rgsp.dtso"
++&battery { charge-full-design-microamp-hours = <3200000>; };
+diff --git a/drivers/of/baseos-rg40xxv.dtso b/drivers/of/baseos-rg40xxv.dtso
+new file mode 100644
+index 000000000..cf23879e6
+--- /dev/null
++++ b/drivers/of/baseos-rg40xxv.dtso
+@@ -0,0 +1,3 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++#include "baseos-rgsp.dtso"
++&battery { charge-full-design-microamp-hours = <3200000>; };
+diff --git a/drivers/of/baseos-rgcubexx.dtso b/drivers/of/baseos-rgcubexx.dtso
+new file mode 100644
+index 000000000..cf23879e6
+--- /dev/null
++++ b/drivers/of/baseos-rgcubexx.dtso
+@@ -0,0 +1,3 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++#include "baseos-rgsp.dtso"
++&battery { charge-full-design-microamp-hours = <3200000>; };

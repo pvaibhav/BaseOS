@@ -165,7 +165,7 @@ if __name__ == '__main__':
     ap.add_argument('what', choices=['root', 'payload', 'all'])
     ap.add_argument('--dev', action='store_true', help='host-heartbeat watchdog (baseos.dev)')
     ap.add_argument('--args', default='', help='extra kernel arguments')
-    ap.add_argument('--firmware', default='v2a', choices=['e1', 'v2a', 'v2a-ab', 'v2-rgsp'], help='firmware generation and target; non-default output in work/v2/os/VARIANT')
+    ap.add_argument('--firmware', default='v2a', choices=['e1', 'v2a', 'v2a-ab'] + ['v2-' + t for t in json.loads((R / 'v2/firmware/targets.json').read_text()) if t != 'rg28xx'], help='firmware generation and target; non-default output in work/v2/os/VARIANT')
     ap.add_argument('--dtb', help='DTB instead of work/v2/kernel/rg28xx.dtb')
     a = ap.parse_args()
     if a.what in ('root', 'all'):

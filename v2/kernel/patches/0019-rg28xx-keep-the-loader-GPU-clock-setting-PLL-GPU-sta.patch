@@ -1,7 +1,7 @@
 From 466012ec47f7159e0b4001da0b2b64d68beaa4f1 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 11:36:16 +0000
-Subject: [PATCH 19/39] rg28xx: keep the loader GPU clock (setting PLL-GPU
+Subject: [PATCH 19/40] rg28xx: keep the loader GPU clock (setting PLL-GPU
  stalls probe 75 ms)
 
 ---

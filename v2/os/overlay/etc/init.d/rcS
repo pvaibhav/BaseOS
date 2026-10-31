@@ -96,10 +96,16 @@ fi
 # Drivers that nothing needs during startup: load them once the frontend is
 # on its way. Per model: rumble, external clock, Wi-Fi, Bluetooth. (Not the
 # USB host controllers: they would take the port from the device side.)
+# (Lists from v2/kernel/MODELS.md; only the RG28XX and RG SP are tried on hardware.)
+radio="gpio-vibra rtc-pcf8563 rtw88_8821cs hci_uart" sticks="sun20i_gpadc_iio mux_gpio iio_mux adc_joystick"
 case "$(tr '\0' '\n' < /proc/device-tree/compatible | head -1)" in
-anbernic,rgsp) [ -e /data/baseos2/no-modules ] ||
-	( sleep 3; modprobe -a gpio-vibra rtc-pcf8563 rtw88_8821cs hci_uart ) </dev/null >/dev/null 2>&1 & ;;
+anbernic,rgsp|anbernic,rg34xx|anbernic,rg35xxplus|anbernic,rg35xxsp) mods=$radio ;;
+anbernic,rg34xxsp|anbernic,rg40xxh|anbernic,rg40xxv|anbernic,rgcubexx) mods="$radio $sticks" ;;
+anbernic,rg35xxh|anbernic,rg35xxpro) mods="$radio $sticks ehci_platform ohci_platform" ;;
+*) mods= ;;
 esac
+[ -z "$mods" ] || [ -e /data/baseos2/no-modules ] ||
+	( sleep 3; modprobe -a $mods ) </dev/null >/dev/null 2>&1 &
 # Platform events and automatic audio routing (baseos events, baseos audio).
 /usr/sbin/baseos-events --daemon </dev/null >/dev/null 2>&1 &
 cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS-done
