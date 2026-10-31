@@ -64,7 +64,8 @@ case " $(cat /proc/cmdline) " in
 esac
 # Keep the last boot's logs on /data (ext4, survives resets) for diagnosis.
 ( sleep 8; d=/data/baseos2/last-boot; mkdir -p $d && rm -f $d/* &&
-  dmesg > $d/dmesg; cp /run/baseos/*.log /run/baseos/t-* $d/ 2>/dev/null; ps > $d/ps; sync ) &
+  dmesg > $d/dmesg; cp /run/baseos/*.log /run/baseos/t-* $d/ 2>/dev/null; ps > $d/ps
+  { date; cat /run/baseos/t-power-on; } >> /data/baseos2/power-on.log; sync ) &
 # Note what this boot read from the card's file system for the next boot's
 # prefetch. (Prefetching the root image as well brought nothing.)
 [ -z "$card" ] || ( sleep 8; nice -n 19 /usr/sbin/baseos-prefetch record /data/boot-prefetch "$card" ) &
