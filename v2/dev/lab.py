@@ -12,13 +12,14 @@
 The E1 firmware and capsule at p4+40MiB and LBA16 must already be on the card;
 `install` refuses otherwise. A failed trial falls back to stock by itself.
 """
-import hashlib, re, subprocess, sys, time
+import hashlib, os, re, subprocess, sys, time
 from pathlib import Path
 
 ADB = '/Users/pvaibhav/Library/Android/sdk/platform-tools/adb'
-SERIAL = '0c00105562458931c52'
+# Another handheld: BASEOS_SERIAL=<adb serial> BASEOS_FIRMWARE=v2-rgsp lab.py ...
+SERIAL = os.environ.get('BASEOS_SERIAL', '0c00105562458931c52')
 R = Path(__file__).resolve().parents[2]
-FIRMWARE = R / 'work/v2/firmware/v2a'
+FIRMWARE = R / 'work/v2/firmware' / os.environ.get('BASEOS_FIRMWARE', 'v2a')
 FW = FIRMWARE / 'firmware.bin'
 CAPSULE = FIRMWARE / 'capsule.egon.bin'
 REBOOT_NEXT_SHA = '314ac6631c06081187f455c8044d2ca6df377d832bc1691db6c1c7eb614226f6'
