@@ -8,6 +8,8 @@ docker exec v2-kbuild bash -euc '
 cd /k/linux
 # Host helpers need the container libraries, not the frontend cross sysroot.
 unset PKG_CONFIG_PATH PKG_CONFIG_SYSROOT_DIR
+# Slot frame deadlines and ALSA waits need sub-tick sleeps at HZ=250.
+scripts/config --file /k/build/.config --enable HIGH_RES_TIMERS
 make -s -j8 O=/k/build ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
   KBUILD_BUILD_TIMESTAMP=2026-10-31 KBUILD_BUILD_USER=baseos KBUILD_BUILD_HOST=baseos \
   Image modules allwinner/sun50i-h700-anbernic-rg28xx-baseos.dtb \
