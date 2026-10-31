@@ -23,6 +23,7 @@ FIRMWARE = R / 'work/v2/firmware' / os.environ.get('BASEOS_FIRMWARE', 'v2a')
 FW = FIRMWARE / 'firmware.bin'
 CAPSULE = FIRMWARE / 'capsule.egon.bin'
 REBOOT_NEXT_SHA = '314ac6631c06081187f455c8044d2ca6df377d832bc1691db6c1c7eb614226f6'
+REBOOT_NEXT = Path('/Users/pvaibhav/Code/Me/NextUI/.worktrees/baseos2-min/build/SYSTEM/h700/bin/reboot_next')
 
 
 def adb(*args, timeout=60, check=True):
@@ -82,7 +83,7 @@ def boot():
 mkdir -p {stage}
 cleanup() {{ mount -o remount,rw / || :; mount -o remount,rw /data || :; kill -CONT {pid} || :; rm -rf {stage}; }}
 trap cleanup EXIT HUP INT TERM
-cp /mnt/sdcard/.system/h700/bin/reboot_next {stage}/reboot_next
+[ -f {stage}/reboot_next ] || cp /mnt/sdcard/.system/h700/bin/reboot_next {stage}/reboot_next
 [ "$(sha256sum {stage}/reboot_next | cut -d ' ' -f 1)" = {REBOOT_NEXT_SHA} ]
 kill -STOP {pid}
 sync
@@ -93,6 +94,9 @@ sync
 unset SHARED_USERDATA_PATH
 LD_LIBRARY_PATH=/usr/lib:/usr/lib/aarch64-linux-gnu {stage}/reboot_next
 exit 1'''
+    if sh('[ -f /mnt/sdcard/.system/h700/bin/reboot_next ] && echo yes || echo no') == 'no':
+        sh(f'mkdir -p {stage}')  # NextUI on this card has no reboot_next: bring ours
+        adb('push', str(REBOOT_NEXT), f'{stage}/reboot_next')
     t0 = time.time()
     try:
         adb('shell', script, timeout=20, check=False)
@@ -195,7 +199,8 @@ def firmware(image):
     """From stock: install the boot firmware in FIRMWARE plus IMAGE (v2a INSTALL.md order)."""
     assert which() == 'stock', 'firmware installs run from stock 1.5.3'
     files = {'firmware.bin': FW.read_bytes(), 'image.bin': Path(image).read_bytes(), 'capsule.bin': CAPSULE.read_bytes()}
-    assert len(files['capsule.bin']) == 131072 and len(files['firmware.bin']) == 81920
+    # The capsule is exactly 128 KiB; the firmware must end before the payload at +48 MiB.
+    assert len(files['capsule.bin']) == 131072 and len(files['firmware.bin']) <= 8 << 20
     stage = '/tmp/baseos-firmware'
     sh(f'rm -rf {stage}; mkdir {stage}')
     try:
