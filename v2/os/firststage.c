@@ -24,7 +24,9 @@
 #include <unistd.h>
 
 #define DISK "/dev/mmcblk0"
-#define ROOT_OFFSET (434176ULL * 512) /* card slot A */
+/* The two 512 MiB system slots. BaseOS 2 lives in whichever one holds a
+ * squashfs image; BaseOS 1.x (ext4) uses the other. */
+static const unsigned long long slots[] = { 434176ULL * 512, 1482752ULL * 512 };
 #define LOGO "/logo.bmp"              /* 24-bit, panel-native size, as the loader shows */
 
 static int kmsg = -1;
@@ -154,7 +156,15 @@ int main(void)
 	snprintf(loop, sizeof(loop), "/dev/loop%d", n);
 	int fd = open_retry(loop, O_RDONLY);
 	struct loop_config config = { .fd = disk };
-	config.info.lo_offset = ROOT_OFFSET;
+	for (unsigned i = 0; i < 2 && !config.info.lo_offset; i++) {
+		char magic[4];
+		if (pread(disk, magic, 4, slots[i]) == 4 && !memcmp(magic, "hsqs", 4))
+			config.info.lo_offset = slots[i];
+	}
+	if (!config.info.lo_offset) {
+		errno = ENOENT;
+		fail("no BaseOS 2 system slot");
+	}
 	config.info.lo_flags = LO_FLAGS_READ_ONLY;
 	if (fd < 0 || ioctl(fd, LOOP_CONFIGURE, &config)) fail("loop");
 	mkdir("/newroot", 0755);

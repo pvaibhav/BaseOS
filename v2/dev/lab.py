@@ -147,16 +147,20 @@ def rearm_and_reset():
     print(f'reset at {time.strftime("%H:%M:%S")}')
 
 
+SLOTS = (434176, 1482752)  # the two 512 MiB system slots (LBA)
+
+
 def write_root(image):
-    """Write a root image to card slot A (LBA 434176; stock 1.5.3 runs from slot B)."""
+    """Write a root image to the system slot BaseOS 1.x is not running from."""
     data = Path(image).read_bytes()
     assert len(data) <= 512 << 20 and len(data) % 4096 == 0
+    live = int(sh('cat /sys/class/block/mmcblk0p5/start'))
+    slot = next(s for s in SLOTS if s != live)
     adb('push', str(image), '/tmp/root.sqfs', timeout=300)
     assert sh('sha256sum /tmp/root.sqfs').split()[0] == hashlib.sha256(data).hexdigest()
-    assert sh('cat /sys/class/block/mmcblk0p5/start') != '434176', 'slot A is the live root'
-    sh('dd if=/tmp/root.sqfs of=/dev/mmcblk0 bs=1M seek=212 conv=notrunc,fsync 2>/dev/null; rm /tmp/root.sqfs; sync', timeout=300)
-    assert range_sha('/dev/mmcblk0', 434176, len(data)) == hashlib.sha256(data).hexdigest()
-    print('root written', len(data))
+    sh(f'dd if=/tmp/root.sqfs of=/dev/mmcblk0 bs=1M seek={slot // 2048} conv=notrunc,fsync 2>/dev/null; rm /tmp/root.sqfs; sync', timeout=300)
+    assert range_sha('/dev/mmcblk0', slot, len(data)) == hashlib.sha256(data).hexdigest()
+    print('root written', len(data), 'at LBA', slot)
 
 
 SHELL = R / 'work/v2/dev/shell.bin'
