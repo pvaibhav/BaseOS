@@ -18,8 +18,9 @@ from pathlib import Path
 ADB = '/Users/pvaibhav/Library/Android/sdk/platform-tools/adb'
 SERIAL = '0c00105562458931c52'
 R = Path(__file__).resolve().parents[2]
-FW = R / 'work/mainline/interactive/media/payload/interactive-final/firmware.bin'
-CAPSULE = R / 'work/mainline/capsule-interactive-final/capsule.egon.bin'
+FIRMWARE = R / 'work/v2/firmware/v2a'
+FW = FIRMWARE / 'firmware.bin'
+CAPSULE = FIRMWARE / 'capsule.egon.bin'
 REBOOT_NEXT_SHA = '314ac6631c06081187f455c8044d2ca6df377d832bc1691db6c1c7eb614226f6'
 
 
@@ -185,6 +186,34 @@ def fsck():
              'ls /tmp/*.REC 2>/dev/null; rm -f /tmp/fsck.fat /tmp/ld-musl-aarch64.so.1; sync; true', timeout=300))
 
 
+def firmware(image):
+    """From stock: install the boot firmware in FIRMWARE plus IMAGE (v2a INSTALL.md order)."""
+    assert which() == 'stock', 'firmware installs run from stock 1.5.3'
+    files = {'firmware.bin': FW.read_bytes(), 'image.bin': Path(image).read_bytes(), 'capsule.bin': CAPSULE.read_bytes()}
+    assert len(files['capsule.bin']) == 131072 and len(files['firmware.bin']) == 81920
+    stage = '/tmp/baseos-firmware'
+    sh(f'rm -rf {stage}; mkdir {stage}')
+    try:
+        for name, data in files.items():
+            tmp = Path('/private/tmp/b2') / name; tmp.write_bytes(data)
+            adb('push', str(tmp), f'{stage}/{name}')
+            assert sh(f'sha256sum {stage}/{name}').split()[0] == hashlib.sha256(data).hexdigest(), name
+        sh('/usr/sbin/native-health --hold-stock')
+        assert sh('/usr/sbin/native-health --stock-latch').endswith(' held')
+        for name, dev, sector in (('firmware.bin', '/dev/mmcblk0p4', 40 * 2048), ('image.bin', '/dev/mmcblk0p4', 48 * 2048)):
+            sh(f'dd if={stage}/{name} of={dev} bs=512 seek={sector} oflag=direct conv=notrunc,fsync 2>/dev/null')
+            assert range_sha(dev, sector, len(files[name])) == hashlib.sha256(files[name]).hexdigest(), name
+        cap = files['capsule.bin']
+        sh(f'dd if={stage}/capsule.bin of=/dev/mmcblk0 bs=512 skip=1 seek=17 count=255 oflag=direct conv=notrunc,fsync 2>/dev/null')
+        assert range_sha('/dev/mmcblk0', 17, 255 * 512) == hashlib.sha256(cap[512:]).hexdigest(), 'capsule body'
+        sh(f'dd if={stage}/capsule.bin of=/dev/mmcblk0 bs=512 seek=16 count=1 oflag=direct conv=notrunc,fsync 2>/dev/null')
+        assert range_sha('/dev/mmcblk0', 16, len(cap)) == hashlib.sha256(cap).hexdigest(), 'capsule'
+        sh('/usr/sbin/native-health --release-stock')
+        print('firmware installed; latch:', sh('/usr/sbin/native-health --stock-latch'))
+    finally:
+        sh(f'rm -rf {stage}')
+
+
 def heartbeat():
     while True:
         try:
@@ -214,6 +243,8 @@ def main():
             sh(f'echo {b.replace(":", " ")} > /run/pad')
     elif cmd == 'bg':
         sh('setsid sh -c ' + repr(' '.join(args) + ' </dev/null >/dev/null 2>&1 &') + ' </dev/null >/dev/null 2>&1')
+    elif cmd == 'firmware':
+        firmware(args[0])
     elif cmd == 'fsck':
         fsck()
     elif cmd == 'root':

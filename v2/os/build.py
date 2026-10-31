@@ -43,13 +43,15 @@ def root():
     static(R / 'v2/dev/src/pad.c', tools / 'baseos-pad')
     static(R / 'v2/dev/src/firstframe.c', tools / 'baseos-firstframe')
     static(R / 'v2/os/baseos-events.c', tools / 'baseos-events')
+    static(R / 'v2/os/baseos-splash.c', tools / 'baseos-splash')
+    (OUT / 'bootlogo.bmp').write_bytes(Path('/Users/pvaibhav/Code/Me/BaseOS/work/rg28xx/bootlogo.bmp').read_bytes())
     drop = ' '.join(DROP); dirs = ' '.join(DIRS)
     sh(f'''
 rm -rf /k/root && mkdir /k/root && cp -a /repo/{BASE}/. /k/root/
 cd /k/root
 rm -f {drop}
 cp -a /repo/v2/os/overlay/. .
-install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe /repo/work/v2/os/bin/baseos-events usr/sbin/
+install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe /repo/work/v2/os/bin/baseos-events /repo/work/v2/os/bin/baseos-splash usr/sbin/
 for d in {dirs}; do mkdir -p "$d"; done
 # Graphics: Mesa is the system GL stack; BaseOS's KMS SDL lives in /usr/lib/baseos2.
 M=usr/lib/baseos-mainline A=usr/lib/aarch64-linux-gnu
@@ -63,7 +65,7 @@ ln -s libSDL2-2.0.so.0.2800.5 usr/lib/baseos2/libSDL2-2.0.so.0
 rm -rf $M
 ldconfig -r /k/root
 printf 'BASEOS_VERSION=2.0.0-dev\n' > etc/baseos-release
-mkdir -p usr/share/baseos && cp /repo/v2/CONTRACT.md usr/share/baseos/
+mkdir -p usr/share/baseos && cp /repo/v2/CONTRACT.md /repo/work/v2/os/bootlogo.bmp usr/share/baseos/
 # Audio routing: ALSA's default device follows /run/baseos/asound.conf (baseos audio).
 rm -f etc/asound.conf && ln -s /run/baseos/asound.conf etc/asound.conf
 test -x usr/sbin/adbd && test -x usr/bin/busybox
@@ -80,7 +82,7 @@ def payload(cmdline_extra, dtb_path=None):
         ('dev/console', stat.S_IFCHR | 0o600, b'', (5, 1)),
         ('init', stat.S_IFREG | 0o755, (OUT / 'firststage').read_bytes(), (0, 0)),
     ]), compresslevel=9, mtime=0)
-    boot, _ = dev.payload.parse(dev.PROVEN.read_bytes(), dev.G)
+    boot, _ = dev.payload.parse(dev.PROVEN.read_bytes(), dev.E1)
     segs = dev.android.split(boot)[0]
     dtb = Path(dtb_path or R / 'work/v2/kernel/rg28xx.dtb').read_bytes()
     if cmdline_extra:

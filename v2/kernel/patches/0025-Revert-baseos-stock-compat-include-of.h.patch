@@ -1,7 +1,7 @@
 From a7a232a8e5f7c6f746bdb4656a84932d7b3583d9 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 14:47:31 +0000
-Subject: [PATCH 25/29] Revert "baseos-stock-compat: include of.h"
+Subject: [PATCH 25/31] Revert "baseos-stock-compat: include of.h"
 
 This reverts commit 7ee21a77fd540f5fcb1556eddd031b7ff1114981.
 ---

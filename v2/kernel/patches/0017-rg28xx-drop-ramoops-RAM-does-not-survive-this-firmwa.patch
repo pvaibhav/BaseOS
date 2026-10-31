@@ -1,7 +1,7 @@
 From ed8dbc9a142df5d17d4f44642608630af7dfec7d Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 11:12:56 +0000
-Subject: [PATCH 17/29] rg28xx: drop ramoops (RAM does not survive this
+Subject: [PATCH 17/31] rg28xx: drop ramoops (RAM does not survive this
  firmware restart)
 
 ---

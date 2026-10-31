@@ -13,7 +13,11 @@ sys.path[:0] = [str(R / 'tools')]
 import mainline_payload as payload, kernel_gzip as android, mainline_kernel_codec as codec
 import argparse
 
-G = bytes.fromhex('e1a64fac986574dbe2a1885805d11afef570a020c84a7022a18088ef567e7b38')
+# The proven E1 payload (source of the dev shell's binaries) carries E1's generation;
+# new payloads carry the installed boot firmware's (v2a) generation.
+E1 = bytes.fromhex('e1a64fac986574dbe2a1885805d11afef570a020c84a7022a18088ef567e7b38')
+FIRMWARE = R / 'work/v2/firmware/v2a'
+G = bytes.fromhex((FIRMWARE / 'generation.txt').read_text().split()[0])
 PROVEN = R / 'work/mainline/interactive/media/payload/interactive-final/image.bin'
 PROVEN_SHA = '481641cbc34d5cd29fcbdcb95f67fdf5c25e31b11fb058fd76a300f750232696'
 OUT = R / 'work/v2/dev'
@@ -83,7 +87,7 @@ def main():
     tools()
     proven = PROVEN.read_bytes()
     assert sha(proven) == PROVEN_SHA, 'proven payload changed'
-    boot, dtb = payload.parse(proven, G)
+    boot, dtb = payload.parse(proven, E1)
     segs = android.split(boot)[0]
     old = read_newc(gzip.decompress(segs[1]))
     src = Path(__file__).resolve().parent / 'initramfs'

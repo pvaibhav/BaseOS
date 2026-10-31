@@ -1,7 +1,7 @@
 From 95e285452af3ee06168705c71f2c39d38d66838d Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:12:16 +0000
-Subject: [PATCH 11/29] rg28xx: all CPUs, no serial console
+Subject: [PATCH 11/31] rg28xx: all CPUs, no serial console
 
 ---
  .../boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts   | 2 +-

@@ -1,7 +1,7 @@
 From e842bd91bb406f7350468b096f982b992fb0852c Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 15:04:54 +0000
-Subject: [PATCH 29/29] ASoC: sun4i-codec: mute the speaker while headphones
+Subject: [PATCH 29/31] ASoC: sun4i-codec: mute the speaker while headphones
  are plugged in
 
 ---

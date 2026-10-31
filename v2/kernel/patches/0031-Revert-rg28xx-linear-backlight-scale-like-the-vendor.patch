@@ -1,0 +1,29 @@
+From 13e16d5800a96f6a310a7f0d74d0838f429b0ef6 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 15:28:04 +0000
+Subject: [PATCH 31/31] Revert "rg28xx: linear backlight scale like the vendor
+ driver"
+
+This reverts commit 30d7c03a5dfa7546a54d28ad2c951f031d12a3d4.
+---
+ .../dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts   | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+index 33aff5c23..9baa33f11 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -263,13 +263,6 @@ &tcon_lcd0 {
+ 
+ &watchdog { timeout-sec = <4>; };
+ 
+-/* Linear duty 0-255 like the vendor driver, so stock brightness steps look the same. */
+-&backlight {
+-	brightness-levels = <0 255>;
+-	num-interpolated-steps = <255>;
+-	default-brightness-level = <128>;
+-};
+-
+ /*
+  * Restart and power-off (and sleep) move the CPU to its boot speed and the
+  * matching voltage first, so the boot code never runs on a lowered voltage.

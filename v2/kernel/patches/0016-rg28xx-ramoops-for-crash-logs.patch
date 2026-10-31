@@ -1,7 +1,7 @@
 From f991c6f4c2015e47ac642e07aa6de424a12851b3 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 11:06:25 +0000
-Subject: [PATCH 16/29] rg28xx: ramoops for crash logs
+Subject: [PATCH 16/31] rg28xx: ramoops for crash logs
 
 ---
  .../allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts  | 11 +++++++++++

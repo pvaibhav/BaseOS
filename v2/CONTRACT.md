@@ -155,6 +155,12 @@ baseos usb mode [adb|host|storage|none]   # print or set the USB-C role
 
 - `host` powers the port and accepts controllers, audio devices and storage.
 
+## System services (works)
+
+- The D-Bus system bus is running (`/run/dbus/system_bus_socket`).
+- The kernel's random number pool is ready early in boot (hardware generator).
+- `/etc/machine-id` is stable across restarts and updates.
+
 ## Events: `baseos events` (works)
 
 Prints one line per change until killed, `name=value` plus extra fields:

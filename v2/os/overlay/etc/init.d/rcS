@@ -13,7 +13,8 @@ mount -t tmpfs -o mode=755,size=64m tmpfs /var
 mkdir -p /run/baseos /var/lib /var/log /var/tmp /var/empty
 ln -s /run /var/run
 cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS
-/usr/sbin/baseos-firstframe > /run/baseos/t-first-frame 2>/dev/null &
+# Boot logo until the frontend's first frame (records its time in t-frontend-frame).
+/usr/sbin/baseos-splash </dev/null >/dev/null 2>&1 &
 # SDL scans /dev/input by mtime without udev; give it a nonzero one.
 touch -c -d @1 /dev/input
 mount -t debugfs -o nodev,noexec,nosuid debugfs /sys/kernel/debug
@@ -23,6 +24,11 @@ mount -t debugfs -o nodev,noexec,nosuid debugfs /sys/kernel/debug
 
 mount -t ext4 -o rw,noatime /dev/mmcblk0p6 /data 2>/dev/null || mount -t tmpfs tmpfs /data
 mkdir -p /data/bluetooth /data/bluealsa
+# A stable machine id (D-Bus wants one); kept on /data so it survives updates.
+[ -s /data/machine-id ] || tr -d - < /proc/sys/kernel/random/uuid > /data/machine-id
+cp /data/machine-id /run/machine-id
+# The system message bus (frontends and Bluetooth use it); start it early.
+mkdir -p /run/dbus && dbus-daemon --system &
 ln -s /data/bluetooth /var/lib/bluetooth
 ln -s /data/bluealsa /var/lib/bluealsa
 card=

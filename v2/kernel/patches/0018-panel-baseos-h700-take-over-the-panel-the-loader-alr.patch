@@ -1,7 +1,7 @@
 From 8d01827ea2820f5e694573444984f889d88c4cb6 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 11:28:40 +0000
-Subject: [PATCH 18/29] panel: baseos-h700: take over the panel the loader
+Subject: [PATCH 18/31] panel: baseos-h700: take over the panel the loader
  already started
 
 ---
