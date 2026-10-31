@@ -1,5 +1,9 @@
 # BaseOS 2 firmware across the H700 models
 
+Current implementation: see [firmware-fleet.md](firmware-fleet.md) for the remaining
+per-model candidates and current evidence. The investigation below records the
+earlier planning checkpoint.
+
 Research date: 2026-10-31. Read-only source and prepared-image investigation.
 No handheld was contacted. No flashing, backups, commits, pushes, host package
 installation, or changes to existing e1/v2a outputs were made.

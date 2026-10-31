@@ -96,6 +96,7 @@ def main():
     p.add_argument('variant')
     p.add_argument('payload', type=Path)
     p.add_argument('--card', type=Path, help='card image whose boot-resource partition holds the logo')
+    p.add_argument('--counter-step-us', type=int, choices=[1, 100], default=1, help='simulated counter advance per read; no hardware timing claim')
     p.add_argument('--mbps', type=float, default=23.5, help='card read rate, MB/s')
     p.add_argument('--fw-root', type=Path, default=REPO / 'work/v2/firmware')
     p.add_argument('--bank', type=int, choices=[0,1,2], default=2)
@@ -124,7 +125,9 @@ def main():
                                                (build / 'spl/symbols.txt').read_text(), re.M)}
     stack_top = int(re.search(r'^CONFIG_SPL_STACK=(0x[0-9a-f]+)$',
                               (build / 'spl/u-boot-2026.10/.config').read_text(), re.M)[1], 16)
-    stream = stream_from(build / 'helper/early-display-generated.h', 'boe' if manifest['target']=='rgsp' and not args.pe6 else 'old')
+    target_spec = json.loads((REPO / 'v2/firmware/targets.json').read_text())[manifest['target']]
+    panel_name = 'boe' if target_spec['panel_rule'] == 1 or (target_spec['panel_rule'] == 2 and not args.pe6) else 'old'
+    stream = stream_from(build / 'helper/early-display-generated.h', panel_name)
     ops_text = (build / 'helper/early-display-operations.h').read_text()
     polls = [tuple(int(x, 16) for x in m.groups()) for m in
              re.finditer(r'\{DISPLAY_POLL,(0x[0-9a-f]+)u,(0x[0-9a-f]+)u,(0x[0-9a-f]+)u', ops_text)]
@@ -145,12 +148,12 @@ def main():
     result = 0x41002000
     m.mem_write(result + 46 * 4, struct.pack('<I', 16))
     params = [0] * 32
-    if manifest['target'] == 'rgsp':
+    if manifest['target'] != 'rg28xx':
         bank_text = (build / 'spl/u-boot-2026.10/arch/arm/mach-sunxi/dram-candidates.h').read_text().split('dram_vendor_candidates[][32] = {')[1]
         banks = [[int(x,16) for x in re.findall(r'0x([0-9a-f]+)u',row)] for row in re.findall(r'\{([^}]+)\}',bank_text)]
         params = banks[args.bank]
         assert len(params) == 32
-    params[1], params[7] = (99 if args.fault == 'dram' else (7 if manifest['target']=='rgsp' and args.bank < 2 else 8)), 1024 << 16  # LPDDR4, 1024 MiB (checked by the helper)
+    params[1], params[7] = (99 if args.fault == 'dram' else (params[1] if manifest['target'] != 'rg28xx' else 8)), 1024 << 16  # LPDDR4, 1024 MiB (checked by the helper)
     m.mem_write(0x41004000, struct.pack('<32I', *params))
     for idx, val in enumerate((0x41003000, result, 0)):
         m.reg_write(system.xreg(idx), val)
@@ -175,7 +178,7 @@ def main():
     mocked = {ssym[n] for n in ('sunxi_board_init', 'baseos_native_cache_on', 'baseos_native_cache_off')}
 
     def tick():
-        st['clock'] += 24
+        st['clock'] += 24 * args.counter_step_us
         return st['clock']
 
     def code(mc, pc, size, ctx):
@@ -188,11 +191,11 @@ def main():
             props = {(path,key): value for path,key,_,value in fdt_mod.walk(bytes(mc.mem_read(0x4a200000,dtb_size)))}
             for key in ('baseos,boot-display','baseos,panel','baseos,bootreason','baseos,dram','baseos,native-boot'):
                 assert ('/chosen',key) in props, key
-            expected_panel = b'boe\0' if manifest['target']=='rgsp' and not args.pe6 else b'old\0'
+            expected_panel = panel_name.encode() + b'\0'
             assert props['/chosen','baseos,panel'] == expected_panel
             fb = next(path for path,key in props if path.startswith('/chosen/framebuffer@') and key=='status')
             assert props[fb,'status'] == b'okay\0'
-            width,height = (720,480) if manifest['target']=='rgsp' else (480,640)
+            width,height = target_spec['logo']
             for key,value in (('width',width),('height',height),('stride',width*4)):
                 assert props[fb,key] == struct.pack('>I',value)
             assert props['/memory@40000000','reg'] == struct.pack('>QQ',0x40000000,0x40000000)
@@ -209,6 +212,14 @@ def main():
                                  logo_record=bytes(mc.mem_read(0x4a300200, 16)).hex(),
                                  native_record=bytes(mc.mem_read(0x4a300000, 240)).hex())
             assert bytes(mc.mem_read(0x4a000000, len(helper))) == helper, 'helper copy differs'
+            if manifest['target'] not in ('rg28xx', 'rgsp'):
+                magic = struct.unpack('<I', mc.mem_read(0x4a300200, 4))[0]
+                assert (magic == 0x31474f4c) == bool(args.card), 'logo presence differs'
+                if args.card:
+                    bmp = bytes(mc.mem_read(0x4b400000, 54))
+                    width, height = struct.unpack_from('<ii', bmp, 18)
+                    assert bmp[:2] == b'BM' and [width, abs(height)] == target_spec['logo']
+
             if args.tamper:
                 record = bytearray(mc.mem_read(0x4a300280, 120))
                 assert struct.unpack_from('<I', record, 4)[0] == 2, 'tamper needs a version 2 record'
@@ -332,11 +343,12 @@ def main():
     if args.fault:
         assert st['outcome'] in ('spl-refused', 'helper-fault'), st['outcome']
         assert bytes(m.mem_read(0x07000138,8)) == struct.pack('<II',cookie,0x42535031)
-        report = dict(emulated=True, fault=args.fault, outcome=st['outcome'], pending_retained=True,
+        assert not any(ad == PI_DATA and value & CLK for _, _, ad, value in st['trace']), 'panel SPI before refusal'
+        report = dict(emulated=True, fault=args.fault, outcome=st['outcome'], pending_retained=True, panel_spi_before_refusal=False,
                       recovery='watchdog reset then capsule selects stock; reset not simulated here')
     else:
         report = check(st, stream, hsym, ssym, generation, args, payload)
-        report.update(emulated=True, pe6=args.pe6, bank=args.bank, logo_present=bool(card))
+        report.update(emulated=True, counter_step_us=args.counter_step_us, pe6=args.pe6, bank=args.bank, logo_present=bool(card))
     (out_dir / f'chain-bank-{args.bank}-pe6-{args.pe6}-{args.fault or str(bool(card))}-{args.payload.stem}{"-tamper-" + args.tamper if args.tamper else ""}.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
 
@@ -443,7 +455,7 @@ def check(st, stream, hsym, ssym, generation, args, payload):
                        'backlight >= 100 ms after TCON enable', 'no RTC writes; one SPL watchdog reload',
                        'SPL branch x0=0x4a300000 with DAIF masked', 'helper reached BL31 with x0=0x4a300400'],
         model='Compiled SPL and helper code; card, DRAM training, PMIC, SPL cache setup, EL3 system '
-              'registers, PLL lock and scanline modelled. Time = counter reads (1 us each) + card '
+              f'registers, PLL lock and scanline modelled. Time = counter reads ({args.counter_step_us} us each) + card '
               'transfer. Helper computation (pixel, kernel unpack) costs almost no modelled time, so '
               'times after helper_entry show the display waits only.')
 

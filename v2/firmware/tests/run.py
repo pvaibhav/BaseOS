@@ -66,6 +66,14 @@ def main(variants):
         variants = [v for v in variants if v != 'v2-rgsp']
         if not variants:
             return 0
+    fleet = [v for v in variants if v.startswith('v2-')]
+    for v in fleet:
+        result = subprocess.run([sys.executable, HERE / 'fleet.py', v[3:]])
+        if result.returncode:
+            return result.returncode
+    variants = [v for v in variants if v not in fleet]
+    if not variants:
+        return 0
     LOGS.mkdir(parents=True, exist_ok=True)
     results = {}
     repo = lambda p: '/repo/' + str(Path(p).relative_to(ROOT))

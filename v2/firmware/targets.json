@@ -23,5 +23,122 @@
     "panel_rule": 2,
     "pull_up": true,
     "compatible": "anbernic,rgsp"
+  },
+  "rg34xx": {
+    "boot0_sha256": "b6edbf39af0bf1f35a7e2fd991c8966b04d061e247c81985d2516f695464049b",
+    "package_sha256": "56371d984e29e74db63009ce27f829eb0a55ce9007ee5e40c52479b22418af3d",
+    "logo": [
+      720,
+      480
+    ],
+    "panel_rule": 2,
+    "pull_up": true,
+    "model_id": 2,
+    "framebuffer_from_ram_end": 68007936,
+    "compatible": "anbernic,rg34xx"
+  },
+  "rg34xxsp": {
+    "boot0_sha256": "87f92be2e3b765d0a0e7f3dcc7c2beaf654d5bbad351d19dc371115d760cf0e8",
+    "package_sha256": "32f92785f3e0819acbd60776e2ef839c1fd1924b31960b98363a93c85300db7e",
+    "logo": [
+      720,
+      480
+    ],
+    "panel_rule": 2,
+    "pull_up": true,
+    "model_id": 3,
+    "framebuffer_from_ram_end": 68007936,
+    "compatible": "anbernic,rg34xxsp"
+  },
+  "rg35xxh": {
+    "boot0_sha256": "6abc0f9b5a4ec9bfaed1e3c9d4f2b2ea061312790a4ce6b44e1df0dcb36d8272",
+    "package_sha256": "7d4648c429ca5c21b084bb40147b3ababbd0d200bb5a2c2c05beef26902c0c55",
+    "logo": [
+      640,
+      480
+    ],
+    "panel_rule": 2,
+    "pull_up": true,
+    "model_id": 4,
+    "framebuffer_from_ram_end": 68012032,
+    "compatible": "anbernic,rg35xxh"
+  },
+  "rg35xxplus": {
+    "boot0_sha256": "55301abb278c106e7e18fd668b5afa21b7cfb7170eddefe5a5ed9fe07079ec5e",
+    "package_sha256": "b3cc7ea963177fb9110e26e7772847b0da084fb275d6e955c1bc7c9103ced8be",
+    "logo": [
+      640,
+      480
+    ],
+    "panel_rule": 2,
+    "pull_up": true,
+    "model_id": 5,
+    "framebuffer_from_ram_end": 68012032,
+    "compatible": "anbernic,rg35xxplus"
+  },
+  "rg35xxpro": {
+    "boot0_sha256": "a2b01bfec53f3d1fe5543533842a3429c37bf35cac266d4ec502b4336f463e43",
+    "package_sha256": "04d64e1772066fdd11e05727e89576b783340dd2b5a1238e9248c5be41a1d605",
+    "logo": [
+      640,
+      480
+    ],
+    "panel_rule": 2,
+    "pull_up": true,
+    "model_id": 6,
+    "framebuffer_from_ram_end": 68012032,
+    "compatible": "anbernic,rg35xxpro"
+  },
+  "rg35xxsp": {
+    "boot0_sha256": "fb0b2228de6a97536f35e40a1b7f996e16b1784d07664dd43751a40fe785f06d",
+    "package_sha256": "de38acd6633b7012498c121686f93956fbf625b879fffcea5e85ba5e08dd850c",
+    "logo": [
+      640,
+      480
+    ],
+    "panel_rule": 2,
+    "pull_up": false,
+    "model_id": 7,
+    "framebuffer_from_ram_end": 68007936,
+    "compatible": "anbernic,rg35xxsp"
+  },
+  "rg40xxh": {
+    "boot0_sha256": "8edac8c8a692f4a63171ce72e65272f113a0a69cb3936900dfa8ba703092e946",
+    "package_sha256": "d022ec52d5cd91aee7b9336d45dc7c9f6825573793e6e6175902af37b695aa80",
+    "logo": [
+      640,
+      480
+    ],
+    "panel_rule": 2,
+    "pull_up": false,
+    "model_id": 8,
+    "framebuffer_from_ram_end": 68016128,
+    "compatible": "anbernic,rg40xxh"
+  },
+  "rg40xxv": {
+    "boot0_sha256": "0def1fb66ded253fb1fda8eb3c8e9bfe5323d4afe8e808996731105a92749c74",
+    "package_sha256": "ea7031f8e64712d9c5a0d8530e4b5b588527f397ebda8239ac4c718c50cd886a",
+    "logo": [
+      640,
+      480
+    ],
+    "panel_rule": 2,
+    "pull_up": false,
+    "model_id": 9,
+    "framebuffer_from_ram_end": 68016128,
+    "compatible": "anbernic,rg40xxv"
+  },
+  "rgcubexx": {
+    "boot0_sha256": "875328ff656aadbcc5c7e5059a7c91d44bcb389e0537b200803f38a1ded82325",
+    "package_sha256": "dcd1998046d5174d1f9ffb4e20cbe10fd0e32ce111ef880d9a6d5c9ba6a1e972",
+    "logo": [
+      720,
+      720
+    ],
+    "panel_rule": 1,
+    "pull_up": false,
+    "model_id": 10,
+    "framebuffer_from_ram_end": 68012032,
+    "compatible": "anbernic,rgcubexx"
   }
 }

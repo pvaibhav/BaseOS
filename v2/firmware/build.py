@@ -139,6 +139,15 @@ VARIANTS = {
                    patches=['helper-allow-pmic.patch'], expect={}),
 }
 
+TARGETS = json.loads((HERE / 'targets.json').read_text())
+# RG SP's original generator identity remains fixed for byte-compatible rebuilds.
+RGSP_GENERATOR_HASHES = {'build.py': '43cb78fb61ddc86074898b6419e08cac89ca4be1404e2dc6bea8faa16922bcf8', 'targets.json': 'f4c62197283725c32948029ef2e0b8a1e82f753927b3dd4056238392bb9b0f5c', 'layout.py': '0084865a52baa42db533b9760b58bfc8a61e1d1bdf6c7bd488e0e1ad178ac8a3', 'Containerfile': 'dad377a7d6cfbf240ce2de29cb438bf46009bbf3a90b1688765a37ec67dcb550'}
+for target in TARGETS:
+    if target not in ('rg28xx', 'rgsp'):
+        VARIANTS['v2-' + target] = dict(generation=None, tfa_log_level='0',
+            tfa_patches=['tfa-allow-pmic.patch'],
+            patches=['helper-allow-pmic.patch', 'model-dtb.patch'], expect={})
+
 
 def sha(data): return hashlib.sha256(data).hexdigest()
 def sha_file(path): return sha(Path(path).read_bytes())
@@ -231,6 +240,28 @@ def stage_tree(variant, out):
         apply_patch(HERE / 'patches' / name, out)
 
 
+def prepare_inventory():
+    """Extract absent inventory fixtures from pinned prepared inputs, locally only."""
+    global INVENTORY
+    if INVENTORY.is_dir():
+        return
+    INVENTORY = WORK / 'build/inputs' / TARGET
+    INVENTORY.mkdir(parents=True, exist_ok=True)
+    with (PREPARED / TARGET / 'boot-prefix.img').open('rb') as source:
+        prefix = source.read(1048576)
+        (INVENTORY / 'prefix.bin').write_bytes(prefix)
+        (INVENTORY / 'boot0.bin').write_bytes(prefix[8192:8192+65536])
+        table, count, stride = struct.unpack_from('<QII', prefix, 584)
+        for i in range(count):
+            entry = prefix[table*512+i*stride:table*512+(i+1)*stride]
+            if entry[56:128].decode('utf-16-le').rstrip('\0') == 'env':
+                source.seek(struct.unpack_from('<Q', entry, 32)[0]*512)
+                (INVENTORY / 'env.bin').write_bytes(source.read(131072))
+                break
+        else:
+            raise ValueError('stock environment partition absent')
+
+
 def model_policy():
     native = load('v2fw_native_policy', ROOT / NATIVE / 'build.py')
     native.INPUT_WORK = PREPARED
@@ -269,7 +300,8 @@ def generation_for(variant, tree, policy, clang, lld):
         'toolchains': {'image': IMAGE, 'clang': compiler_hash(clang), 'lld': compiler_hash(lld)},
     }
     if TARGET != 'rg28xx':
-        identity['target_generator'] = {n: sha_file(HERE / n) for n in ('build.py', 'targets.json', 'layout.py', 'Containerfile')}
+        identity['target_generator'] = (RGSP_GENERATOR_HASHES if TARGET == 'rgsp' else
+            {n: sha_file(HERE / n) for n in ('build.py', 'targets.json', 'layout.py', 'Containerfile')})
         identity['compiler_image'] = CONTAINER_CLANG
         identity['policy_generators'] = {n: sha_file(ROOT / n) for n in
             ('devices.json', 'tools/device_profile.py', NATIVE + '/build.py',
@@ -341,6 +373,9 @@ def build_helper(tree, build, policy, generation, clang, lld, env):
         display.build(out, TARGET, policy, generation)
         (out / 'native-generated.h').write_text('#include "early-display-generated.h"\n'
                                                 f'#define BASEOS_MODEL_ID {policy["model_id"]}u\n')
+        if TARGET not in ('rg28xx', 'rgsp'):
+            with (out / 'native-generated.h').open('a') as header:
+                header.write('#define BASEOS_DTB_COMPATIBLE "' + TARGETS[TARGET]['compatible'] + '"\n')
         u3 = load('v2fw_u3', HERE / 'layout.py')
         (out / 'u3-layout.h').write_text(u3.layout_header({'model_policy': policy}))
         include = tree / 'experiments/h700-mainline/include'
@@ -447,7 +482,7 @@ def build_spl(variant, tree, build, policy, generation, firmware, regions, helpe
         edits = load('v2fw_spl_edits', ROOT / SPL / 'build-early-mmc.py')
         edits.HERE = spl  # dram-select.c and dram-retry64.S come from the variant tree
         edits.native_dram(src, boot0)
-        if TARGET == 'rgsp':
+        if TARGET != 'rg28xx':
             dram = arch / 'dram_sun50i_h616.c'
             text = dram.read_text()
             loop = 'while ((readl(SUNXI_DRAM_PHY0_BASE + 0x184) & val) != val) {'
@@ -636,7 +671,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('what', choices=[*VARIANTS, 'all', 'restamp'])
     parser.add_argument('paths', nargs='*', help='restamp: IN OUT')
-    parser.add_argument('--target', choices=['rg28xx', 'rgsp'], default='rg28xx')
+    parser.add_argument('--target', choices=list(TARGETS), default='rg28xx')
     parser.add_argument('--output-name', help='private comparison output directory')
     parser.add_argument('--variant', default='v2a', choices=list(VARIANTS))
     args = parser.parse_args()
@@ -647,19 +682,20 @@ def main():
         parser.error('output-name must be a simple directory name')
     INVENTORY = INVENTORY.parent / TARGET
     HANDOFF_PACKAGE = PREPARED / TARGET / 'boot-gzip/boot-package.bin'
-    if TARGET == 'rgsp':
-        if args.what != 'v2-rgsp':
-            parser.error('rgsp requires variant v2-rgsp')
+    if TARGET != 'rg28xx':
+        if args.what != 'v2-' + TARGET:
+            parser.error(TARGET + ' requires variant v2-' + TARGET)
         CONTAINER_CLANG = subprocess.check_output(['docker', 'image', 'inspect',
             'baseos-v2-firmware-clang:local', '--format', '{{.Id}}'], text=True).strip()
-    elif args.what == 'v2-rgsp':
-        parser.error('v2-rgsp requires --target rgsp')
+    elif args.what.startswith('v2-'):
+        parser.error(args.what + ' requires its matching --target')
+    prepare_inventory()
     if args.what == 'restamp':
         if len(args.paths) != 2:
             parser.error('restamp needs IN and OUT')
         restamp(*args.paths, args.variant)
         return
-    for variant in ([v for v in VARIANTS if v != 'v2-rgsp'] if args.what == 'all' else [args.what]):
+    for variant in ([v for v in VARIANTS if not v.startswith('v2-')] if args.what == 'all' else [args.what]):
         build_variant(variant)
 
 
