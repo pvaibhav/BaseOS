@@ -1,6 +1,7 @@
 /* Virtual copy of the RG28XX pad ("ANBERNIC-keys") for remote testing.
  * Reads commands from the FIFO /run/pad, one per line:
- *   up|down|left|right|a|b|x|y|start|select|l1|l2|r1|r2|menu|vol+|vol- [ms]
+ *   up|down|left|right|a|b|x|y|start|select|l1|l2|r1|r2|menu|vol+|vol-|power [ms]
+ * "power" goes to a separate power-key-only device, like the PMIC's.
  * A button is held for ms (default 120) and released. */
 #include <fcntl.h>
 #include <linux/uinput.h>
@@ -9,7 +10,13 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static int fd;
+static int fd, pfd;
+static void emit_to(int f, int type, int code, int value) {
+	struct input_event e = { .type = type, .code = code, .value = value };
+	write(f, &e, sizeof(e));
+	struct input_event s = { .type = EV_SYN, .code = SYN_REPORT };
+	write(f, &s, sizeof(s));
+}
 static void emit(int type, int code, int value) {
 	struct input_event e = { .type = type, .code = code, .value = value };
 	write(fd, &e, sizeof(e));
@@ -36,6 +43,11 @@ int main(void) {
 	struct uinput_setup setup = { .id = { BUS_HOST, 1, 1, 0x100 } };
 	strcpy(setup.name, "ANBERNIC-keys");
 	if (ioctl(fd, UI_DEV_SETUP, &setup) || ioctl(fd, UI_DEV_CREATE)) { perror("uinput"); return 1; }
+	pfd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+	ioctl(pfd, UI_SET_EVBIT, EV_KEY); ioctl(pfd, UI_SET_KEYBIT, KEY_POWER);
+	struct uinput_setup psetup = { .id = { BUS_HOST, 1, 2, 0x100 } };
+	strcpy(psetup.name, "baseos-power");
+	if (ioctl(pfd, UI_DEV_SETUP, &psetup) || ioctl(pfd, UI_DEV_CREATE)) { perror("uinput power"); return 1; }
 	mkfifo("/run/pad", 0600);
 	char line[64];
 	for (;;) {
@@ -44,6 +56,11 @@ int main(void) {
 		while (fgets(line, sizeof(line), f)) {
 			char name[16]; int ms = 120;
 			if (sscanf(line, "%15s %d", name, &ms) < 1) continue;
+			if (!strcmp(name, "power")) {
+				emit_to(pfd, EV_KEY, KEY_POWER, 1); usleep(ms * 1000);
+				emit_to(pfd, EV_KEY, KEY_POWER, 0); usleep(80000);
+				continue;
+			}
 			for (unsigned i = 0; i < sizeof(map) / sizeof(*map); i++) {
 				if (strcmp(name, map[i].n)) continue;
 				emit(map[i].type, map[i].code, map[i].type == EV_ABS ? map[i].value : 1);
