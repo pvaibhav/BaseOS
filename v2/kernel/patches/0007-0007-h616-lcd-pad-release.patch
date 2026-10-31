@@ -1,7 +1,7 @@
 From 698536190958702ab5aef5b9bd6d88ee57897119 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:05:10 +0000
-Subject: [PATCH 07/40] 0007-h616-lcd-pad-release
+Subject: [PATCH 07/41] 0007-h616-lcd-pad-release
 
 ---
  drivers/pinctrl/sunxi/pinctrl-sun50i-h616.c | 84 ++++++++++++++-------

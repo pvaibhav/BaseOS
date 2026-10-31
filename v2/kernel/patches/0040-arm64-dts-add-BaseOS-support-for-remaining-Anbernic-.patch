@@ -1,7 +1,7 @@
 From 967ad23393af0c19897bf090d0df92adc85e2694 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 19:54:39 +0000
-Subject: [PATCH 40/40] arm64: dts: add BaseOS support for remaining Anbernic
+Subject: [PATCH 40/41] arm64: dts: add BaseOS support for remaining Anbernic
  H700 models
 
 ---

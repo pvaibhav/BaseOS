@@ -1,7 +1,7 @@
 From 276e1db9670995f38af527193de1d0f36ef4d4bd Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 19:35:52 +0000
-Subject: [PATCH 39/40] rg28xx/rgsp: fixed mmc numbers, so TF1 is always
+Subject: [PATCH 39/41] rg28xx/rgsp: fixed mmc numbers, so TF1 is always
  mmcblk0
 
 Without mmc aliases the card hosts are numbered in probe order. On the RG SP

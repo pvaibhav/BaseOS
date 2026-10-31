@@ -212,12 +212,7 @@ perf)
 	esac ;;
 usb)
 	case "$1" in
-	mode)
-		if [ $# -lt 2 ]; then
-			[ -n "$(cat /sys/kernel/config/usb_gadget/baseos/UDC 2>/dev/null)" ] && echo mode=adb || echo mode=none
-		else
-			case "$2" in adb|none) ;; host|storage) unavailable "USB $2 mode" ;; *) usage ;; esac
-		fi ;;
+	mode) exec /usr/sbin/baseos-usb "$@" ;;
 	*) usage ;;
 	esac ;;
 events) exec /usr/sbin/baseos-events ;;

@@ -170,13 +170,29 @@ baseos bt pair|connect|disconnect|forget ADDRESS  |  devices
   clients must reopen ALSA default on the audio_output event. Disconnect falls
   back to auto, including when bluetooth was selected explicitly.
 
-## USB: `baseos usb` (works for adb; host untested)
+## USB: `baseos usb` (built; host needs hardware testing)
 
 ```
 baseos usb mode [adb|host|storage|none]   # print or set the USB-C role
 ```
 
-- `host` powers the port and accepts controllers, audio devices and storage.
+- With no argument, prints `mode=adb`, `mode=host` or `mode=none` from the
+  controller role and gadget binding.
+- Set commands queue a request and print `requested=<mode>`; this is not a
+  completion acknowledgement. The boot USB service owns all transitions.
+- `host` waits up to 10 seconds for the computer/charger cable to be unplugged,
+  with at least a two-second delay before switching. It then powers USB-C and
+  accepts USB audio, generic HID/Xbox controllers and storage. There is no
+  automatic filesystem mounting. USB-C returns to adb after 20 seconds without
+  an enumerated device, or three seconds after the last device is removed.
+  A hub counts as a device. Devices on a separate USB-A port do not count.
+- `adb` cancels a pending host request, turns host power off and rebinds the
+  existing FunctionFS gadget. It keeps the same descriptors, serial and adbd.
+- `none` restores the device role with host power off, then unbinds the gadget.
+- `storage` (exporting the handheld as a disk) remains unavailable, exit 3.
+- Every restart starts in adb mode. Requests and timers live only in `/run`.
+  Host driver modules can stay loaded after host mode; only USB-C controllers
+  are unbound, so the separate USB-A port is left alone.
 
 ## System services (works)
 

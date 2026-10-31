@@ -1,10 +1,92 @@
 #!/bin/sh
-# adb over the USB-C port (FunctionFS gadget).
+# A single detached boot service owns USB-C. Requests and state live in RAM.
 set -eu
+r=/run/baseos
+g=/sys/kernel/config/usb_gadget/baseos
+role=/sys/class/usb_role/baseos-usbc-role-switch/role
+ehci=5101000.usb
+ohci=5101400.usb
+platform=/sys/bus/platform
+current() {
+    if [ "$(cat "$role" 2>/dev/null)" = host ]; then echo mode=host
+    elif [ -n "$(cat "$g/UDC" 2>/dev/null)" ]; then echo mode=adb
+    else echo mode=none; fi
+}
+if [ "${1:-}" = mode ]; then
+    if [ $# = 1 ]; then current; exit; fi
+    case "$2" in host|adb|none) ;; storage) echo 'USB storage gadget mode unavailable' >&2; exit 3 ;; *) exit 2 ;; esac
+    [ -s "$r/usb.pid" ] && kill -0 "$(cat "$r/usb.pid")" 2>/dev/null || {
+        echo 'USB service is not running' >&2; exit 1;
+    }
+    # Atomic requests; the service serializes all transitions.
+    printf '%s\n' "$2" > "$r/usb-request.$$"
+    mv "$r/usb-request.$$" "$r/usb-request"
+    echo "requested=$2"
+    exit
+fi
+mkdir -p "$r"
+exec 9>"$r/usb.lock"
+flock -n 9 || exit 1
+echo $$ > "$r/usb.pid"
+unbind() {
+    for pair in "$ohci:ohci-platform" "$ehci:ehci-platform"; do
+        dev=${pair%:*}; driver=${pair#*:}
+        if [ -L "$platform/devices/$dev/driver" ]; then
+            printf '%s' "$dev" > "$platform/drivers/$driver/unbind" || return 1
+        fi
+        printf '\n' > "$platform/devices/$dev/driver_override" || return 1
+    done
+}
+bind() {
+    dev=$1; driver=$2
+    printf '%s' "$driver" > "$platform/devices/$dev/driver_override" &&
+    printf '%s' "$dev" > "$platform/drivers/$driver/bind" &&
+    [ -L "$platform/devices/$dev/driver" ]
+}
+adb() {
+    unbind || return 1
+    if [ "$(cat "$role")" != device ]; then
+        printf device > "$role" || return 1
+    fi
+    [ -z "$(cat "$g/UDC")" ] || return 0
+    n=0
+    while [ "$n" -lt 100 ]; do
+        for udc in /sys/class/udc/*; do
+            [ -d "$udc" ] || continue
+            printf '%s' "${udc##*/}" > "$g/UDC" 2>/dev/null && return 0
+        done
+        n=$((n + 1)); sleep 0.05
+    done
+    return 1
+}
+attached() {
+    for d in /sys/bus/usb/devices/*-*; do
+        [ -f "$d/idVendor" ] || continue
+        case "$(readlink -f "$d")" in
+            */$ehci/*|*/$ohci/*) return 0 ;;
+        esac
+    done
+    return 1
+}
+host() {
+    # Load before disconnecting adb so missing modules leave it intact.
+    modprobe -a ehci_platform ohci_platform snd_usb_audio usb_storage uas sd_mod usbhid hid_generic xpad || return 1
+    printf '\n' > "$g/UDC" || return 1
+    printf host > "$role" || return 1
+    bind "$ehci" ehci-platform && bind "$ohci" ohci-platform
+}
+cleanup() {
+    trap '' HUP INT TERM
+    adb || echo 'USB: failed to restore adb' >&2
+    rm -f "$r/usb.pid"
+}
+trap cleanup EXIT
+trap 'exit 0' INT TERM
+trap '' HUP
 serial=$(tr -d '\000' < /sys/firmware/devicetree/base/chosen/baseos,serial 2>/dev/null || :)
 [ -n "$serial" ] || serial=baseos
 ip link set lo up
-mount -t configfs configfs /sys/kernel/config
+mountpoint -q /sys/kernel/config || mount -t configfs configfs /sys/kernel/config
 g=/sys/kernel/config/usb_gadget/baseos
 mkdir -p "$g/strings/0x409" "$g/configs/c.1/strings/0x409" "$g/functions/ffs.adb" /dev/usb-ffs/adb
 printf 0x18d1 > "$g/idVendor"
@@ -13,15 +95,41 @@ printf '%s' "$serial" > "$g/strings/0x409/serialnumber"
 printf BaseOS > "$g/strings/0x409/manufacturer"
 printf 'BaseOS 2' > "$g/strings/0x409/product"
 printf adb > "$g/configs/c.1/strings/0x409/configuration"
-ln -s "$g/functions/ffs.adb" "$g/configs/c.1/ffs.adb"
-mount -t functionfs adb /dev/usb-ffs/adb
-/usr/sbin/adbd > /run/baseos/adbd.log 2>&1 &
-n=0
-while [ "$n" -lt 100 ]; do
-	for udc in /sys/class/udc/*; do
-		[ -d "$udc" ] || continue
-		printf '%s' "${udc##*/}" > "$g/UDC" 2>/dev/null && exit 0
-	done
-	n=$((n + 1)); sleep 0.05
+[ -L "$g/configs/c.1/ffs.adb" ] || ln -s "$g/functions/ffs.adb" "$g/configs/c.1/ffs.adb"
+mountpoint -q /dev/usb-ffs/adb || mount -t functionfs adb /dev/usb-ffs/adb
+/usr/sbin/adbd 9>&- > /run/baseos/adbd.log 2>&1 &
+
+adb
+state=adb
+idle=0
+arm=0
+while :; do
+    if [ -f "$r/usb-request" ]; then
+        mv "$r/usb-request" "$r/usb-active"
+        request=$(cat "$r/usb-active"); rm "$r/usb-active"
+        case "$request" in
+            host) if [ "$state" != host ]; then state=arming; arm=0; fi ;;
+            adb|none)
+                adb
+                state=$request
+                [ "$state" != none ] || printf '\n' > "$g/UDC"
+                ;;
+        esac
+    fi
+    case "$state" in
+        arming)
+            arm=$((arm + 1))
+            if [ "$arm" -ge 3 ] && [ "$(cat /sys/class/power_supply/axp2202-usb/online)" = 0 ]; then
+                if host; then state=host; idle=20
+                else echo 'USB: host failed; restoring adb' >&2; adb; state=adb; fi
+            elif [ "$arm" -ge 10 ]; then
+                echo 'USB: unplug the computer cable before requesting host' >&2
+                adb; state=adb
+            fi ;;
+        host)
+            if attached; then idle=3
+            else idle=$((idle - 1)); fi
+            if [ "$idle" -le 0 ]; then adb; state=adb; fi ;;
+    esac
+    sleep 1
 done
-echo 'no USB device controller' >&2; exit 1
