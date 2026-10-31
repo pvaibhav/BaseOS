@@ -1,7 +1,7 @@
 From a246fc479a3ed3efe11f29dc9a747cb0ff7f86a6 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 14:43:31 +0000
-Subject: [PATCH 23/38] misc: BaseOS stock compatibility (/dev/disp brightness,
+Subject: [PATCH 23/39] misc: BaseOS stock compatibility (/dev/disp brightness,
  power key first, i2c-5)
 
 ---

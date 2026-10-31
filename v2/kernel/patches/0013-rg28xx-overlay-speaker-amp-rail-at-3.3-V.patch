@@ -1,7 +1,7 @@
 From dff188d2c0431cbe70c9e937d84e0ccad91a5f48 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:39:30 +0000
-Subject: [PATCH 13/38] rg28xx overlay: speaker amp rail at 3.3 V
+Subject: [PATCH 13/39] rg28xx overlay: speaker amp rail at 3.3 V
 
 ---
  drivers/of/baseos-rg28xx.dtso | 4 ++++

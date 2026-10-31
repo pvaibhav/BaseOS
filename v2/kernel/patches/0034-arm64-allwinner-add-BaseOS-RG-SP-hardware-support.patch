@@ -1,7 +1,7 @@
 From 8706b8df27987b943924d89c6b7aaff1f47cde9d Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 17:01:05 +0000
-Subject: [PATCH 34/38] arm64: allwinner: add BaseOS RG SP hardware support
+Subject: [PATCH 34/39] arm64: allwinner: add BaseOS RG SP hardware support
 
 ---
  arch/arm64/boot/dts/allwinner/Makefile        |   3 +

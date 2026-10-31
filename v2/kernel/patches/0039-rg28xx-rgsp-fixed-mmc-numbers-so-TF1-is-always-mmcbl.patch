@@ -1,0 +1,77 @@
+From 276e1db9670995f38af527193de1d0f36ef4d4bd Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 19:35:52 +0000
+Subject: [PATCH 39/39] rg28xx/rgsp: fixed mmc numbers, so TF1 is always
+ mmcblk0
+
+Without mmc aliases the card hosts are numbered in probe order. On the RG SP
+(TF1, Wi-Fi SDIO, TF2) TF1 was sometimes mmcblk1 or mmcblk2, the first stage
+waited for mmcblk0 in vain and the watchdog reset the board: about one start
+in three fell back to stock. Also add a start-up breadcrumb in an RTC scratch
+register (0x07000134) for diagnosing failed starts from the stock OS.
+---
+ .../sun50i-h700-anbernic-rg28xx-baseos.dts    |  9 +++++++++
+ drivers/of/baseos-overlay.c                   | 20 +++++++++++++++++++
+ 2 files changed, 29 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+index 3f1c8e8c4..c9d6038d9 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -108,6 +108,15 @@ reserved-memory {
+ 
+     aliases {
+         serial0 = &uart0;
++        /*
++         * Fixed card numbers: TF1 is always mmcblk0, which the first stage
++         * and rcS rely on. Without these the hosts are numbered in the order
++         * they finish probing, and on the RG SP (three hosts) TF1 was
++         * sometimes mmcblk1 or 2, so about one start in three failed.
++         */
++        mmc0 = &mmc0;
++        mmc1 = &mmc1;
++        mmc2 = &mmc2;
+     };
+ 
+     chosen {
+diff --git a/drivers/of/baseos-overlay.c b/drivers/of/baseos-overlay.c
+index 9ba04228f..a13ecc774 100644
+--- a/drivers/of/baseos-overlay.c
++++ b/drivers/of/baseos-overlay.c
+@@ -4,9 +4,28 @@
+  * (it rejects any x-powers PMIC node), applied before devices are created.
+  */
+ #include <linux/init.h>
++#include <linux/io.h>
+ #include <linux/of.h>
+ #include <linux/printk.h>
+ 
++/*
++ * Start-up breadcrumb: an RTC scratch register (unused by the stock and BaseOS
++ * loaders) survives a watchdog reset, so after a failed start the stock OS can
++ * read how far Linux got. Later stages (first stage, rcS) write it too.
++ */
++#define BASEOS_STAGE_REG 0x07000134
++#define BASEOS_STAGE_KERNEL 0xb2000010
++
++static void __init baseos_stage(u32 stage)
++{
++	void __iomem *reg = ioremap(BASEOS_STAGE_REG, 4);
++
++	if (reg) {
++		writel(stage, reg);
++		iounmap(reg);
++	}
++}
++
+ extern u8 __dtbo_baseos_rg28xx_begin[], __dtbo_baseos_rg28xx_end[];
+ 
+ extern u8 __dtbo_baseos_rgsp_begin[], __dtbo_baseos_rgsp_end[];
+@@ -25,6 +44,7 @@ static int __init baseos_overlay_init(void)
+ 	} else {
+ 		return 0;
+ 	}
++	baseos_stage(BASEOS_STAGE_KERNEL);
+ 	ret = of_overlay_fdt_apply(begin, end - begin, &id, NULL);
+ 	pr_info("baseos: board overlay %s (%d)\n", ret ? "failed" : "applied", ret);
+ 	return 0;

@@ -40,6 +40,7 @@ else
  setsid $WRAP /bin/sh "$LAUNCH" &
 fi
 child=$!
+/usr/sbin/mem 0x07000134 0xb2000040 >/dev/null || :   # start-up breadcrumb
 # Radio firmware, association and DHCP must never hold up the launcher.
 /usr/sbin/baseos-radio daemon </dev/null >/run/baseos/radio.log 2>&1 &
 # First start after boot: read the parts of the card the last boot needed

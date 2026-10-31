@@ -47,6 +47,20 @@ static int open_retry(const char *path, int flags)
 	return -1;
 }
 
+/* Start-up breadcrumb in an RTC scratch register (see baseos-overlay.c). */
+static void stage(uint32_t value)
+{
+	int fd = open("/dev/mem", O_RDWR | O_SYNC | O_CLOEXEC);
+	if (fd < 0)
+		return;
+	volatile uint32_t *p = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x07000000);
+	if (p != MAP_FAILED) {
+		p[0x134 / 4] = value;
+		munmap((void *)p, 4096);
+	}
+	close(fd);
+}
+
 static double since_power_on(void)
 {
 	uint64_t c;
@@ -146,6 +160,7 @@ int main(void)
 	char loop[32];
 	mount("devtmpfs", "/dev", "devtmpfs", 0, 0);
 	kmsg = open("/dev/kmsg", O_WRONLY | O_CLOEXEC);
+	stage(0xb2000020);
 	if (fork() == 0)
 		_exit(splash());
 	int disk = open_retry(DISK, O_RDONLY);
@@ -169,6 +184,7 @@ int main(void)
 	if (fd < 0 || ioctl(fd, LOOP_CONFIGURE, &config)) fail("loop");
 	mkdir("/newroot", 0755);
 	if (mount(loop, "/newroot", "squashfs", MS_RDONLY, 0)) fail("root mount");
+	stage(0xb2000021);
 	if (mount("/dev", "/newroot/dev", 0, MS_MOVE, 0) || chdir("/newroot") ||
 	    mount(".", "/", 0, MS_MOVE, 0) || chroot(".") || chdir("/")) fail("switch");
 	execl("/usr/bin/busybox", "init", (char *)0);
