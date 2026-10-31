@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/*
+ * RG28XX power chip, battery, CPU voltage and audio. Applied by
+ * drivers/of/baseos-overlay.c because the boot firmware refuses x-powers nodes.
+ * Rails are described only where a consumer needs them; undescribed rails are
+ * never touched, so nothing the firmware set up can be switched off.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&{/} {
+	battery: battery {
+		compatible = "simple-battery";
+		charge-full-design-microamp-hours = <3000000>;
+		constant-charge-current-max-microamp = <1500000>;
+		voltage-max-design-microvolt = <4100000>; /* stock charges to 4.1 V */
+	};
+
+	reg_vcc5v: regulator-vcc5v {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc-5v";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+	};
+};
+
+&r_i2c {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	axp717: pmic@34 {
+		compatible = "x-powers,axp717";
+		reg = <0x34>;
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		interrupt-parent = <&nmi_intc>;
+		interrupts = <0 IRQ_TYPE_LEVEL_LOW>;
+		vin1-supply = <&reg_vcc5v>;
+		vin2-supply = <&reg_vcc5v>;
+		vin3-supply = <&reg_vcc5v>;
+		vin4-supply = <&reg_vcc5v>;
+
+		axp_adc: adc {
+			compatible = "x-powers,axp717-adc";
+			#io-channel-cells = <1>;
+		};
+
+		battery-power {
+			compatible = "x-powers,axp717-battery-power-supply";
+			monitored-battery = <&battery>;
+			x-powers,no-thermistor;
+		};
+
+		usb-power {
+			compatible = "x-powers,axp717-usb-power-supply";
+			input-current-limit-microamp = <2500000>;
+		};
+
+		regulators {
+			reg_dcdc1: dcdc1 {
+				regulator-always-on;
+				regulator-min-microvolt = <900000>;
+				regulator-max-microvolt = <1160000>;
+				regulator-name = "vdd-cpu";
+			};
+
+			reg_aldo4: aldo4 {
+				regulator-always-on;
+				regulator-name = "avcc";
+			};
+
+			reg_cldo1: cldo1 {
+				regulator-always-on;
+				regulator-min-microvolt = <3300000>; /* boots at 1.8 V: quiet speaker */
+				regulator-max-microvolt = <3300000>;
+				regulator-name = "vcc-spkr-amp";
+			};
+		};
+	};
+};
+
+&cpu0 {
+	cpu-supply = <&reg_dcdc1>;
+};
+
+&codec {
+	allwinner,audio-routing = "Speaker", "LINEOUT", "Headphone", "LINEOUT";
+	allwinner,pa-gpios = <&pio 8 5 GPIO_ACTIVE_HIGH>; /* PI5 */
+	hp-det-gpios = <&pio 8 3 GPIO_ACTIVE_HIGH>; /* PI3 */
+	status = "okay";
+};

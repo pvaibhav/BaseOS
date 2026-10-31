@@ -1,0 +1,12 @@
+#!/bin/sh
+# BaseOS 2 dev shell: adb first, watchdog fed only while the host checks in.
+export PATH=/bin:/sbin
+/bin/busybox mount -t proc proc /proc
+/bin/busybox --install -s /bin
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /dev/usb-ffs/adb
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=64m,mode=1777 tmpfs /tmp
+mount -t tmpfs -o size=8m tmpfs /run
+exec /bin/busybox init

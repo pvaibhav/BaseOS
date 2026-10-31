@@ -1,0 +1,242 @@
+From 37cf1784daae737e2a3efae16b256626ef9c76a2 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:05:10 +0000
+Subject: [PATCH 03/13] 0003-review-boundaries-and-lifetime
+
+---
+ .../arm64/boot/dts/allwinner/sun50i-h616.dtsi |  3 -
+ drivers/clk/sunxi-ng/ccu-sun8i-de2.c          | 12 ++--
+ drivers/gpu/drm/panel/panel-mipi.c            |  6 ++
+ drivers/mfd/syscon.c                          | 68 +++++++++++++++----
+ include/linux/mfd/syscon.h                    |  8 +++
+ 5 files changed, 75 insertions(+), 22 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+index 899bf9246..6e603296e 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+@@ -206,7 +206,6 @@ mixer0_out: port@1 {
+ 						reg = <1>;
+ 
+ 						mixer0_out_tcon_top_mixer0: endpoint {
+-				status = "disabled";
+ 							remote-endpoint = <&tcon_top_mixer0_in_mixer0>;
+ 						};
+ 					};
+@@ -1129,7 +1128,6 @@ tcon_top_mixer0_in: port@0 {
+ 					reg = <0>;
+ 
+ 					tcon_top_mixer0_in_mixer0: endpoint@0 {
+-				status = "disabled";
+ 						reg = <0>;
+ 						remote-endpoint = <&mixer0_out_tcon_top_mixer0>;
+ 					};
+@@ -1197,7 +1195,6 @@ tcon_lcd0_in: port@0 {
+ 					reg = <0>;
+ 
+ 					tcon_lcd0_in_tcon_top_mixer0: endpoint@0 {
+-				status = "disabled";
+ 						reg = <0>;
+ 						remote-endpoint = <&tcon_top_mixer0_out_tcon_lcd0>;
+ 					};
+diff --git a/drivers/clk/sunxi-ng/ccu-sun8i-de2.c b/drivers/clk/sunxi-ng/ccu-sun8i-de2.c
+index 11c019295..dfc6f372d 100644
+--- a/drivers/clk/sunxi-ng/ccu-sun8i-de2.c
++++ b/drivers/clk/sunxi-ng/ccu-sun8i-de2.c
+@@ -290,6 +290,7 @@ static int sunxi_de2_clk_probe(struct platform_device *pdev)
+ {
+ 	struct clk *bus_clk, *mod_clk;
+ 	struct reset_control *rstc;
++	struct regmap *regmap = NULL;
+ 	void __iomem *reg;
+ 	const struct sunxi_ccu_desc *ccu_desc;
+ 	int ret;
+@@ -344,8 +345,6 @@ static int sunxi_de2_clk_probe(struct platform_device *pdev)
+ 	 */
+ 	if (of_device_is_compatible(pdev->dev.of_node,
+ 				    "allwinner,sun50i-h616-de33-clk")) {
+-		struct regmap *regmap;
+-
+ 		regmap = devm_regmap_init_mmio(&pdev->dev, reg,
+ 				       &sun8i_de2_ccu_regmap_config);
+ 		if (IS_ERR(regmap)) {
+@@ -353,15 +352,18 @@ static int sunxi_de2_clk_probe(struct platform_device *pdev)
+ 			goto err_assert_reset;
+ 		}
+ 
+-		ret = of_syscon_register_regmap(pdev->dev.of_node, regmap);
+-		if (ret)
+-			goto err_assert_reset;
+ 	}
+ 
+ 	ret = devm_sunxi_ccu_probe(&pdev->dev, reg, ccu_desc);
+ 	if (ret)
+ 		goto err_assert_reset;
+ 
++	if (regmap) {
++		ret = devm_of_syscon_register_regmap(&pdev->dev, regmap);
++		if (ret)
++			goto err_assert_reset;
++	}
++
+ 	return 0;
+ 
+ err_assert_reset:
+diff --git a/drivers/gpu/drm/panel/panel-mipi.c b/drivers/gpu/drm/panel/panel-mipi.c
+index 146c908f4..17779af0d 100644
+--- a/drivers/gpu/drm/panel/panel-mipi.c
++++ b/drivers/gpu/drm/panel/panel-mipi.c
+@@ -476,6 +476,12 @@ static struct panel_firmware *panel_mipi_load_firmware(struct device *dev)
+ 		goto err;
+ 	}
+ 
++	if (blob->size < sizeof(*hdr) + sizeof(*config)) {
++		dev_err(dev, "firmware: %s: config is truncated\n", filename);
++		err = -EINVAL;
++		goto err;
++	}
++
+ 	config = (struct panel_firmware_config *)(blob->data + sizeof(*hdr));
+ 	timings = (struct panel_firmware_panel_timing *)(blob->data +
+ 							 sizeof(*hdr) +
+diff --git a/drivers/mfd/syscon.c b/drivers/mfd/syscon.c
+index 21a7fcdd2..dc5821c4d 100644
+--- a/drivers/mfd/syscon.c
++++ b/drivers/mfd/syscon.c
+@@ -10,6 +10,7 @@
+ 
+ #include <linux/cleanup.h>
+ #include <linux/clk.h>
++#include <linux/device.h>
+ #include <linux/err.h>
+ #include <linux/hwspinlock.h>
+ #include <linux/list.h>
+@@ -193,18 +194,17 @@ static struct regmap *device_node_get_regmap(struct device_node *np,
+ 	return syscon->regmap;
+ }
+ 
+-/**
+- * of_syscon_register_regmap() - Register regmap for specified device node
+- * @np: Device tree node
+- * @regmap: Pointer to regmap object
+- *
+- * Register an externally created regmap object with syscon for the specified
+- * device tree node. This regmap will then be returned to client drivers using
+- * the syscon_regmap_lookup_by_phandle() API.
+- *
+- * Return: 0 on success, negative error code on failure.
+- */
+-int of_syscon_register_regmap(struct device_node *np, struct regmap *regmap)
++static void devm_syscon_regmap_release(struct device *dev, void *res)
++{
++	struct syscon *syscon = res;
++
++	mutex_lock(&syscon_list_lock);
++	list_del(&syscon->list);
++	mutex_unlock(&syscon_list_lock);
++}
++
++static int syscon_register_regmap(struct device_node *np, struct regmap *regmap,
++				  struct device *dev)
+ {
+ 	struct syscon *entry, *syscon = NULL;
+ 	int ret;
+@@ -212,7 +212,11 @@ int of_syscon_register_regmap(struct device_node *np, struct regmap *regmap)
+ 	if (!np || !regmap)
+ 		return -EINVAL;
+ 
+-	syscon = kzalloc_obj(*syscon);
++	if (dev)
++		syscon = devres_alloc(devm_syscon_regmap_release, sizeof(*syscon),
++				      GFP_KERNEL);
++	else
++		syscon = kzalloc_obj(*syscon);
+ 	if (!syscon)
+ 		return -ENOMEM;
+ 
+@@ -232,15 +236,51 @@ int of_syscon_register_regmap(struct device_node *np, struct regmap *regmap)
+ 	list_add_tail(&syscon->list, &syscon_list);
+ 	mutex_unlock(&syscon_list_lock);
+ 
++	if (dev)
++		devres_add(dev, syscon);
++
+ 	return 0;
+ 
+ err_unlock:
+ 	mutex_unlock(&syscon_list_lock);
+-	kfree(syscon);
++	if (dev)
++		devres_free(syscon);
++	else
++		kfree(syscon);
+ 	return ret;
+ }
++
++/**
++ * of_syscon_register_regmap() - Register regmap for specified device node
++ * @np: Device tree node
++ * @regmap: Pointer to regmap object
++ *
++ * Register an externally created regmap object with syscon for the specified
++ * device tree node. This regmap will then be returned to client drivers using
++ * the syscon_regmap_lookup_by_phandle() API.
++ *
++ * Return: 0 on success, negative error code on failure.
++ */
++int of_syscon_register_regmap(struct device_node *np, struct regmap *regmap)
++{
++	return syscon_register_regmap(np, regmap, NULL);
++}
+ EXPORT_SYMBOL_GPL(of_syscon_register_regmap);
+ 
++/**
++ * devm_of_syscon_register_regmap() - Register a device-owned syscon regmap
++ * @dev: Provider device
++ * @regmap: Regmap allocated before this registration
++ *
++ * Remove the registration before earlier managed regmap resources are freed.
++ * Return: 0 on success, negative error code on failure.
++ */
++int devm_of_syscon_register_regmap(struct device *dev, struct regmap *regmap)
++{
++	return syscon_register_regmap(dev->of_node, regmap, dev);
++}
++EXPORT_SYMBOL_GPL(devm_of_syscon_register_regmap);
++
+ /**
+  * device_node_to_regmap() - Get or create a regmap for specified device node
+  * @np: Device tree node
+diff --git a/include/linux/mfd/syscon.h b/include/linux/mfd/syscon.h
+index aad9c6b50..ac371c335 100644
+--- a/include/linux/mfd/syscon.h
++++ b/include/linux/mfd/syscon.h
+@@ -14,6 +14,7 @@
+ #include <linux/err.h>
+ #include <linux/errno.h>
+ 
++struct device;
+ struct device_node;
+ 
+ #ifdef CONFIG_MFD_SYSCON
+@@ -30,6 +31,7 @@ struct regmap *syscon_regmap_lookup_by_phandle_optional(struct device_node *np,
+ 							const char *property);
+ int of_syscon_register_regmap(struct device_node *np,
+ 			      struct regmap *regmap);
++int devm_of_syscon_register_regmap(struct device *dev, struct regmap *regmap);
+ #else
+ static inline struct regmap *device_node_to_regmap(struct device_node *np)
+ {
+@@ -75,6 +77,12 @@ static inline int of_syscon_register_regmap(struct device_node *np,
+ 	return -EOPNOTSUPP;
+ }
+ 
++static inline int devm_of_syscon_register_regmap(struct device *dev,
++					       struct regmap *regmap)
++{
++	return -EOPNOTSUPP;
++}
++
+ #endif
+ 
+ #endif /* __LINUX_MFD_SYSCON_H__ */

@@ -1,0 +1,27 @@
+#!/bin/sh
+# adb over the USB-C port (FunctionFS gadget).
+set -eu
+serial=$(tr -d '\000' < /sys/firmware/devicetree/base/chosen/baseos,serial 2>/dev/null || :)
+[ -n "$serial" ] || serial=baseos
+ip link set lo up
+mount -t configfs configfs /sys/kernel/config
+g=/sys/kernel/config/usb_gadget/baseos
+mkdir -p "$g/strings/0x409" "$g/configs/c.1/strings/0x409" "$g/functions/ffs.adb" /dev/usb-ffs/adb
+printf 0x18d1 > "$g/idVendor"
+printf 0x4e42 > "$g/idProduct"
+printf '%s' "$serial" > "$g/strings/0x409/serialnumber"
+printf BaseOS > "$g/strings/0x409/manufacturer"
+printf 'BaseOS 2' > "$g/strings/0x409/product"
+printf adb > "$g/configs/c.1/strings/0x409/configuration"
+ln -s "$g/functions/ffs.adb" "$g/configs/c.1/ffs.adb"
+mount -t functionfs adb /dev/usb-ffs/adb
+/usr/sbin/adbd > /run/baseos/adbd.log 2>&1 &
+n=0
+while [ "$n" -lt 100 ]; do
+	for udc in /sys/class/udc/*; do
+		[ -d "$udc" ] || continue
+		printf '%s' "${udc##*/}" > "$g/UDC" 2>/dev/null && exit 0
+	done
+	n=$((n + 1)); sleep 0.05
+done
+echo 'no USB device controller' >&2; exit 1

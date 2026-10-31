@@ -1,0 +1,475 @@
+From 8dd622f020a5665cae237624fc2d158884a7f4bf Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:05:10 +0000
+Subject: [PATCH 04/13] 0004-h700-rgb-stock-contract
+
+---
+ .../display/allwinner,sun4i-a10-tcon.yaml     |  29 +++++
+ drivers/clk/sunxi-ng/ccu-sun50i-h616.h        |   1 -
+ drivers/gpu/drm/sun4i/sun4i_rgb.c             |  30 +++++
+ drivers/gpu/drm/sun4i/sun4i_tcon.c            |  83 +++++++++++--
+ drivers/gpu/drm/sun4i/sun4i_tcon.h            |   7 ++
+ drivers/gpu/drm/sun4i/sun4i_tcon_dclk.c       | 116 +++++++++++++++++-
+ include/dt-bindings/clock/sun50i-h616-ccu.h   |   2 +
+ 7 files changed, 257 insertions(+), 11 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-tcon.yaml b/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-tcon.yaml
+index f9fc0d87c..a87b663a9 100644
+--- a/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-tcon.yaml
++++ b/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-tcon.yaml
+@@ -20,6 +20,7 @@ properties:
+ 
+   compatible:
+     oneOf:
++      - const: allwinner,sun50i-h700-tcon-lcd
+       - const: allwinner,sun4i-a10-tcon
+       - const: allwinner,sun5i-a13-tcon
+       - const: allwinner,sun6i-a31-tcon
+@@ -65,6 +66,11 @@ properties:
+               - allwinner,sun50i-h616-tcon-tv
+           - const: allwinner,sun8i-r40-tcon-tv
+ 
++  allwinner,dclk-sel:
++    description: Raw DCLK_SEL encoding from the per-model panel contract; no measured phase angle.
++    $ref: /schemas/types.yaml#/definitions/uint32
++    enum: [0, 2]
++
+   reg:
+     maxItems: 1
+ 
+@@ -173,6 +179,29 @@ required:
+ additionalProperties: false
+ 
+ allOf:
++  - if:
++      properties:
++        compatible:
++          contains:
++            const: allwinner,sun50i-h700-tcon-lcd
++    then:
++      properties:
++        clocks:
++          minItems: 3
++          maxItems: 3
++        clock-names:
++          items:
++            - const: ahb
++            - const: tcon-ch0
++            - const: pll-video0-4x
++      required:
++        - allwinner,dclk-sel
++        - "#clock-cells"
++        - clock-output-names
++    else:
++      properties:
++        allwinner,dclk-sel: false
++
+   - if:
+       properties:
+         compatible:
+diff --git a/drivers/clk/sunxi-ng/ccu-sun50i-h616.h b/drivers/clk/sunxi-ng/ccu-sun50i-h616.h
+index 7056f293a..37fce1e06 100644
+--- a/drivers/clk/sunxi-ng/ccu-sun50i-h616.h
++++ b/drivers/clk/sunxi-ng/ccu-sun50i-h616.h
+@@ -21,7 +21,6 @@
+ #define CLK_PLL_PERIPH1_2X	7
+ #define CLK_PLL_GPU		8
+ #define CLK_PLL_VIDEO0		9
+-#define CLK_PLL_VIDEO0_4X	10
+ #define CLK_PLL_VIDEO1		11
+ #define CLK_PLL_VIDEO1_4X	12
+ #define CLK_PLL_VIDEO2		13
+diff --git a/drivers/gpu/drm/sun4i/sun4i_rgb.c b/drivers/gpu/drm/sun4i/sun4i_rgb.c
+index 3da9a9283..f3d8f03db 100644
+--- a/drivers/gpu/drm/sun4i/sun4i_rgb.c
++++ b/drivers/gpu/drm/sun4i/sun4i_rgb.c
+@@ -7,6 +7,7 @@
+  */
+ 
+ #include <linux/clk.h>
++#include <video/videomode.h>
+ 
+ #include <drm/drm_atomic_helper.h>
+ #include <drm/drm_bridge.h>
+@@ -64,6 +65,32 @@ static int sun4i_rgb_get_modes(struct drm_connector *connector)
+  */
+ #define SUN4I_RGB_DOTCLOCK_TOLERANCE_PER_MILLE	5
+ 
++/* Advertising one mode alone does not reject userspace-created modes. */
++static enum drm_mode_status sun4i_h700_rgb_mode_valid(struct sun4i_rgb *rgb,
++                         const struct drm_display_mode *mode)
++{
++	struct display_timing timing;
++	struct drm_display_mode fixed = { 0 };
++	struct videomode vm;
++	unsigned long divider;
++	long rounded;
++
++	if (!rgb->panel || !rgb->panel->funcs->get_timings ||
++     rgb->panel->funcs->get_timings(rgb->panel, 1, &timing) != 1)
++		return MODE_BAD;
++	videomode_from_timing(&timing, &vm);
++	drm_display_mode_from_videomode(&vm, &fixed);
++	if (mode->clock <= 0 || mode->clock != fixed.clock ||
++     !drm_mode_equal(mode, &fixed))
++		return MODE_BAD;
++	divider = DIV_ROUND_CLOSEST(288000000UL, fixed.clock * 1000UL);
++	if (divider < 1 || divider > 127)
++		return MODE_CLOCK_RANGE;
++	rounded = clk_round_rate(rgb->tcon->dclk, fixed.clock * 1000UL);
++	return rounded > 0 && rounded == 288000000UL / divider ?
++		MODE_OK : MODE_CLOCK_RANGE;
++}
++
+ static enum drm_mode_status sun4i_rgb_mode_valid(struct drm_encoder *crtc,
+ 						 const struct drm_display_mode *mode)
+ {
+@@ -77,6 +104,9 @@ static enum drm_mode_status sun4i_rgb_mode_valid(struct drm_encoder *crtc,
+ 
+ 	DRM_DEBUG_DRIVER("Validating modes...\n");
+ 
++	if (tcon->quirks->h700_rgb)
++		return sun4i_h700_rgb_mode_valid(rgb, mode);
++
+ 	if (hsync < 1)
+ 		return MODE_HSYNC_NARROW;
+ 
+diff --git a/drivers/gpu/drm/sun4i/sun4i_tcon.c b/drivers/gpu/drm/sun4i/sun4i_tcon.c
+index a0f9a1c09..aad8519c8 100644
+--- a/drivers/gpu/drm/sun4i/sun4i_tcon.c
++++ b/drivers/gpu/drm/sun4i/sun4i_tcon.c
+@@ -307,12 +307,18 @@ static void sun4i_tcon0_mode_set_dithering(struct sun4i_tcon *tcon,
+ 	 * The whole dithering process and these parameters are not
+ 	 * explained in the vendor documents or BSP kernel code.
+ 	 */
+-	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_PR_REG, 0x11111111);
+-	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_PG_REG, 0x11111111);
+-	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_PB_REG, 0x11111111);
+-	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_LR_REG, 0x11111111);
+-	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_LG_REG, 0x11111111);
+-	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_LB_REG, 0x11111111);
++	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_PR_REG,
++		     tcon->quirks->h700_rgb ? 1 : 0x11111111);
++	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_PG_REG,
++		     tcon->quirks->h700_rgb ? 3 : 0x11111111);
++	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_PB_REG,
++		     tcon->quirks->h700_rgb ? 5 : 0x11111111);
++	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_LR_REG,
++		     tcon->quirks->h700_rgb ? 7 : 0x11111111);
++	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_LG_REG,
++		     tcon->quirks->h700_rgb ? 11 : 0x11111111);
++	regmap_write(tcon->regs, SUN4I_TCON0_FRM_SEED_LB_REG,
++		     tcon->quirks->h700_rgb ? 13 : 0x11111111);
+ 	regmap_write(tcon->regs, SUN4I_TCON0_FRM_TBL0_REG, 0x01010000);
+ 	regmap_write(tcon->regs, SUN4I_TCON0_FRM_TBL1_REG, 0x15151111);
+ 	regmap_write(tcon->regs, SUN4I_TCON0_FRM_TBL2_REG, 0x57575555);
+@@ -527,7 +533,8 @@ static void sun4i_tcon0_mode_set_rgb(struct sun4i_tcon *tcon,
+ 	sun4i_tcon0_mode_set_dithering(tcon, connector);
+ 
+ 	/* Adjust clock delay */
+-	clk_delay = sun4i_tcon_get_clk_delay(mode, 0);
++	clk_delay = tcon->quirks->h700_rgb ? 31 :
++		sun4i_tcon_get_clk_delay(mode, 0);
+ 	regmap_update_bits(tcon->regs, SUN4I_TCON0_CTL_REG,
+ 			   SUN4I_TCON0_CTL_CLK_DELAY_MASK,
+ 			   SUN4I_TCON0_CTL_CLK_DELAY(clk_delay));
+@@ -783,9 +790,59 @@ static irqreturn_t sun4i_tcon_handler(int irq, void *private)
+ 	return IRQ_HANDLED;
+ }
+ 
++static void sun4i_h700_fini_clocks(struct sun4i_tcon *tcon)
++{
++	if (tcon->h700_channel_enabled) {
++		clk_disable_unprepare(tcon->sclk0);
++		tcon->h700_channel_enabled = false;
++	}
++	if (!IS_ERR_OR_NULL(tcon->sclk0)) {
++		clk_put(tcon->sclk0);
++		tcon->sclk0 = NULL;
++	}
++	if (tcon->h700_bus_enabled) {
++		clk_disable_unprepare(tcon->clk);
++		tcon->h700_bus_enabled = false;
++	}
++	if (!IS_ERR_OR_NULL(tcon->clk)) {
++		clk_put(tcon->clk);
++		tcon->clk = NULL;
++	}
++}
++
++static int sun4i_h700_init_clocks(struct device *dev, struct sun4i_tcon *tcon)
++{
++	int ret;
++	tcon->clk = clk_get(dev, "ahb");
++	if (IS_ERR(tcon->clk)) {
++		ret = PTR_ERR(tcon->clk);
++		goto fail;
++	}
++	ret = clk_prepare_enable(tcon->clk);
++	if (ret)
++		goto fail;
++	tcon->h700_bus_enabled = true;
++	tcon->sclk0 = clk_get(dev, "tcon-ch0");
++	if (IS_ERR(tcon->sclk0)) {
++		ret = PTR_ERR(tcon->sclk0);
++		goto fail;
++	}
++	ret = clk_prepare_enable(tcon->sclk0);
++	if (ret)
++		goto fail;
++	tcon->h700_channel_enabled = true;
++	return 0;
++fail:
++	sun4i_h700_fini_clocks(tcon);
++	return ret;
++}
++
+ static int sun4i_tcon_init_clocks(struct device *dev,
+ 				  struct sun4i_tcon *tcon)
+ {
++	if (tcon->quirks->h700_rgb)
++		return sun4i_h700_init_clocks(dev, tcon);
++
+ 	tcon->clk = devm_clk_get_enabled(dev, "ahb");
+ 	if (IS_ERR(tcon->clk)) {
+ 		dev_err(dev, "Couldn't get the TCON bus clock\n");
+@@ -1295,6 +1352,8 @@ static int sun4i_tcon_bind(struct device *dev, struct device *master,
+ 	if (tcon->quirks->has_channel_0)
+ 		sun4i_dclk_free(tcon);
+ err_assert_reset:
++	if (tcon->quirks->h700_rgb)
++		sun4i_h700_fini_clocks(tcon);
+ 	reset_control_assert(tcon->lcd_rst);
+ 	return ret;
+ }
+@@ -1307,6 +1366,8 @@ static void sun4i_tcon_unbind(struct device *dev, struct device *master,
+ 	list_del(&tcon->list);
+ 	if (tcon->quirks->has_channel_0)
+ 		sun4i_dclk_free(tcon);
++	if (tcon->quirks->h700_rgb)
++		sun4i_h700_fini_clocks(tcon);
+ }
+ 
+ static const struct component_ops sun4i_tcon_ops = {
+@@ -1555,7 +1616,15 @@ static const struct sun4i_tcon_quirks sun20i_d1_lcd_quirks = {
+ };
+ 
+ /* sun4i_drv uses this list to check if a device node is a TCON */
++static const struct sun4i_tcon_quirks sun50i_h700_lcd_quirks = {
++	.h700_rgb = true,
++	.has_channel_0 = true,
++	.dclk_min_div = 1,
++	.set_mux = sun8i_r40_tcon_tv_set_mux,
++};
++
+ const struct of_device_id sun4i_tcon_of_table[] = {
++	{ .compatible = "allwinner,sun50i-h700-tcon-lcd", .data = &sun50i_h700_lcd_quirks },
+ 	{ .compatible = "allwinner,sun4i-a10-tcon", .data = &sun4i_a10_quirks },
+ 	{ .compatible = "allwinner,sun5i-a13-tcon", .data = &sun5i_a13_quirks },
+ 	{ .compatible = "allwinner,sun6i-a31-tcon", .data = &sun6i_a31_quirks },
+diff --git a/drivers/gpu/drm/sun4i/sun4i_tcon.h b/drivers/gpu/drm/sun4i/sun4i_tcon.h
+index fa23aa23f..d700846eb 100644
+--- a/drivers/gpu/drm/sun4i/sun4i_tcon.h
++++ b/drivers/gpu/drm/sun4i/sun4i_tcon.h
+@@ -236,6 +236,7 @@
+ struct sun4i_tcon;
+ 
+ struct sun4i_tcon_quirks {
++	bool	h700_rgb;
+ 	bool	has_channel_0;	/* a83t does not have channel 0 on second TCON */
+ 	bool	has_channel_1;	/* a33 does not have channel 1 */
+ 	bool	has_lvds_alt;	/* Does the LVDS clock have a parent other than the TCON clock? */
+@@ -267,6 +268,12 @@ struct sun4i_tcon {
+ 	/* Possible mux for the LVDS clock */
+ 	struct clk			*lvds_pll;
+ 
++	/* H700 bind-owned exclusive clock claims. */
++	struct clk *h700_pll;
++	bool h700_pll_owned, h700_sclk_owned;
++	bool h700_bus_enabled, h700_channel_enabled;
++	u32 h700_dclk_sel;
++
+ 	/* Pixel clock */
+ 	struct clk			*dclk;
+ 	u8				dclk_max_div;
+diff --git a/drivers/gpu/drm/sun4i/sun4i_tcon_dclk.c b/drivers/gpu/drm/sun4i/sun4i_tcon_dclk.c
+index 4afb12bd5..043fd67ae 100644
+--- a/drivers/gpu/drm/sun4i/sun4i_tcon_dclk.c
++++ b/drivers/gpu/drm/sun4i/sun4i_tcon_dclk.c
+@@ -6,6 +6,7 @@
+  * Maxime Ripard <maxime.ripard@free-electrons.com>
+  */
+ 
++#include <linux/clk.h>
+ #include <linux/clk-provider.h>
+ #include <linux/regmap.h>
+ 
+@@ -67,6 +68,67 @@ static unsigned long sun4i_dclk_recalc_rate(struct clk_hw *hw,
+ 	return parent_rate / val;
+ }
+ 
++/* This claim belongs to component bind, not the platform device lifetime. */
++static void sun4i_h700_clock_release(struct sun4i_tcon *tcon)
++{
++	if (tcon->h700_sclk_owned) {
++		clk_rate_exclusive_put(tcon->sclk0);
++		tcon->h700_sclk_owned = false;
++	}
++	if (tcon->h700_pll_owned) {
++		clk_rate_exclusive_put(tcon->h700_pll);
++		tcon->h700_pll_owned = false;
++	}
++	if (tcon->h700_pll) {
++		clk_put(tcon->h700_pll);
++		tcon->h700_pll = NULL;
++	}
++}
++
++static int sun4i_h700_clock_claim(struct device *dev, struct sun4i_tcon *tcon)
++{
++	struct clk_hw *mux = __clk_get_hw(tcon->sclk0);
++	int ret;
++
++	if (of_property_count_u32_elems(dev->of_node, "allwinner,dclk-sel") != 1 ||
++	    of_property_read_u32(dev->of_node, "allwinner,dclk-sel", &tcon->h700_dclk_sel) ||
++	    (tcon->h700_dclk_sel != 0 && tcon->h700_dclk_sel != 2))
++		return -EINVAL;
++	tcon->h700_pll = clk_get(dev, "pll-video0-4x");
++	if (IS_ERR(tcon->h700_pll)) {
++		ret = PTR_ERR(tcon->h700_pll);
++		tcon->h700_pll = NULL;
++		return ret;
++	}
++	/* CCU 0xb60 source 1 must be the explicit PLL_VIDEO0_4X input. */
++	if (clk_hw_get_parent_by_index(mux, 1) != __clk_get_hw(tcon->h700_pll)) {
++		ret = -EINVAL;
++		goto fail;
++	}
++	ret = clk_set_rate_exclusive(tcon->h700_pll, 288000000);
++	if (ret)
++		goto fail;
++	tcon->h700_pll_owned = true;
++	ret = clk_set_parent(tcon->sclk0, tcon->h700_pll);
++	if (ret)
++		goto fail;
++	ret = clk_rate_exclusive_get(tcon->sclk0);
++	if (ret)
++		goto fail;
++	tcon->h700_sclk_owned = true;
++	if (clk_get_rate(tcon->sclk0) != 288000000) {
++		ret = -EINVAL;
++		goto fail;
++	}
++	ret = regmap_update_bits(tcon->regs, SUN4I_TCON0_IO_POL_REG,
++			  GENMASK(29, 28), tcon->h700_dclk_sel << 28);
++	if (!ret)
++		return 0;
++fail:
++	sun4i_h700_clock_release(tcon);
++	return ret;
++}
++
+ static int sun4i_dclk_determine_rate(struct clk_hw *hw,
+ 				     struct clk_rate_request *req)
+ {
+@@ -76,6 +138,27 @@ static int sun4i_dclk_determine_rate(struct clk_hw *hw,
+ 	u8 best_div = 1;
+ 	int i;
+ 
++	if (tcon->quirks->h700_rgb) {
++		unsigned long delta = ULONG_MAX;
++		if (clk_hw_get_rate(clk_hw_get_parent(hw)) != 288000000 || !req->rate)
++			return -EINVAL;
++		for (i = tcon->dclk_min_div; i <= tcon->dclk_max_div; i++) {
++			unsigned long rate = 288000000 / i;
++			unsigned long diff = rate > req->rate ? rate - req->rate : req->rate - rate;
++			if (rate < req->min_rate || rate > req->max_rate)
++				continue;
++			if (diff < delta) {
++				delta = diff;
++				best_div = i;
++			}
++		}
++		if (delta == ULONG_MAX)
++			return -EINVAL;
++		req->best_parent_rate = 288000000;
++		req->rate = 288000000 / best_div;
++		return 0;
++	}
++
+ 	for (i = tcon->dclk_min_div; i <= tcon->dclk_max_div; i++) {
+ 		u64 ideal = (u64)req->rate * i;
+ 		unsigned long rounded;
+@@ -118,7 +201,22 @@ static int sun4i_dclk_set_rate(struct clk_hw *hw, unsigned long rate,
+ 			       unsigned long parent_rate)
+ {
+ 	struct sun4i_dclk *dclk = hw_to_dclk(hw);
+-	u8 div = parent_rate / rate;
++	u8 div;
++
++	if (dclk->tcon->quirks->h700_rgb) {
++		unsigned int i;
++		if (!rate || parent_rate != 288000000)
++			return -EINVAL;
++		/* determine_rate returned the floor of parent/div, not the kHz request. */
++		for (i = dclk->tcon->dclk_min_div; i <= dclk->tcon->dclk_max_div; i++)
++			if (parent_rate / i == rate)
++				break;
++		if (i > dclk->tcon->dclk_max_div)
++			return -EINVAL;
++		div = i;
++	} else {
++		div = parent_rate / rate;
++	}
+ 
+ 	return regmap_update_bits(dclk->regmap, SUN4I_TCON0_DCLK_REG,
+ 				  GENMASK(6, 0), div);
+@@ -187,14 +285,25 @@ int sun4i_dclk_create(struct device *dev, struct sun4i_tcon *tcon)
+ 	init.ops = &sun4i_dclk_ops;
+ 	init.parent_names = &parent_name;
+ 	init.num_parents = 1;
+-	init.flags = CLK_SET_RATE_PARENT;
++	init.flags = tcon->quirks->h700_rgb ? 0 : CLK_SET_RATE_PARENT;
+ 
+ 	dclk->regmap = tcon->regs;
+ 	dclk->hw.init = &init;
+ 
++	if (tcon->quirks->h700_rgb) {
++		/* CCF may validate a mode before the first modeset initializes these. */
++		tcon->dclk_min_div = tcon->quirks->dclk_min_div;
++		tcon->dclk_max_div = 127;
++		ret = sun4i_h700_clock_claim(dev, tcon);
++		if (ret)
++			return ret;
++	}
++
+ 	tcon->dclk = clk_register(dev, &dclk->hw);
+-	if (IS_ERR(tcon->dclk))
++	if (IS_ERR(tcon->dclk)) {
++		sun4i_h700_clock_release(tcon);
+ 		return PTR_ERR(tcon->dclk);
++	}
+ 
+ 	return 0;
+ }
+@@ -203,6 +312,7 @@ EXPORT_SYMBOL(sun4i_dclk_create);
+ int sun4i_dclk_free(struct sun4i_tcon *tcon)
+ {
+ 	clk_unregister(tcon->dclk);
++	sun4i_h700_clock_release(tcon);
+ 	return 0;
+ }
+ EXPORT_SYMBOL(sun4i_dclk_free);
+diff --git a/include/dt-bindings/clock/sun50i-h616-ccu.h b/include/dt-bindings/clock/sun50i-h616-ccu.h
+index 6889405f9..4ab2eff6d 100644
+--- a/include/dt-bindings/clock/sun50i-h616-ccu.h
++++ b/include/dt-bindings/clock/sun50i-h616-ccu.h
+@@ -6,6 +6,8 @@
+ #ifndef _DT_BINDINGS_CLK_SUN50I_H616_H_
+ #define _DT_BINDINGS_CLK_SUN50I_H616_H_
+ 
++#define CLK_PLL_VIDEO0_4X	10
++
+ #define CLK_PLL_PERIPH0		4
+ 
+ #define CLK_CPUX		21

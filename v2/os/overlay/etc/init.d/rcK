@@ -1,0 +1,14 @@
+#!/bin/sh
+# Stop the frontend, then release the card and /data cleanly.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+: > /run/baseos/stopping
+if read -r group < /run/baseos/frontend-pgid 2>/dev/null; then
+	kill -TERM -- "-$group" 2>/dev/null
+	n=0
+	while kill -0 -- "-$group" 2>/dev/null && [ "$n" -lt 30 ]; do sleep 0.1; n=$((n + 1)); done
+	kill -KILL -- "-$group" 2>/dev/null
+fi
+sync
+umount /mnt/sdcard 2>/dev/null || mount -o remount,ro /mnt/sdcard
+umount /data 2>/dev/null || mount -o remount,ro /data
+sync

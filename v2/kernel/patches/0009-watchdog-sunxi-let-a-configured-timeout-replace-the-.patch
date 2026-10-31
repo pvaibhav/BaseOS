@@ -1,0 +1,25 @@
+From b7d2ee7559252625c64a90fdf4eeed67470ab506 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:09:41 +0000
+Subject: [PATCH 09/13] watchdog: sunxi: let a configured timeout replace the
+ firmware one
+
+---
+ drivers/watchdog/sunxi_wdt.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/watchdog/sunxi_wdt.c b/drivers/watchdog/sunxi_wdt.c
+index 3db34524e..7646e1359 100644
+--- a/drivers/watchdog/sunxi_wdt.c
++++ b/drivers/watchdog/sunxi_wdt.c
+@@ -321,7 +321,9 @@ static int sunxi_wdt_probe(struct platform_device *pdev)
+ 
+ 	if (sunxi_wdt_is_running(&sunxi_wdt->wdt_dev)) {
+ 		running_timeout = sunxi_wdt_get_timeout(&sunxi_wdt->wdt_dev);
+-		if (running_timeout)
++		/* A configured timeout replaces the one the firmware armed. */
++		if (running_timeout && !timeout &&
++		    !of_property_present(dev->of_node, "timeout-sec"))
+ 			sunxi_wdt->wdt_dev.timeout = running_timeout;
+ 
+ 		err = sunxi_wdt_start(&sunxi_wdt->wdt_dev);

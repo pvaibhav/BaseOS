@@ -1,0 +1,354 @@
+From 4a2d4eb4838148cf3bf8a07c383ccc72eef501f9 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:10:20 +0000
+Subject: [PATCH 10/13] arm64: dts: allwinner: RG28XX BaseOS tree (U4-K
+ display, activated old panel)
+
+---
+ arch/arm64/boot/dts/allwinner/Makefile        |   1 +
+ .../sun50i-h700-anbernic-rg28xx-baseos.dts    | 268 ++++++++++++++++++
+ .../sun50i-h700-anbernic-rg28xx-phandles.dtsi |  48 ++++
+ 3 files changed, 317 insertions(+)
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+ create mode 100644 arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-phandles.dtsi
+
+diff --git a/arch/arm64/boot/dts/allwinner/Makefile b/arch/arm64/boot/dts/allwinner/Makefile
+index aa21f58a4..c16878df3 100644
+--- a/arch/arm64/boot/dts/allwinner/Makefile
++++ b/arch/arm64/boot/dts/allwinner/Makefile
+@@ -59,6 +59,7 @@ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h618-orangepi-zero2w.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h618-orangepi-zero3.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h618-transpeed-8k618-t.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h618-yuzukihd-chameleon.dtb
++dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg28xx-baseos.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg35xx-2024.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg35xx-h.dtb
+ dtb-$(CONFIG_ARCH_SUNXI) += sun50i-h700-anbernic-rg35xx-plus.dtb
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+new file mode 100644
+index 000000000..ba327a643
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -0,0 +1,268 @@
++// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++/dts-v1/;
++#include "sun50i-h616.dtsi"
++#include <dt-bindings/gpio/gpio.h>
++/* Pinned 7.3.1 CCU onecell index; private header, not a stable binding ID. */
++#define BASEOS_H616_PLL_GPU 8
++
++/ {
++    model = "BaseOS RG28XX host-only joined KMS candidate";
++    compatible = "anbernic,rg28xx", "allwinner,sun50i-h700";
++
++    reg_sd_boot: regulator-sd-boot {
++        compatible = "regulator-fixed";
++        regulator-name = "retained-boot-3v3";
++        regulator-min-microvolt = <3300000>;
++        regulator-max-microvolt = <3300000>;
++        regulator-always-on;
++        regulator-boot-on;
++    };
++    gpio-keys {
++        compatible = "gpio-keys-polled";
++        label = "ANBERNIC-keys";
++        poll-interval = <20>;
++        key-up {
++            gpios = <&pio 0 6 17>;
++            linux,code = <0x11>;
++            linux,input-type = <3>;
++            linux,input-value = <0xffffffff>;
++        };
++        key-down {
++            gpios = <&pio 4 0 17>;
++            linux,code = <0x11>;
++            linux,input-type = <3>;
++            linux,input-value = <0x1>;
++        };
++        key-left {
++            gpios = <&pio 0 8 17>;
++            linux,code = <0x10>;
++            linux,input-type = <3>;
++            linux,input-value = <0xffffffff>;
++        };
++        key-right {
++            gpios = <&pio 0 9 17>;
++            linux,code = <0x10>;
++            linux,input-type = <3>;
++            linux,input-value = <0x1>;
++        };
++        key-a {
++            gpios = <&pio 0 0 17>;
++            linux,code = <0x130>;
++        };
++        key-b {
++            gpios = <&pio 0 1 17>;
++            linux,code = <0x131>;
++        };
++        key-x {
++            gpios = <&pio 0 3 17>;
++            linux,code = <0x132>;
++        };
++        key-y {
++            gpios = <&pio 0 2 17>;
++            linux,code = <0x133>;
++        };
++        key-start {
++            gpios = <&pio 0 4 17>;
++            linux,code = <0x137>;
++        };
++        key-select {
++            gpios = <&pio 0 5 17>;
++            linux,code = <0x136>;
++        };
++        key-l1 {
++            gpios = <&pio 0 10 17>;
++            linux,code = <0x134>;
++        };
++        key-l2 {
++            gpios = <&pio 0 11 17>;
++            linux,code = <0x13a>;
++        };
++        key-r1 {
++            gpios = <&pio 0 12 17>;
++            linux,code = <0x135>;
++        };
++        key-r2 {
++            gpios = <&pio 0 7 17>;
++            linux,code = <0x13b>;
++        };
++        key-menu {
++            gpios = <&pio 4 3 17>;
++            linux,code = <0x138>;
++        };
++        key-volume-up {
++            gpios = <&pio 4 1 17>;
++            linux,code = <0x73>;
++        };
++        key-volume-down {
++            gpios = <&pio 4 2 17>;
++            linux,code = <0x72>;
++        };
++    };
++
++    reserved-memory {
++        #address-cells = <2>;
++        #size-cells = <2>;
++        ranges;
++        secmon@40000000 { reg = <0 0x40000000 0 0x40000>; no-map; };
++    };
++
++    aliases {
++        serial0 = &uart0;
++    };
++
++    chosen {
++        #address-cells = <2>;
++        #size-cells = <2>;
++        ranges;
++        stdout-path = "serial0:115200n8";
++        bootargs = "rdinit=/init console=ttyS0,115200 panic=3 clk_ignore_unused maxcpus=1 watchdog.stop_on_reboot=0";
++        baseos,trial;
++        framebuffer@0 {
++            compatible = "simple-framebuffer";
++            reg = <0 0 0 0>;
++            width = <480>;
++            height = <640>;
++            stride = <1920>;
++            format = "x8r8g8b8";
++            status = "disabled";
++        };
++
++    };
++
++    /* Final RAM geometry and initrd extents come from the loader each boot. */
++    memory@40000000 {
++        device_type = "memory";
++        reg = <0 0x40000000 0 0x40000000>;
++    };
++};
++
++&uart0 {
++    pinctrl-names = "default";
++    pinctrl-0 = <&uart0_ph_pins>;
++    status = "okay";
++};
++
++&usbotg {
++    dr_mode = "peripheral";
++    status = "okay";
++};
++
++&usbphy {
++    status = "okay";
++};
++
++/* This node also supplies CCU clocks; the RTC time driver stays disabled. */
++&rtc {
++    status = "okay";
++};
++
++&watchdog {
++    status = "okay";
++};
++
++&mmc0 {
++    pinctrl-names = "default";
++    pinctrl-0 = <&mmc0_pins>;
++    vmmc-supply = <&reg_sd_boot>;
++    vqmmc-supply = <&reg_sd_boot>;
++    bus-width = <4>;
++    max-frequency = <50000000>;
++    non-removable;
++    no-sdio;
++    no-mmc;
++    no-1-8-v;
++    cap-sd-highspeed;
++    status = "okay";
++};
++&mmc1 { status = "disabled"; };
++&mmc2 { status = "disabled"; };
++&r_i2c { status = "disabled"; };
++
++
++/* Frequency-only: dedicated PLL, no OPP table or PMIC control. */
++&gpu {
++    mali-supply = <&reg_gpu_sys_retained>;
++    assigned-clocks = <&ccu BASEOS_H616_PLL_GPU>, <&ccu CLK_GPU0>;
++    assigned-clock-parents = <0>, <&ccu BASEOS_H616_PLL_GPU>;
++    assigned-clock-rates = <420000000>, <420000000>;
++    status = "okay";
++};
++/ {
++    reg_gpu_sys_retained: regulator-gpu-sys-retained {
++        compatible = "regulator-fixed";
++        regulator-name = "retained-vdd-gpu-sys";
++        regulator-min-microvolt = <940000>;
++        regulator-max-microvolt = <940000>;
++        regulator-always-on;
++        regulator-boot-on;
++    };
++};
++
++/ {
++    backlight: backlight {
++        compatible = "pwm-backlight";
++        pwms = <&pwm 0 20000 0>;
++        pinctrl-names = "default";
++        pinctrl-0 = <&pwm0_pin>;
++        status = "disabled";
++    };
++    spi_lcd: spi-lcd {
++        compatible = "spi-gpio";
++        #address-cells = <1>;
++        #size-cells = <0>;
++        sck-gpios = <&pio 8 9 GPIO_ACTIVE_HIGH>;
++        mosi-gpios = <&pio 8 10 GPIO_ACTIVE_HIGH>;
++        cs-gpios = <&pio 8 8 GPIO_ACTIVE_HIGH>;
++        num-chipselects = <1>;
++        status = "disabled";
++        panel: panel@0 {
++            baseos,panel = "old";
++            compatible = "baseos,rg28xx-panel";
++            reg = <0>;
++            spi-max-frequency = <1000000>;
++            reset-gpios = <&pio 8 14 GPIO_ACTIVE_LOW>;
++            backlight = <&backlight>;
++            power-gpios = <&pio 8 15 GPIO_ACTIVE_HIGH>;
++            pinctrl-names = "default", "sleep";
++            pinctrl-0 = <&lcd0_rgb888_pins>;
++            pinctrl-1 = <&lcd_rgb_sleep>;
++            status = "disabled";
++            port {
++                panel_in: endpoint { remote-endpoint = <&tcon_lcd0_out_lcd>; };
++            };
++        };
++    };
++};
++&pio { vcc-pd-supply = <&reg_sd_boot>; vcc-pi-supply = <&reg_sd_boot>; };
++&tcon_lcd0_out_lcd { remote-endpoint = <&panel_in>; };
++
++&pio {
++    lcd_rgb_sleep: lcd-rgb-sleep {
++        pins = "PD0", "PD1", "PD2", "PD3", "PD4", "PD5", "PD6", "PD7", "PD8", "PD9", "PD10", "PD11", "PD12", "PD13", "PD14", "PD15", "PD16", "PD17", "PD18", "PD19", "PD20", "PD21", "PD22", "PD23", "PD24", "PD25", "PD26", "PD27";
++        function = "io_disabled";
++        bias-disable;
++    };
++};
++&de { baseos,display-group; status = "okay"; };
++&de_bus { baseos,display-group; status = "okay"; };
++&display_clocks { baseos,display-group; status = "okay"; };
++&planes { baseos,display-group; status = "okay"; };
++&mixer0 { baseos,display-group; status = "okay"; };
++&tcon_top { baseos,display-group; status = "okay"; };
++&tcon_lcd0 { baseos,display-group; status = "okay"; };
++&pwm { baseos,display-group; status = "okay"; };
++&spi_lcd { baseos,display-group; status = "okay"; };
++&panel { baseos,display-group; status = "okay"; };
++&backlight { baseos,display-group; status = "okay"; };
++&tcon_top_mixer1_out { status = "disabled"; };
++&tcon_top_mixer1_out_tcon_lcd0 { status = "disabled"; };
++&tcon_lcd0 {
++    compatible = "allwinner,sun50i-h700-tcon-lcd";
++    clocks = <&ccu CLK_BUS_TCON_LCD0>, <&ccu CLK_TCON_LCD0>, <&ccu CLK_PLL_VIDEO0_4X>;
++    clock-names = "ahb", "tcon-ch0", "pll-video0-4x";
++    allwinner,dclk-sel = <0>;
++};
++
++&watchdog { timeout-sec = <4>; };
++
++#include "sun50i-h700-anbernic-rg28xx-phandles.dtsi"
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-phandles.dtsi b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-phandles.dtsi
+new file mode 100644
+index 000000000..f2706b756
+--- /dev/null
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-phandles.dtsi
+@@ -0,0 +1,48 @@
++/* Phandle values the E1 loader seals in its display policy. Pinned so new nodes cannot renumber them. */
++&{/soc/interrupt-controller@3021000} { phandle = <1>; };
++&{/soc/clock@3001000} { phandle = <2>; };
++&{/cpus/l2-cache} { phandle = <3>; };
++&{/soc/bus@1000000/mixer@280000} { phandle = <4>; };
++&{/cpus/cpu@0} { phandle = <5>; };
++&{/cpus/cpu@1} { phandle = <6>; };
++&{/cpus/cpu@2} { phandle = <7>; };
++&{/cpus/cpu@3} { phandle = <8>; };
++&{/soc/syscon@3000000/sram@28000/sram-section@0} { phandle = <9>; };
++&{/soc/bus@1000000/clock@8000} { phandle = <10>; };
++&{/soc/bus@1000000/planes@100000} { phandle = <11>; };
++&{/soc/tcon-top@6510000/ports/port@0/endpoint@0} { phandle = <12>; };
++&{/soc/tcon-top@6510000/ports/port@2/endpoint@1} { phandle = <13>; };
++&{/soc/power-controller@7010250} { phandle = <14>; };
++&{/regulator-gpu-sys-retained} { phandle = <15>; };
++&{/soc/rtc@7000000} { phandle = <16>; };
++&{/osc24M-clk} { phandle = <17>; };
++&{/regulator-sd-boot} { phandle = <18>; };
++&{/soc/dma-controller@3002000} { phandle = <19>; };
++&{/soc/pinctrl@300b000/mmc0-pins} { phandle = <20>; };
++&{/soc/pinctrl@300b000/mmc1-pins} { phandle = <21>; };
++&{/soc/pinctrl@300b000/mmc2-pins} { phandle = <22>; };
++&{/soc/pinctrl@300b000/uart0-ph-pins} { phandle = <23>; };
++&{/soc/pinctrl@300b000/i2c0-pins} { phandle = <24>; };
++&{/soc/syscon@3000000} { phandle = <25>; };
++&{/soc/efuse@3006000/thermal-sensor-calibration@14} { phandle = <26>; };
++&{/soc/pinctrl@300b000/spdif-tx-pin} { phandle = <27>; };
++&{/soc/phy@5100400} { phandle = <28>; };
++&{/soc/bus@1000000/mixer@280000/ports/port@1/endpoint} { phandle = <29>; };
++&{/soc/lcd-controller@6511000/ports/port@0/endpoint@0} { phandle = <30>; };
++&{/soc/bus@1000000/mixer@2a0000/ports/port@1/endpoint} { phandle = <31>; };
++&{/soc/lcd-controller@6511000/ports/port@0/endpoint@1} { phandle = <32>; };
++&{/soc/tcon-top@6510000/ports/port@1/endpoint@0} { phandle = <33>; };
++&{/soc/tcon-top@6510000/ports/port@3/endpoint@0} { phandle = <34>; };
++&{/spi-lcd/panel@0/port/endpoint} { phandle = <35>; };
++&{/soc/clock@7010000} { phandle = <36>; };
++&{/soc/pinctrl@300b000/ir-rx-pin} { phandle = <37>; };
++&{/soc/pinctrl@7022000/r-i2c-pins} { phandle = <38>; };
++&{/soc/pinctrl@7022000/r-rsb-pins} { phandle = <39>; };
++&{/soc/thermal-sensor@5070400} { phandle = <40>; };
++&{/soc/pinctrl@300b000} { phandle = <41>; };
++&{/soc/pwm@300a000} { phandle = <42>; };
++&{/soc/pinctrl@300b000/pwm0-pin} { phandle = <43>; };
++&{/backlight} { phandle = <44>; };
++&{/soc/pinctrl@300b000/lcd0-rgb888-pins} { phandle = <45>; };
++&{/soc/pinctrl@300b000/lcd-rgb-sleep} { phandle = <46>; };
++&{/soc/lcd-controller@6511000/ports/port@1/endpoint@0} { phandle = <47>; };

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Development boots (baseos.dev on the command line) are fed only while the
+# host keeps touching /run/hb, so an unattended failure returns to stock.
+# Otherwise feed forever with a 4 s timeout.
+case " $(cat /proc/cmdline) " in
+*' baseos.dev '*) exec /usr/sbin/baseos-feeder ;;
+*) exec /usr/bin/busybox watchdog -F -T 4 -t 1 /dev/watchdog ;;
+esac

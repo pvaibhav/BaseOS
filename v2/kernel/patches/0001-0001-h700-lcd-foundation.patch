@@ -1,0 +1,4307 @@
+From b7554ae80fd6f44b59dbaa88518b9125a8fcc3c2 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:05:10 +0000
+Subject: [PATCH 01/13] 0001-h700-lcd-foundation
+
+---
+ .../bus/allwinner,sun50i-a64-de2.yaml         |    7 +-
+ .../allwinner,sun4i-a10-display-engine.yaml   |    1 +
+ .../display/allwinner,sun4i-a10-tcon.yaml     |   10 +
+ .../display/allwinner,sun8i-r40-tcon-top.yaml |   13 +-
+ .../bindings/display/panel/panel-mipi.yaml    |  122 ++
+ .../bindings/pwm/allwinner,sun4i-a10-pwm.yaml |   33 +-
+ .../devicetree/bindings/vendor-prefixes.yaml  |    2 +
+ .../arm64/boot/dts/allwinner/sun50i-h616.dtsi |  257 +++
+ drivers/clk/sunxi-ng/ccu-sun8i-de2.c          |   52 +-
+ drivers/gpu/drm/panel/Kconfig                 |    9 +
+ drivers/gpu/drm/panel/Makefile                |    1 +
+ drivers/gpu/drm/panel/panel-mipi.c            | 1181 +++++++++++++
+ drivers/gpu/drm/sun4i/Kconfig                 |    8 +
+ drivers/gpu/drm/sun4i/Makefile                |    1 +
+ drivers/gpu/drm/sun4i/sun4i_drv.c             |    1 +
+ drivers/gpu/drm/sun4i/sun4i_tcon.c            |    9 +
+ drivers/gpu/drm/sun4i/sun50i_planes.c         |  205 +++
+ drivers/gpu/drm/sun4i/sun50i_planes.h         |   43 +
+ drivers/gpu/drm/sun4i/sun8i_mixer.c           |  134 +-
+ drivers/gpu/drm/sun4i/sun8i_mixer.h           |   10 +-
+ drivers/gpu/drm/sun4i/sun8i_vi_layer.c        |   36 +-
+ drivers/pwm/Kconfig                           |   12 +
+ drivers/pwm/Makefile                          |    1 +
+ drivers/pwm/pwm-sun8i.c                       | 1542 +++++++++++++++++
+ include/dt-bindings/clock/sun8i-tcon-top.h    |    2 +
+ 25 files changed, 3609 insertions(+), 83 deletions(-)
+ create mode 100644 Documentation/devicetree/bindings/display/panel/panel-mipi.yaml
+ create mode 100644 drivers/gpu/drm/panel/panel-mipi.c
+ create mode 100644 drivers/gpu/drm/sun4i/sun50i_planes.c
+ create mode 100644 drivers/gpu/drm/sun4i/sun50i_planes.h
+ create mode 100644 drivers/pwm/pwm-sun8i.c
+
+diff --git a/Documentation/devicetree/bindings/bus/allwinner,sun50i-a64-de2.yaml b/Documentation/devicetree/bindings/bus/allwinner,sun50i-a64-de2.yaml
+index 232252e88..1161e058f 100644
+--- a/Documentation/devicetree/bindings/bus/allwinner,sun50i-a64-de2.yaml
++++ b/Documentation/devicetree/bindings/bus/allwinner,sun50i-a64-de2.yaml
+@@ -24,7 +24,9 @@ properties:
+     oneOf:
+       - const: allwinner,sun50i-a64-de2
+       - items:
+-          - const: allwinner,sun50i-h6-de3
++          - enum:
++              - allwinner,sun50i-h6-de3
++              - allwinner,sun50i-h616-de33
+           - const: allwinner,sun50i-a64-de2
+ 
+   reg:
+@@ -47,9 +49,6 @@ patternProperties:
+   "@[0-9a-f]+$":
+     type: object
+     additionalProperties: true
+-    properties:
+-      reg:
+-        maxItems: 1
+ 
+     required:
+       - reg
+diff --git a/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-display-engine.yaml b/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-display-engine.yaml
+index e6088f379..117426862 100644
+--- a/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-display-engine.yaml
++++ b/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-display-engine.yaml
+@@ -65,6 +65,7 @@ properties:
+       - allwinner,sun20i-d1-display-engine
+       - allwinner,sun50i-a64-display-engine
+       - allwinner,sun50i-h6-display-engine
++      - allwinner,sun50i-h616-display-engine
+ 
+   allwinner,pipelines:
+     $ref: /schemas/types.yaml#/definitions/phandle-array
+diff --git a/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-tcon.yaml b/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-tcon.yaml
+index 724d93b91..f9fc0d87c 100644
+--- a/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-tcon.yaml
++++ b/Documentation/devicetree/bindings/display/allwinner,sun4i-a10-tcon.yaml
+@@ -29,6 +29,7 @@ properties:
+       - const: allwinner,sun8i-a33-tcon
+       - const: allwinner,sun8i-a83t-tcon-lcd
+       - const: allwinner,sun8i-a83t-tcon-tv
++      - const: allwinner,sun8i-r40-tcon-lcd
+       - const: allwinner,sun8i-r40-tcon-tv
+       - const: allwinner,sun8i-v3s-tcon
+       - const: allwinner,sun9i-a80-tcon-lcd
+@@ -47,6 +48,11 @@ properties:
+               - allwinner,sun50i-a64-tcon-lcd
+           - const: allwinner,sun8i-a83t-tcon-lcd
+ 
++      - items:
++          - enum:
++              - allwinner,sun50i-h616-tcon-lcd
++          - const: allwinner,sun8i-r40-tcon-lcd
++
+       - items:
+           - enum:
+               - allwinner,sun8i-h3-tcon-tv
+@@ -56,6 +62,7 @@ properties:
+       - items:
+           - enum:
+               - allwinner,sun50i-h6-tcon-tv
++              - allwinner,sun50i-h616-tcon-tv
+           - const: allwinner,sun8i-r40-tcon-tv
+ 
+   reg:
+@@ -231,6 +238,7 @@ allOf:
+           contains:
+             enum:
+               - allwinner,sun8i-a83t-tcon-lcd
++              - allwinner,sun8i-r40-tcon-lcd
+               - allwinner,sun8i-v3s-tcon
+               - allwinner,sun9i-a80-tcon-lcd
+               - allwinner,sun20i-d1-tcon-lcd
+@@ -280,6 +288,7 @@ allOf:
+               - allwinner,sun9i-a80-tcon-lcd
+               - allwinner,sun4i-a10-tcon
+               - allwinner,sun8i-a83t-tcon-lcd
++              - allwinner,sun8i-r40-tcon-lcd
+               - allwinner,sun20i-d1-tcon-lcd
+ 
+     then:
+@@ -297,6 +306,7 @@ allOf:
+               - allwinner,sun8i-a23-tcon
+               - allwinner,sun8i-a33-tcon
+               - allwinner,sun8i-a83t-tcon-lcd
++              - allwinner,sun8i-r40-tcon-lcd
+               - allwinner,sun20i-d1-tcon-lcd
+ 
+     then:
+diff --git a/Documentation/devicetree/bindings/display/allwinner,sun8i-r40-tcon-top.yaml b/Documentation/devicetree/bindings/display/allwinner,sun8i-r40-tcon-top.yaml
+index 7d849c409..80f1e49f5 100644
+--- a/Documentation/devicetree/bindings/display/allwinner,sun8i-r40-tcon-top.yaml
++++ b/Documentation/devicetree/bindings/display/allwinner,sun8i-r40-tcon-top.yaml
+@@ -39,10 +39,15 @@ properties:
+     const: 1
+ 
+   compatible:
+-    enum:
+-      - allwinner,sun8i-r40-tcon-top
+-      - allwinner,sun20i-d1-tcon-top
+-      - allwinner,sun50i-h6-tcon-top
++    oneOf:
++      - enum:
++          - allwinner,sun8i-r40-tcon-top
++          - allwinner,sun20i-d1-tcon-top
++          - allwinner,sun50i-h6-tcon-top
++      - items:
++          - enum:
++              - allwinner,sun50i-h616-tcon-top
++          - const: allwinner,sun50i-h6-tcon-top
+ 
+   reg:
+     maxItems: 1
+diff --git a/Documentation/devicetree/bindings/display/panel/panel-mipi.yaml b/Documentation/devicetree/bindings/display/panel/panel-mipi.yaml
+new file mode 100644
+index 000000000..b3be83873
+--- /dev/null
++++ b/Documentation/devicetree/bindings/display/panel/panel-mipi.yaml
+@@ -0,0 +1,122 @@
++# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/display/panel/panel-mipi.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Generic MIPI-DSI/DPI Panels Requiring Initialization
++
++maintainers:
++  - Hironori KIKUCHI <kikuchan98@gmail.com>
++
++description: This is a binding for generic MIPI-DSI/DPI panels that require
++  initialization with a simple command sequence before use.
++
++properties:
++  compatible:
++    oneOf:
++      - items:
++          - enum:
++              # Unknown 3.35" 720x480 24-bit IPS LCD panel
++              # used in Anbernic RG 34XX
++              - anbernic,rg28xx-panel-old
++              - anbernic,rg34xx-panel
++              # Unknown 4.00" 640x480 24-bit IPS LCD panel (YLM-LBV0400001X-V1)
++              # used in Anbernic RG40XX series
++              - anbernic,rg40xx-panel
++              # Unknown 3.95" 720x720 24-bit IPS LCD panel (YLM-LBN0395004H-V1)
++              # used in Anbernic RG CubeXX
++              - anbernic,rgcubexx-panel
++          - const: panel-mipi-dpi-spi
++      - items:
++          - enum:
++              # HOTHMI TFT-H028B23VGIST7G40-V1 2.80" 480x640 TFT LCD panel
++              - hothmi,tft-h028b23vgist7g40-v1
++          - const: panel-mipi-dsi
++
++  reg:
++    description: DSI / SPI channel used by that screen
++    maxItems: 1
++
++  power-supply: true
++
++  io-supply:
++    description: I/O system regulator.
++      No need to set if this is the same as polwer-supply.
++
++  dc-gpios:
++    maxItems: 1
++    description: Controller data/command selection (D/CX) in 4-line SPI mode.
++      If not set, the controller is in 3-line SPI mode.
++      Disallowed for DSI.
++
++  port: true
++  reset-gpios: true
++
++  backlight: true
++
++required:
++  - compatible
++  - reg
++
++allOf:
++  - $ref: panel-common.yaml#
++  - if:
++      properties:
++        compatible:
++          contains:
++            enum:
++              - panel-mipi-dpi-spi
++    then:
++      # SPI mode
++      $ref: /schemas/spi/spi-peripheral-props.yaml#
++
++  - if:
++      properties:
++        compatible:
++          contains:
++            enum:
++              - panel-mipi-dsi
++    then:
++      # DSI mode
++      properties:
++        dc-gpios: false
++
++unevaluatedProperties: false
++
++examples:
++  - |
++    dsi {
++        #address-cells = <1>;
++        #size-cells = <0>;
++
++        panel@0 {
++            compatible = "hothmi,tft-h028b23vgist7g40-v1", "panel-mipi-dsi";
++            reg = <0>;
++
++            port {
++                mipi_in_panel: endpoint {
++                    remote-endpoint = <&mipi_out_panel>;
++                };
++            };
++        };
++    };
++  - |
++    #include <dt-bindings/gpio/gpio.h>
++
++    spi {
++        #address-cells = <1>;
++        #size-cells = <0>;
++
++        panel@0 {
++            compatible = "anbernic,rg40xx-panel", "panel-mipi-dpi-spi";
++            reg = <0>;
++
++            spi-max-frequency = <40000000>;
++
++            dc-gpios = <&gpio 24 GPIO_ACTIVE_HIGH>;
++            reset-gpios = <&gpio 25 GPIO_ACTIVE_LOW>;
++
++            backlight = <&backlight>;
++        };
++    };
+diff --git a/Documentation/devicetree/bindings/pwm/allwinner,sun4i-a10-pwm.yaml b/Documentation/devicetree/bindings/pwm/allwinner,sun4i-a10-pwm.yaml
+index 1197858e4..3b1819c86 100644
+--- a/Documentation/devicetree/bindings/pwm/allwinner,sun4i-a10-pwm.yaml
++++ b/Documentation/devicetree/bindings/pwm/allwinner,sun4i-a10-pwm.yaml
+@@ -14,6 +14,13 @@ properties:
+   "#pwm-cells":
+     const: 3
+ 
++  "#clock-cells":
++    const: 1
++    description:
++      The cell selects the PWM channel whose hardware bypass path is exported
++      as a clock. Its rate follows the selected shared pair source and divider;
++      the PWM period, duty-cycle and polarity logic is bypassed.
++
+   compatible:
+     oneOf:
+       - const: allwinner,sun4i-a10-pwm
+@@ -36,6 +43,7 @@ properties:
+           - const: allwinner,sun50i-h5-pwm
+           - const: allwinner,sun5i-a13-pwm
+       - const: allwinner,sun50i-h6-pwm
++      - const: allwinner,sun50i-h616-pwm
+ 
+   reg:
+     maxItems: 1
+@@ -62,7 +70,9 @@ allOf:
+       properties:
+         compatible:
+           contains:
+-            const: allwinner,sun50i-h6-pwm
++            enum:
++              - allwinner,sun50i-h6-pwm
++              - allwinner,sun50i-h616-pwm
+ 
+     then:
+       properties:
+@@ -83,6 +93,27 @@ allOf:
+         clocks:
+           maxItems: 1
+ 
++  - if:
++      properties:
++        compatible:
++          contains:
++            const: allwinner,sun50i-h616-pwm
++
++    then:
++      properties:
++        clocks:
++          minItems: 2
++
++        clock-names:
++          minItems: 2
++
++      required:
++        - "#clock-cells"
++
++    else:
++      properties:
++        "#clock-cells": false
++
+ required:
+   - compatible
+   - reg
+diff --git a/Documentation/devicetree/bindings/vendor-prefixes.yaml b/Documentation/devicetree/bindings/vendor-prefixes.yaml
+index ba2002969..3189f4f0a 100644
+--- a/Documentation/devicetree/bindings/vendor-prefixes.yaml
++++ b/Documentation/devicetree/bindings/vendor-prefixes.yaml
+@@ -757,6 +757,8 @@ patternProperties:
+     description: Shenzhen Hope Microelectronics Co., Ltd.
+   "^hoperun,.*":
+     description: Jiangsu HopeRun Software Co., Ltd.
++  "^hothmi,.*":
++    description: Hotdisplay Technology Co.Ltd
+   "^hp,.*":
+     description: Hewlett Packard Inc.
+   "^hpe,.*":
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+index 1598e8625..899bf9246 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+@@ -7,8 +7,11 @@
+ #include <dt-bindings/clock/sun50i-h616-ccu.h>
+ #include <dt-bindings/clock/sun50i-h6-r-ccu.h>
+ #include <dt-bindings/clock/sun6i-rtc.h>
++#include <dt-bindings/clock/sun8i-de2.h>
++#include <dt-bindings/clock/sun8i-tcon-top.h>
+ #include <dt-bindings/reset/sun50i-h616-ccu.h>
+ #include <dt-bindings/reset/sun50i-h6-r-ccu.h>
++#include <dt-bindings/reset/sun8i-de2.h>
+ #include <dt-bindings/thermal/thermal.h>
+ 
+ / {
+@@ -94,6 +97,12 @@ l2_cache: l2-cache {
+ 		};
+ 	};
+ 
++	de: display-engine {
++		compatible = "allwinner,sun50i-h616-display-engine";
++		allwinner,pipelines = <&mixer0>;
++		status = "disabled";
++	};
++
+ 	reserved-memory {
+ 		#address-cells = <2>;
+ 		#size-cells = <2>;
+@@ -150,6 +159,87 @@ soc {
+ 		#size-cells = <1>;
+ 		ranges = <0x0 0x0 0x0 0x40000000>;
+ 
++		de_bus: bus@1000000 {
++			status = "disabled";
++			compatible = "allwinner,sun50i-h616-de33",
++				     "allwinner,sun50i-a64-de2";
++			reg = <0x1000000 0x400000>;
++			allwinner,sram = <&sram_c 1>;
++			#address-cells = <1>;
++			#size-cells = <1>;
++			ranges = <0 0x1000000 0x400000>;
++
++			display_clocks: clock@8000 {
++				status = "disabled";
++				compatible = "allwinner,sun50i-h616-de33-clk";
++				reg = <0x8000 0x100>;
++				clocks = <&ccu CLK_DE>, <&ccu CLK_BUS_DE>;
++				clock-names = "mod", "bus";
++				resets = <&ccu RST_BUS_DE>;
++				#clock-cells = <1>;
++				#reset-cells = <1>;
++			};
++
++			planes: planes@100000 {
++				status = "disabled";
++				compatible = "allwinner,sun50i-h616-de33-planes";
++				reg = <0x100000 0x180000>;
++				allwinner,plane-mapping = <&display_clocks>;
++			};
++
++			mixer0: mixer@280000 {
++				status = "disabled";
++				compatible = "allwinner,sun50i-h616-de33-mixer-0";
++				reg = <0x280000 0x20000>,
++				      <0x8100 0x40>;
++				clocks = <&display_clocks CLK_BUS_MIXER0>,
++					 <&display_clocks CLK_MIXER0>;
++				clock-names = "bus", "mod";
++				resets = <&display_clocks RST_MIXER0>;
++				allwinner,planes = <&planes>;
++
++				ports {
++					#address-cells = <1>;
++					#size-cells = <0>;
++
++					mixer0_out: port@1 {
++						reg = <1>;
++
++						mixer0_out_tcon_top_mixer0: endpoint {
++				status = "disabled";
++							remote-endpoint = <&tcon_top_mixer0_in_mixer0>;
++						};
++					};
++				};
++			};
++
++			mixer1: mixer@2a0000 {
++				status = "disabled";
++				compatible = "allwinner,sun50i-h616-de33-mixer-0";
++				reg = <0x2a0000 0x20000>,
++				      <0x8140 0x40>;
++				clocks = <&display_clocks CLK_BUS_MIXER1>,
++					 <&display_clocks CLK_MIXER1>;
++				clock-names = "bus", "mod";
++				resets = <&display_clocks RST_MIXER1>;
++				allwinner,planes = <&planes>;
++
++				ports {
++					#address-cells = <1>;
++					#size-cells = <0>;
++
++					mixer1_out: port@1 {
++						reg = <1>;
++
++						mixer1_out_tcon_top_mixer1: endpoint {
++				status = "disabled";
++							remote-endpoint = <&tcon_top_mixer1_in_mixer1>;
++						};
++					};
++				};
++			};
++		};
++
+ 		gpu: gpu@1800000 {
+ 			compatible = "allwinner,sun50i-h616-mali",
+ 				     "arm,mali-bifrost";
+@@ -281,6 +371,17 @@ watchdog: watchdog@30090a0 {
+ 			clocks = <&osc24M>;
+ 		};
+ 
++		pwm: pwm@300a000 {
++			compatible = "allwinner,sun50i-h616-pwm";
++			reg = <0x0300a000 0x400>;
++			clocks = <&osc24M>, <&ccu CLK_BUS_PWM>;
++			clock-names = "mod", "bus";
++			resets = <&ccu RST_BUS_PWM>;
++			#pwm-cells = <3>;
++			#clock-cells = <1>;
++			status = "disabled";
++		};
++
+ 		pio: pinctrl@300b000 {
+ 			compatible = "allwinner,sun50i-h616-pinctrl";
+ 			reg = <0x0300b000 0x400>;
+@@ -323,6 +424,24 @@ ir_rx_pin: ir-rx-pin {
+ 				function = "ir_rx";
+ 			};
+ 
++			/omit-if-no-ref/
++			lcd0_rgb888_pins: lcd0-rgb888-pins {
++				pins = "PD0", "PD1", "PD2", "PD3",
++				       "PD4", "PD5", "PD6", "PD7",
++				       "PD8", "PD9", "PD10", "PD11",
++				       "PD12", "PD13", "PD14", "PD15",
++				       "PD16", "PD17", "PD18", "PD19",
++				       "PD20", "PD21", "PD22", "PD23",
++				       "PD24", "PD25", "PD26", "PD27";
++				function = "lcd0";
++			};
++
++			/omit-if-no-ref/
++
++
++			/omit-if-no-ref/
++
++
+ 			mmc0_pins: mmc0-pins {
+ 				pins = "PF0", "PF1", "PF2", "PF3",
+ 				       "PF4", "PF5";
+@@ -385,6 +504,27 @@ nand_rb1_pin: nand-rb1-pin {
+ 				bias-pull-up;
+ 			};
+ 
++			/omit-if-no-ref/
++			pwm0_pin: pwm0-pin {
++				pins = "PD28";
++				function = "pwm0";
++			};
++
++			/omit-if-no-ref/
++
++
++			/omit-if-no-ref/
++
++
++			/omit-if-no-ref/
++
++
++			/omit-if-no-ref/
++
++
++			/omit-if-no-ref/
++
++
+ 			/omit-if-no-ref/
+ 			spi0_pins: spi0-pins {
+ 				pins = "PC0", "PC2", "PC4";
+@@ -965,6 +1105,123 @@ ohci3: usb@5311400 {
+ 			status = "disabled";
+ 		};
+ 
++
++		tcon_top: tcon-top@6510000 {
++				status = "disabled";
++			compatible = "allwinner,sun50i-h616-tcon-top",
++				     "allwinner,sun50i-h6-tcon-top";
++			reg = <0x06510000 0x1000>;
++			clocks = <&ccu CLK_BUS_TCON_TOP>,
++				 <&ccu CLK_TCON_TV0>;
++			clock-names = "bus",
++				      "tcon-tv0";
++			clock-output-names = "tcon-top-tv0";
++			resets = <&ccu RST_BUS_TCON_TOP>;
++			#clock-cells = <1>;
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				tcon_top_mixer0_in: port@0 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <0>;
++
++					tcon_top_mixer0_in_mixer0: endpoint@0 {
++				status = "disabled";
++						reg = <0>;
++						remote-endpoint = <&mixer0_out_tcon_top_mixer0>;
++					};
++				};
++
++				tcon_top_mixer0_out: port@1 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <1>;
++
++					tcon_top_mixer0_out_tcon_lcd0: endpoint@0 {
++						reg = <0>;
++						remote-endpoint = <&tcon_lcd0_in_tcon_top_mixer0>;
++					};
++
++				};
++
++				tcon_top_mixer1_in: port@2 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <2>;
++
++					tcon_top_mixer1_in_mixer1: endpoint@1 {
++				status = "disabled";
++						reg = <1>;
++						remote-endpoint = <&mixer1_out_tcon_top_mixer1>;
++					};
++				};
++
++				tcon_top_mixer1_out: port@3 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <3>;
++
++					tcon_top_mixer1_out_tcon_lcd0: endpoint@0 {
++						reg = <0>;
++						remote-endpoint = <&tcon_lcd0_in_tcon_top_mixer1>;
++					};
++
++				};
++
++			};
++		};
++
++		tcon_lcd0: lcd-controller@6511000 {
++			compatible = "allwinner,sun50i-h616-tcon-lcd",
++				     "allwinner,sun8i-r40-tcon-lcd";
++			reg = <0x06511000 0x1000>;
++			interrupts = <GIC_SPI 64 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&ccu CLK_BUS_TCON_LCD0>, <&ccu CLK_TCON_LCD0>;
++			clock-names = "ahb", "tcon-ch0";
++			clock-output-names = "tcon-data-clock";
++			#clock-cells = <0>;
++			resets = <&ccu RST_BUS_TCON_LCD0>, <&ccu RST_BUS_LVDS>;
++			reset-names = "lcd", "lvds";
++			status = "disabled";
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				tcon_lcd0_in: port@0 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <0>;
++
++					tcon_lcd0_in_tcon_top_mixer0: endpoint@0 {
++				status = "disabled";
++						reg = <0>;
++						remote-endpoint = <&tcon_top_mixer0_out_tcon_lcd0>;
++					};
++
++					tcon_lcd0_in_tcon_top_mixer1: endpoint@1 {
++				status = "disabled";
++						reg = <1>;
++						remote-endpoint = <&tcon_top_mixer1_out_tcon_lcd0>;
++					};
++				};
++
++				tcon_lcd0_out: port@1 {
++					reg = <1>;
++					#address-cells = <1>;
++					#size-cells = <0>;
++
++					tcon_lcd0_out_lcd: endpoint@0 {
++						reg = <0>;
++					};
++				};
++			};
++		};
++
++
+ 		rtc: rtc@7000000 {
+ 			compatible = "allwinner,sun50i-h616-rtc";
+ 			reg = <0x07000000 0x400>;
+diff --git a/drivers/clk/sunxi-ng/ccu-sun8i-de2.c b/drivers/clk/sunxi-ng/ccu-sun8i-de2.c
+index a6cd0f988..11c019295 100644
+--- a/drivers/clk/sunxi-ng/ccu-sun8i-de2.c
++++ b/drivers/clk/sunxi-ng/ccu-sun8i-de2.c
+@@ -6,9 +6,11 @@
+ #include <linux/clk.h>
+ #include <linux/clk-provider.h>
+ #include <linux/io.h>
++#include <linux/mfd/syscon.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+ #include <linux/platform_device.h>
++#include <linux/regmap.h>
+ #include <linux/reset.h>
+ 
+ #include "ccu_common.h"
+@@ -250,6 +252,40 @@ static const struct sunxi_ccu_desc sun50i_h616_de33_clk_desc = {
+ 	.num_resets	= ARRAY_SIZE(sun50i_h5_de2_resets),
+ };
+ 
++/*
++ * Add a regmap for the DE33 plane driver to access plane
++ * mapping registers.
++ * Only these registers are allowed to be written, in order
++ * to prevent overriding clock and reset configuration.
++ */
++
++#define SUN50I_DE33_CHN2CORE_REG 0x24
++#define SUN50I_DE33_PORT02CHN_REG 0x28
++#define SUN50I_DE33_PORT12CHN_REG 0x2c
++static bool sun8i_de2_ccu_regmap_accessible_reg(struct device *dev,
++						unsigned int reg)
++{
++	switch (reg) {
++	case SUN50I_DE33_CHN2CORE_REG:
++	case SUN50I_DE33_PORT02CHN_REG:
++	case SUN50I_DE33_PORT12CHN_REG:
++		return true;
++	default:
++		return false;
++	}
++}
++
++static const struct regmap_config sun8i_de2_ccu_regmap_config = {
++	.reg_bits	= 32,
++	.val_bits	= 32,
++	.reg_stride	= 4,
++	.max_register	= 0xe0,
++
++	/* other devices have no business accessing other registers */
++	.readable_reg	= sun8i_de2_ccu_regmap_accessible_reg,
++	.writeable_reg	= sun8i_de2_ccu_regmap_accessible_reg,
++};
++
+ static int sunxi_de2_clk_probe(struct platform_device *pdev)
+ {
+ 	struct clk *bus_clk, *mod_clk;
+@@ -303,13 +339,23 @@ static int sunxi_de2_clk_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	/*
+-	 * The DE33 requires these additional (unknown) registers set
++	 * The DE33 requires these additional plane mapping registers set
+ 	 * during initialisation.
+ 	 */
+ 	if (of_device_is_compatible(pdev->dev.of_node,
+ 				    "allwinner,sun50i-h616-de33-clk")) {
+-		writel(0, reg + 0x24);
+-		writel(0x0000a980, reg + 0x28);
++		struct regmap *regmap;
++
++		regmap = devm_regmap_init_mmio(&pdev->dev, reg,
++				       &sun8i_de2_ccu_regmap_config);
++		if (IS_ERR(regmap)) {
++			ret = PTR_ERR(regmap);
++			goto err_assert_reset;
++		}
++
++		ret = of_syscon_register_regmap(pdev->dev.of_node, regmap);
++		if (ret)
++			goto err_assert_reset;
+ 	}
+ 
+ 	ret = devm_sunxi_ccu_probe(&pdev->dev, reg, ccu_desc);
+diff --git a/drivers/gpu/drm/panel/Kconfig b/drivers/gpu/drm/panel/Kconfig
+index cbdf7b8f7..50de98268 100644
+--- a/drivers/gpu/drm/panel/Kconfig
++++ b/drivers/gpu/drm/panel/Kconfig
+@@ -585,6 +585,15 @@ config DRM_PANEL_MOTOROLA_MOT
+ 	  unknown. The panel has a 540x960 resolution and uses 24 bit RGB per
+ 	  pixel.
+ 
++config DRM_PANEL_MIPI
++	tristate "Generic MIPI-DSI/DPI(+SPI) panel"
++	depends on OF
++	depends on SPI || DRM_MIPI_DSI
++	select DRM_MIPI_DBI if SPI
++	depends on BACKLIGHT_CLASS_DEVICE
++	help
++	  Firmware-configured panels over DSI or DPI with SPI control.
++
+ config DRM_PANEL_NEC_NL8048HL11
+ 	tristate "NEC NL8048HL11 RGB panel"
+ 	depends on GPIOLIB && OF && SPI
+diff --git a/drivers/gpu/drm/panel/Makefile b/drivers/gpu/drm/panel/Makefile
+index 3b523cf37..2c599861e 100644
+--- a/drivers/gpu/drm/panel/Makefile
++++ b/drivers/gpu/drm/panel/Makefile
+@@ -55,6 +55,7 @@ obj-$(CONFIG_DRM_PANEL_LG_LG4573) += panel-lg-lg4573.o
+ obj-$(CONFIG_DRM_PANEL_LG_SW43408) += panel-lg-sw43408.o
+ obj-$(CONFIG_DRM_PANEL_LXD_M9189A) += panel-lxd-m9189a.o
+ obj-$(CONFIG_DRM_PANEL_MAGNACHIP_D53E6EA8966) += panel-magnachip-d53e6ea8966.o
++obj-$(CONFIG_DRM_PANEL_MIPI) += panel-mipi.o
+ obj-$(CONFIG_DRM_PANEL_MOTOROLA_MOT) += panel-motorola-mot.o
+ obj-$(CONFIG_DRM_PANEL_NEC_NL8048HL11) += panel-nec-nl8048hl11.o
+ obj-$(CONFIG_DRM_PANEL_NEWVISION_NV3051D) += panel-newvision-nv3051d.o
+diff --git a/drivers/gpu/drm/panel/panel-mipi.c b/drivers/gpu/drm/panel/panel-mipi.c
+new file mode 100644
+index 000000000..146c908f4
+--- /dev/null
++++ b/drivers/gpu/drm/panel/panel-mipi.c
+@@ -0,0 +1,1181 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Generic MIPI-DSI/DPI(+SPI) Panel Driver
++ *
++ * Supported panels:
++ * - A generic MIPI-DSI panel which implements basic DCS
++ * - A generic MIPI-DPI panel which implements basic DCS over SPI
++ *
++ * Copyright (C) 2025, Hironori KIKUCHI <kikuchan98@gmail.com>
++ */
++
++#include <drm/drm_mipi_dbi.h>
++#include <drm/drm_mipi_dsi.h>
++#include <drm/drm_modes.h>
++#include <drm/drm_panel.h>
++#include <linux/backlight.h>
++#include <linux/bitfield.h>
++#include <linux/debugfs.h>
++#include <linux/delay.h>
++#include <linux/device.h>
++#include <linux/firmware.h>
++#include <linux/gpio/consumer.h>
++#include <linux/media-bus-format.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/regulator/consumer.h>
++#include <linux/spi/spi.h>
++#include <video/mipi_display.h>
++
++/*
++ * The display panel configuration can be stored in a firmware file,
++ * under the firmware directory of the system.
++ *
++ * The name of the file is `panels/<compatible>.panel`, where the
++ * `<compatible>` is the first string of the `compatible` property
++ * defined in the Device Tree for the device.
++ *
++ * File Layout:
++ *     A binary file composed with the following data:
++ *         <header>
++ *         <config>
++ *         <timings>
++ *         <init-sequence>
++ *
++ * The 'header':
++ *     A `struct panel_firmware_header`.
++ *     The `file_format_version` must be `1`.
++ *
++ * The 'config':
++ *     A `struct panel_firmware_config`.
++ *     The values are in big-endian.
++ *
++ * The 'timings':
++ *     An array of `struct panel_firmware_panel_timing`.
++ *     Its length is `num_timings` in the config.
++ *     The values are in big-endian.
++ *
++ * The 'init-sequence':
++ *     MIPI commands to execute when the display pipeline is enabled.
++ *     This is used to configure the display controller, and it may
++ *     contains panel specific parameters as well.
++ *
++ *     The commands are encoded and stored in a byte array:
++ *
++ *         0x00             : sleep 10 ms
++ *         0x01 <M>         : MIPI command <M> with no arguments
++ *         0x02 <M> <a>     : MIPI command <M> with 1 argument <a>
++ *         0x03 <M> <a> <b> : MIPI command <M> with 2 arguments <a> <b>
++ *                :
++ *         0x7f <M> <...>   : MIPI command <M> with 126 arguments <...>
++ *         0x80             : sleep 100 ms
++ *         0x81 - 0xff      : reserved
++ *
++ *     Example:
++ *         command 0x11
++ *         sleep 10ms
++ *         command 0xb1 arguments 0x01 0x2c 0x2d
++ *         command 0x29
++ *         sleep 130ms
++ *
++ *     Byte sequence:
++ *         0x01 0x11
++ *         0x00
++ *         0x04 0xb1 0x01 0x2c 0x2d
++ *         0x01 0x29
++ *         0x80 0x00 0x00 0x00
++ *
++ */
++static const u8 panel_firmware_magic[15] = {
++	0x50, 0x41, 0x4e, 0x45, 0x4c, 0x2d, 0x46, 0x49,
++	0x52, 0x4d, 0x57, 0x41, 0x52, 0x45, 0x00,
++};
++
++struct panel_firmware_header {
++	u8 magic[15];
++	u8 file_format_version; /* must be 1 */
++} __packed;
++
++struct panel_firmware_config {
++	u16 width_mm, height_mm;
++	u16 rotation;
++	u8 _reserved_1[2];
++	u8 _reserved_2[8];
++
++	u16 reset_delay; /* delay after the reset command, in ms */
++	u16 init_delay; /* delay for sending the initial command sequence, in ms */
++	u16 sleep_delay; /* delay after the sleep command, in ms */
++	u16 backlight_delay; /* delay for enabling the backlight, in ms */
++	u16 _reserved_3[4];
++
++	u16 dsi_lanes; /* unsigned int */
++	u16 dsi_format; /* enum mipi_dsi_pixel_format */
++	u32 dsi_mode_flags; /* unsigned long */
++	u32 bus_flags; /* struct drm_bus_flags */
++	u8 _reserved_4[2];
++	u8 preferred_timing;
++	u8 num_timings;
++} __packed;
++
++struct panel_firmware_panel_timing {
++	u16 hactive;
++	u16 hfp;
++	u16 hslen;
++	u16 hbp;
++
++	u16 vactive;
++	u16 vfp;
++	u16 vslen;
++	u16 vbp;
++
++	u32 dclk; /* in kHz */
++	u32 flags; /* include/drm/drm_modes.h DRM_MODE_FLAG_* */
++
++	u8 _reserved_1[8];
++} __packed;
++
++struct panel_commands {
++	const u8 *data;
++	size_t size;
++};
++
++struct panel_firmware {
++	const struct firmware *blob;
++	const struct panel_firmware_config *config;
++	const struct panel_firmware_panel_timing *timings;
++	struct panel_commands commands;
++};
++
++struct panel_mipi {
++	struct drm_panel panel;
++	struct mipi_dsi_device *dsi;
++	struct mipi_dbi dbi;
++
++	struct mutex lock;
++
++	struct regulator_bulk_data supplies[2];
++	struct gpio_desc *reset;
++
++	unsigned int reset_delay;
++	unsigned int init_delay;
++	unsigned int sleep_delay;
++	unsigned int backlight_delay;
++
++	unsigned int dsi_lanes;
++	enum mipi_dsi_pixel_format dsi_format;
++
++	/* Panel info */
++	u32 width_mm, height_mm;
++	u32 bus_format, bus_flags;
++	enum drm_panel_orientation orientation;
++
++	struct list_head mode_list;
++
++	struct panel_firmware *firmware;
++	struct panel_commands commands;
++
++	int (*write_command)(struct panel_mipi *mipi, const u8 *buf,
++			     size_t len);
++	int (*read_command)(struct panel_mipi *mipi, u8 cmd, u8 *buf,
++			    size_t len);
++
++	/* debugfs */
++	struct dentry *debugfs;
++	u8 recvbuf[1024];
++	size_t recvlen;
++	int display_id;
++};
++
++static inline struct panel_mipi *to_panel_mipi(struct drm_panel *panel)
++{
++	return container_of(panel, struct panel_mipi, panel);
++}
++
++static int panel_mipi_dsi_write(struct panel_mipi *mipi, const u8 *buf,
++				size_t len)
++{
++	int ret;
++
++	ret = mipi_dsi_dcs_write_buffer(mipi->dsi, buf, len);
++	if (ret < 0)
++		return ret;
++
++	return 0;
++}
++
++static int panel_mipi_dbi_write(struct panel_mipi *mipi, const u8 *buf,
++				size_t len)
++{
++	return mipi_dbi_command_stackbuf(&mipi->dbi, buf[0], buf + 1, len - 1);
++}
++
++#define panel_mipi_write(mipi, ...)                                \
++	({                                                         \
++		u8 _buf[] = { __VA_ARGS__ };                       \
++		mipi->write_command(mipi, _buf, ARRAY_SIZE(_buf)); \
++	})
++
++static int panel_mipi_dsi_read(struct panel_mipi *mipi, u8 cmd, u8 *buf,
++			       size_t len)
++{
++	int ret;
++
++	ret = mipi_dsi_set_maximum_return_packet_size(mipi->dsi, len);
++	if (ret)
++		return ret;
++
++	ret = mipi_dsi_dcs_read(mipi->dsi, cmd, buf, len);
++	if (ret < 0)
++		return ret;
++
++	return 0;
++}
++
++static int panel_mipi_dbi_read(struct panel_mipi *mipi, u8 cmd, u8 *buf,
++			       size_t len)
++{
++	void *recvbuf;
++	int err;
++
++	/* alloc DMA-safe buffer */
++	recvbuf = kzalloc(len, GFP_KERNEL);
++	if (!recvbuf)
++		return -ENOMEM;
++
++	err = mipi_dbi_command_buf(&mipi->dbi, cmd, recvbuf, len);
++	if (!err)
++		memcpy(buf, recvbuf, len);
++
++	kfree(recvbuf);
++
++	return err;
++}
++
++#define panel_mipi_read(mipi, cmd, buf, len) \
++	(mipi)->read_command((mipi), (cmd), (buf), (len))
++
++static unsigned long panel_mipi_dsi_set_mode_flags(struct panel_mipi *mipi,
++						   unsigned long new_flags)
++{
++	unsigned long old_flags;
++
++	if (!mipi->dsi)
++		return 0;
++
++	old_flags = mipi->dsi->mode_flags;
++
++	mipi->dsi->mode_flags = new_flags;
++
++	return old_flags;
++}
++
++static bool panel_mipi_dsi_set_lpm(struct panel_mipi *mipi, bool set)
++{
++	unsigned long old_flags;
++
++	if (!mipi->dsi)
++		return false;
++
++	old_flags = panel_mipi_dsi_set_mode_flags(
++		mipi, set ? mipi->dsi->mode_flags | MIPI_DSI_MODE_LPM :
++			    mipi->dsi->mode_flags & ~MIPI_DSI_MODE_LPM);
++
++	return old_flags & MIPI_DSI_MODE_LPM ? true : false;
++}
++
++#define PANEL_MIPI_TRANSACTION(mipi, stmt)   \
++	do {                                 \
++		mutex_lock(&(mipi)->lock);   \
++		do {                         \
++			stmt;                \
++		} while (0);                 \
++		mutex_unlock(&(mipi)->lock); \
++	} while (0)
++
++#define PANEL_MIPI_TRANSACTION_LPM(mipi, lpm, stmt)                       \
++	PANEL_MIPI_TRANSACTION(                                           \
++		mipi,                                                     \
++		bool _lpm_backup = panel_mipi_dsi_set_lpm((mipi), (lpm)); \
++		do { stmt; } while (0);                                   \
++		panel_mipi_dsi_set_lpm((mipi), _lpm_backup))
++
++static int panel_mipi_validate_commands(struct panel_mipi *mipi, const u8 *data,
++					size_t size, size_t *valid_len)
++{
++	size_t i = 0;
++
++	/* sanity check */
++	while (i < size) {
++		u8 inst = data[i];
++		bool ext = (inst & 0x80) ? true : false;
++		u8 len = inst & 0x7f;
++
++		if (ext && len > 0)
++			return -EINVAL; /* reserved */
++
++		if (i + 1 + len > size)
++			break;
++
++		i += 1 + len;
++	}
++
++	*valid_len = i;
++
++	return 0;
++}
++
++static int panel_mipi_load_commands(struct panel_mipi *mipi, const u8 *data,
++				    size_t size)
++{
++	int err;
++	size_t valid_len;
++
++	err = panel_mipi_validate_commands(mipi, data, size, &valid_len);
++	if (err)
++		return err;
++
++	if (valid_len != size)
++		return -EINVAL;
++
++	mipi->commands.data = data;
++	mipi->commands.size = size;
++
++	return 0;
++}
++
++static int panel_mipi_write_commands(struct panel_mipi *mipi, const u8 *data,
++				     size_t size)
++{
++	const u8 *read_commands;
++	unsigned int write_memory_bpw;
++	size_t i = 0;
++	int err = 0;
++
++	if (!data)
++		return 0;
++
++	/*
++	 * Disable interpretation for special commands for DBI
++	 *
++	 * This is required because the vendor specific custom commands
++	 * may change its command set to the other.
++	 */
++	read_commands = mipi->dbi.read_commands;
++	write_memory_bpw = mipi->dbi.write_memory_bpw;
++	mipi->dbi.read_commands = NULL;
++	mipi->dbi.write_memory_bpw = 8;
++
++	while (i < size) {
++		u8 inst = data[i++];
++		bool ext = (inst & 0x80) ? true : false;
++		u8 len = inst & 0x7f;
++
++		if (len == 0x00) {
++			msleep(ext ? 100 : 10);
++			continue;
++		}
++
++		err = mipi->write_command(mipi, data + i, len);
++		if (err)
++			break;
++
++		i += len;
++	}
++
++	/* restore */
++	mipi->dbi.read_commands = read_commands;
++	mipi->dbi.write_memory_bpw = write_memory_bpw;
++
++	return err;
++}
++
++static int panel_mipi_read_firmware(const struct device *dev,
++				    struct panel_mipi *mipi,
++				    const struct panel_firmware *firmware)
++{
++	int rotation;
++	int err;
++
++	err = panel_mipi_load_commands(mipi, firmware->commands.data,
++				       firmware->commands.size);
++	if (err) {
++		dev_err(dev, "firmware: Malformed command sequence\n");
++		return err;
++	}
++
++	mipi->width_mm = be16_to_cpu(firmware->config->width_mm);
++	mipi->height_mm = be16_to_cpu(firmware->config->height_mm);
++
++	rotation = be16_to_cpu(firmware->config->rotation);
++	if (rotation == 0)
++		mipi->orientation = DRM_MODE_PANEL_ORIENTATION_NORMAL;
++	else if (rotation == 90)
++		mipi->orientation = DRM_MODE_PANEL_ORIENTATION_RIGHT_UP;
++	else if (rotation == 180)
++		mipi->orientation = DRM_MODE_PANEL_ORIENTATION_BOTTOM_UP;
++	else if (rotation == 270)
++		mipi->orientation = DRM_MODE_PANEL_ORIENTATION_LEFT_UP;
++	else {
++		dev_err(dev, "firmware: Invalid rotation %u\n", rotation);
++		return -EINVAL;
++	}
++
++	mipi->reset_delay = be16_to_cpu(firmware->config->reset_delay);
++	mipi->init_delay = be16_to_cpu(firmware->config->init_delay);
++	mipi->sleep_delay = be16_to_cpu(firmware->config->sleep_delay);
++	mipi->backlight_delay = be16_to_cpu(firmware->config->backlight_delay);
++
++	mipi->bus_flags = be32_to_cpu(firmware->config->bus_flags);
++
++	return 0;
++}
++
++static struct panel_firmware *panel_mipi_load_firmware(struct device *dev)
++{
++	const struct firmware *blob;
++	const struct panel_firmware_header *hdr;
++	const struct panel_firmware_config *config;
++	const struct panel_firmware_panel_timing *timings;
++	struct panel_firmware *firmware;
++	const char *firmware_name;
++	size_t command_offset;
++	char filename[128];
++	int err;
++
++	err = of_property_read_string_index(dev->of_node, "compatible", 0,
++					    &firmware_name);
++	if (err)
++		return ERR_PTR(err);
++
++	snprintf(filename, sizeof(filename), "panels/%s.panel", firmware_name);
++	err = request_firmware(&blob, filename, dev);
++	if (err)
++		return ERR_PTR(err);
++
++	hdr = (const struct panel_firmware_header *)blob->data;
++
++	if (blob->size < sizeof(*hdr)) {
++		dev_err(dev, "firmware: %s: file size %zu is too small\n",
++			filename, blob->size);
++		err = -EINVAL;
++		goto err;
++	}
++
++	if (memcmp(hdr->magic, panel_firmware_magic, sizeof(hdr->magic))) {
++		dev_err(dev, "firmware: %s: Bad magic %15ph\n", filename,
++			hdr->magic);
++		err = -EINVAL;
++		goto err;
++	}
++
++	if (hdr->file_format_version != 1) {
++		dev_err(dev, "firmware: %s: version %u is not supported\n",
++			filename, hdr->file_format_version);
++		err = -EINVAL;
++		goto err;
++	}
++
++	config = (struct panel_firmware_config *)(blob->data + sizeof(*hdr));
++	timings = (struct panel_firmware_panel_timing *)(blob->data +
++							 sizeof(*hdr) +
++							 sizeof(*config));
++	command_offset = sizeof(*hdr) + sizeof(*config) +
++			 config->num_timings * sizeof(*timings);
++	if (blob->size < command_offset) {
++		dev_err(dev, "firmware: %s: file size %zu is too small\n",
++			filename, blob->size);
++		err = -EINVAL;
++		goto err;
++	}
++
++	firmware = devm_kzalloc(dev, sizeof(*firmware), GFP_KERNEL);
++	if (!firmware) {
++		err = -ENOMEM;
++		goto err;
++	}
++
++	firmware->blob = blob;
++	firmware->config = config;
++	firmware->timings = timings;
++	firmware->commands.data = blob->data + command_offset;
++	firmware->commands.size = blob->size - command_offset;
++
++	dev_info(dev, "firmware: %s: loaded successfully\n", filename);
++
++	return firmware;
++
++err:
++	release_firmware(blob);
++
++	return ERR_PTR(err);
++}
++
++static int panel_mipi_read_display_id(struct panel_mipi *mipi)
++{
++	u8 buf[3];
++	int err;
++
++	err = panel_mipi_read(mipi, MIPI_DCS_GET_DISPLAY_ID, buf, sizeof(buf));
++
++	return err ? err : ((buf[0] << 16) | (buf[1] << 8) | buf[2]);
++}
++
++static int panel_mipi_enable(struct drm_panel *panel)
++{
++	struct panel_mipi *mipi = to_panel_mipi(panel);
++	int err;
++
++	PANEL_MIPI_TRANSACTION(mipi, {
++		err = panel_mipi_write(mipi, MIPI_DCS_SET_DISPLAY_ON);
++	});
++	if (err)
++		return err;
++
++	if (panel->backlight) {
++		/* Wait for the picture to be ready before enabling backlight */
++		msleep(mipi->backlight_delay);
++	}
++
++	return 0;
++}
++
++static int panel_mipi_disable(struct drm_panel *panel)
++{
++	struct panel_mipi *mipi = to_panel_mipi(panel);
++	int err = 0;
++
++	PANEL_MIPI_TRANSACTION(mipi, {
++		err = panel_mipi_write(mipi, MIPI_DCS_SET_DISPLAY_OFF);
++	});
++
++	return err;
++}
++
++static int panel_mipi_prepare(struct drm_panel *panel)
++{
++	struct panel_mipi *mipi = to_panel_mipi(panel);
++	int err, display_id;
++
++	err = regulator_bulk_enable(ARRAY_SIZE(mipi->supplies), mipi->supplies);
++	if (err)
++		return err;
++
++	PANEL_MIPI_TRANSACTION(mipi, {
++		/* Reset the chip */
++		if (mipi->reset) {
++			gpiod_set_value_cansleep(mipi->reset, 1);
++			msleep(mipi->reset_delay);
++			gpiod_set_value_cansleep(mipi->reset, 0);
++		}
++
++		msleep(mipi->init_delay);
++
++		/* Read the Display ID */
++		mipi->display_id = panel_mipi_read_display_id(mipi);
++		if (mipi->display_id >= 0)
++			dev_info(panel->dev, "MIPI Display ID: %06x\n",
++				 mipi->display_id);
++		else
++			dev_warn(panel->dev, "MIPI Display ID: Unknown\n");
++
++		/* Write the init-sequence */
++		err = panel_mipi_write_commands(mipi, mipi->commands.data,
++						mipi->commands.size);
++		if (err)
++			break;
++
++		/* Ensure to exit from a sleep mode */
++		err = panel_mipi_write(mipi, MIPI_DCS_EXIT_SLEEP_MODE);
++		if (err)
++			break;
++		msleep(mipi->sleep_delay);
++
++		/*
++		 * Read the Display ID again,
++		 * because the init-sequence might have changed the ID.
++		 */
++		display_id = panel_mipi_read_display_id(mipi);
++		if (display_id >= 0 && display_id != mipi->display_id)
++			dev_info(panel->dev, "MIPI Display ID changed: %06x\n",
++				 display_id);
++	});
++
++	if (err) {
++		dev_err(panel->dev, "Failed to prepare the panel\n");
++		regulator_bulk_disable(ARRAY_SIZE(mipi->supplies),
++				       mipi->supplies);
++		return err;
++	}
++
++	return 0;
++}
++
++static int panel_mipi_unprepare(struct drm_panel *panel)
++{
++	struct panel_mipi *mipi = to_panel_mipi(panel);
++	int err;
++
++	PANEL_MIPI_TRANSACTION(mipi, {
++		err = panel_mipi_write(mipi, MIPI_DCS_ENTER_SLEEP_MODE);
++		if (err)
++			dev_warn(panel->dev, "Failed to enter a sleep mode\n");
++		msleep(mipi->sleep_delay);
++	});
++
++	if (mipi->reset) {
++		gpiod_set_value_cansleep(mipi->reset, 1);
++		msleep(mipi->reset_delay);
++	}
++
++	regulator_bulk_disable(ARRAY_SIZE(mipi->supplies), mipi->supplies);
++
++	return 0;
++}
++
++static int panel_mipi_get_modes(struct drm_panel *panel,
++				struct drm_connector *connector)
++{
++	struct panel_mipi *mipi = to_panel_mipi(panel);
++	struct drm_display_mode *mode;
++	unsigned int count = 0;
++
++	list_for_each_entry(mode, &mipi->mode_list, head) {
++		struct drm_display_mode *dmode;
++
++		dmode = drm_mode_duplicate(connector->dev, mode);
++		if (!dmode)
++			return -EINVAL;
++
++		drm_mode_probed_add(connector, dmode);
++		count++;
++	}
++
++	connector->display_info.bpc = 8;
++	connector->display_info.width_mm = mipi->width_mm;
++	connector->display_info.height_mm = mipi->height_mm;
++	connector->display_info.bus_flags = mipi->bus_flags;
++	drm_display_info_set_bus_formats(&connector->display_info,
++					 &mipi->bus_format, 1);
++
++	/*
++	 * TODO: Remove once all drm drivers call
++	 * drm_connector_set_orientation_from_panel()
++	 */
++	drm_connector_set_panel_orientation(connector, mipi->orientation);
++
++	return count;
++}
++
++static enum drm_panel_orientation
++panel_mipi_get_orientation(struct drm_panel *panel)
++{
++	struct panel_mipi *mipi = to_panel_mipi(panel);
++
++	return mipi->orientation;
++}
++
++#ifdef CONFIG_DEBUG_FS
++
++static int display_id_show(struct seq_file *s, void *data)
++{
++	struct drm_panel *panel = s->private;
++	struct panel_mipi *mipi = to_panel_mipi(panel);
++	int display_id;
++
++	PANEL_MIPI_TRANSACTION(mipi, {
++		display_id = panel_mipi_read_display_id(mipi);
++	});
++
++	if (display_id >= 0)
++		seq_printf(s, "%06x\n", display_id);
++	else
++		seq_puts(s, "Unknown\n");
++
++	return 0;
++}
++DEFINE_SHOW_ATTRIBUTE(display_id);
++
++static int initial_display_id_show(struct seq_file *s, void *data)
++{
++	struct drm_panel *panel = s->private;
++	struct panel_mipi *mipi = to_panel_mipi(panel);
++
++	if (mipi->display_id >= 0)
++		seq_printf(s, "%06x\n", mipi->display_id);
++	else
++		seq_puts(s, "Unknown\n");
++
++	return 0;
++}
++DEFINE_SHOW_ATTRIBUTE(initial_display_id);
++
++static int commands_open(struct inode *inode, struct file *file)
++{
++	struct panel_mipi *mipi = inode->i_private;
++
++	mipi->recvlen = 0;
++	file->private_data = mipi;
++
++	return 0;
++}
++
++static ssize_t commands_write(struct file *file, const char __user *data,
++			      size_t size, loff_t *pos)
++{
++	struct panel_mipi *mipi = file->private_data;
++	ssize_t s = min_t(u64, sizeof(mipi->recvbuf) - mipi->recvlen, size);
++	size_t valid_len;
++	int err;
++
++	if (!s || !mipi)
++		return -EINVAL;
++
++	if (copy_from_user(mipi->recvbuf + mipi->recvlen, data, s))
++		return -EINVAL;
++
++	mipi->recvlen += s;
++
++	err = panel_mipi_validate_commands(mipi, mipi->recvbuf, mipi->recvlen,
++					   &valid_len);
++	if (err)
++		return err;
++
++	if (valid_len > 0) {
++		PANEL_MIPI_TRANSACTION(mipi, {
++			err = panel_mipi_write_commands(mipi, mipi->recvbuf,
++							valid_len);
++		});
++		if (err)
++			return err;
++
++		mipi->recvlen -= valid_len;
++		if (mipi->recvlen)
++			memmove(mipi->recvbuf, mipi->recvbuf + valid_len,
++				mipi->recvlen);
++	}
++
++	return s;
++}
++
++static int commands_release(struct inode *inode, struct file *file)
++{
++	struct panel_mipi *mipi = inode->i_private;
++
++	if (mipi->recvlen) {
++		dev_err(mipi->panel.dev, "Premature end of commands\n");
++		return -EIO;
++	}
++
++	return 0;
++}
++
++static const struct file_operations commands_fops = {
++	.owner = THIS_MODULE,
++	.open = commands_open,
++	.write = commands_write,
++	.release = commands_release,
++};
++
++#endif
++
++static void panel_mipi_debugfs_init(struct device *dev, struct panel_mipi *mipi)
++{
++#ifdef CONFIG_DEBUG_FS
++	struct dentry *dir;
++
++	mipi->debugfs = debugfs_lookup("panel-mipi", NULL);
++	if (!mipi->debugfs)
++		mipi->debugfs = debugfs_create_dir("panel-mipi", NULL);
++
++	dir = debugfs_create_dir(dev_name(dev), mipi->debugfs);
++	debugfs_create_file("display-id", 0600, dir, mipi, &display_id_fops);
++	debugfs_create_file("initial-display-id", 0600, dir, mipi,
++			    &initial_display_id_fops);
++	debugfs_create_file("commands", 0600, dir, mipi, &commands_fops);
++#endif
++}
++
++static void panel_mipi_debugfs_remove(struct panel_mipi *mipi)
++{
++#ifdef CONFIG_DEBUG_FS
++	debugfs_remove_recursive(mipi->debugfs);
++	mipi->debugfs = NULL;
++#endif
++}
++
++static const struct drm_panel_funcs panel_mipi_funcs = {
++	.prepare = panel_mipi_prepare,
++	.unprepare = panel_mipi_unprepare,
++	.enable = panel_mipi_enable,
++	.disable = panel_mipi_disable,
++	.get_modes = panel_mipi_get_modes,
++	.get_orientation = panel_mipi_get_orientation,
++};
++
++static int panel_mipi_add_mode(struct device *dev, struct panel_mipi *mipi,
++			       const struct drm_display_mode *src_mode)
++{
++	struct drm_display_mode *mode;
++
++	mode = devm_kzalloc(dev, sizeof(*mode), GFP_KERNEL);
++	if (!mode)
++		return -ENOMEM;
++
++	drm_mode_copy(mode, src_mode);
++
++	if (!mode->clock)
++		mode->clock = mode->htotal * mode->vtotal * 60 / 1000;
++
++	mode->type |= DRM_MODE_TYPE_DRIVER;
++
++	dev_info(dev, "Modeline " DRM_MODE_FMT " added\n", DRM_MODE_ARG(mode));
++
++	list_add_tail(&mode->head, &mipi->mode_list);
++
++	return 0;
++}
++
++static int panel_mipi_firmware_read_modes(const struct panel_firmware *firmware,
++					  struct drm_display_mode *mode,
++					  unsigned int i)
++{
++	const struct panel_firmware_panel_timing *timings =
++		&firmware->timings[i];
++
++	if (!firmware || i >= firmware->config->num_timings)
++		return -ENOENT;
++
++	if (!timings->hactive || !timings->vactive)
++		return -ENOENT;
++
++	memset(mode, 0, sizeof(*mode));
++
++	mode->clock = be32_to_cpu(timings->dclk);
++
++	mode->hdisplay = be16_to_cpu(timings->hactive);
++	mode->hsync_start = mode->hdisplay + be16_to_cpu(timings->hfp);
++	mode->hsync_end = mode->hsync_start + be16_to_cpu(timings->hslen);
++	mode->htotal = mode->hsync_end + be16_to_cpu(timings->hbp);
++
++	mode->vdisplay = be16_to_cpu(timings->vactive);
++	mode->vsync_start = mode->vdisplay + be16_to_cpu(timings->vfp);
++	mode->vsync_end = mode->vsync_start + be16_to_cpu(timings->vslen);
++	mode->vtotal = mode->vsync_end + be16_to_cpu(timings->vbp);
++
++	mode->flags = be32_to_cpu(timings->flags);
++
++	drm_mode_set_name(mode);
++
++	return 0;
++}
++
++static int panel_mipi_probe_modes(struct device *dev, struct panel_mipi *mipi)
++{
++	unsigned int i = 0;
++	struct drm_display_mode mode = {};
++	int err;
++
++	INIT_LIST_HEAD(&mipi->mode_list);
++
++	/* Read from the firmware */
++	for (i = 0; i < mipi->firmware->config->num_timings; i++) {
++		if (!panel_mipi_firmware_read_modes(mipi->firmware, &mode, i)) {
++			if (mipi->firmware->config->preferred_timing == i)
++				mode.type |= DRM_MODE_TYPE_PREFERRED;
++
++			err = panel_mipi_add_mode(dev, mipi, &mode);
++			if (err)
++				return err;
++		}
++	}
++
++	if (list_empty(&mipi->mode_list))
++		return dev_err_probe(dev, -EINVAL, "No modes defined\n");
++
++	return 0;
++}
++
++static void panel_mipi_cleanup(void *data)
++{
++	struct panel_mipi *mipi = (struct panel_mipi *)data;
++
++	panel_mipi_debugfs_remove(mipi);
++
++	drm_panel_remove(&mipi->panel);
++
++	if (mipi->panel.enabled)
++		drm_panel_disable(&mipi->panel);
++
++	if (mipi->panel.prepared)
++		drm_panel_unprepare(&mipi->panel);
++
++	if (mipi->firmware)
++		release_firmware(mipi->firmware->blob);
++}
++
++static int
++panel_mipi_backlight_update_status(struct backlight_device *backlight)
++{
++	struct panel_mipi *mipi = dev_get_drvdata(&backlight->dev);
++	int level = backlight_get_brightness(backlight);
++	int err;
++
++	PANEL_MIPI_TRANSACTION_LPM(mipi, false, {
++		err = panel_mipi_write(mipi, MIPI_DCS_SET_DISPLAY_BRIGHTNESS,
++				       level, level);
++	});
++
++	return err;
++}
++
++static int
++panel_mipi_backlight_get_brightness(struct backlight_device *backlight)
++{
++	return backlight_get_brightness(backlight);
++}
++
++static const struct backlight_ops panel_mipi_backlight_ops = {
++	.get_brightness = panel_mipi_backlight_get_brightness,
++	.update_status = panel_mipi_backlight_update_status,
++};
++
++static int panel_mipi_set_backlight(struct drm_panel *panel, struct device *dev,
++				    struct panel_mipi *mipi)
++{
++	int err;
++
++	err = drm_panel_of_backlight(panel);
++	if (err)
++		return err;
++
++	if (!panel->backlight) {
++		struct backlight_device *backlight = NULL;
++		struct backlight_properties props = {
++			.max_brightness = 255,
++			.type = BACKLIGHT_RAW,
++		};
++
++		backlight = devm_backlight_device_register(
++			dev, dev_name(dev), dev, mipi,
++			&panel_mipi_backlight_ops, &props);
++		if (IS_ERR(backlight))
++			return PTR_ERR(backlight);
++
++		panel->backlight = backlight;
++	}
++
++	return 0;
++}
++
++static int panel_mipi_probe(struct device *dev, int connector_type)
++{
++	struct panel_mipi *mipi;
++	int err;
++
++	mipi = devm_drm_panel_alloc(dev, __typeof(*mipi), panel, &panel_mipi_funcs, connector_type);
++	if (IS_ERR(mipi))
++		return PTR_ERR(mipi);
++
++	mutex_init(&mipi->lock);
++
++	mipi->display_id = -1;
++
++	/* Get `power-supply` and `io-supply` (if any) */
++	mipi->supplies[0].supply = "power";
++	mipi->supplies[1].supply = "io";
++	err = devm_regulator_bulk_get(dev, ARRAY_SIZE(mipi->supplies),
++				      mipi->supplies);
++	if (err < 0) {
++		return dev_err_probe(dev, err,
++				     "%pOF: Failed to get regulators\n",
++				     dev->of_node);
++	}
++
++	/* GPIO for /RESET */
++	mipi->reset = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
++	if (IS_ERR(mipi->reset))
++		return dev_err_probe(dev, PTR_ERR(mipi->reset),
++				     "%pOF: Failed to get GPIO for RESET\n",
++				     dev->of_node);
++
++	/* Load the firmware */
++	mipi->firmware = panel_mipi_load_firmware(dev);
++	if (IS_ERR(mipi->firmware))
++		return dev_err_probe(dev, PTR_ERR(mipi->firmware),
++				     "Failed to load firmware\n");
++
++	err = panel_mipi_read_firmware(dev, mipi, mipi->firmware);
++	if (err)
++		return err;
++
++	err = panel_mipi_probe_modes(dev, mipi);
++	if (err)
++		return err;
++
++	/* DRM panel setup */
++	err = panel_mipi_set_backlight(&mipi->panel, dev, mipi);
++	if (err)
++		return dev_err_probe(dev, err, "Failed to set backlight\n");
++
++	drm_panel_add(&mipi->panel);
++
++	dev_set_drvdata(dev, mipi);
++
++	panel_mipi_debugfs_init(dev, mipi);
++
++	return devm_add_action_or_reset(dev, panel_mipi_cleanup, mipi);
++}
++
++static int panel_mipi_dsi_probe(struct mipi_dsi_device *dsi)
++{
++	struct panel_mipi *mipi;
++	int err;
++
++	err = panel_mipi_probe(&dsi->dev, DRM_MODE_CONNECTOR_DSI);
++	if (err)
++		return err;
++
++	mipi = dev_get_drvdata(&dsi->dev);
++	mipi->dsi = dsi;
++	mipi->write_command = panel_mipi_dsi_write;
++	mipi->read_command = panel_mipi_dsi_read;
++
++	/* Read from the firmware */
++	dsi->lanes = be16_to_cpu(mipi->firmware->config->dsi_lanes);
++	dsi->format = be16_to_cpu(mipi->firmware->config->dsi_format);
++	dsi->mode_flags = be32_to_cpu(mipi->firmware->config->dsi_mode_flags);
++
++	if (!dsi->lanes)
++		return dev_err_probe(&dsi->dev, -EINVAL,
++				     "dsi-lanes == 0 for DSI panel\n");
++
++	/* Adjust bus_format */
++	switch (dsi->format) {
++	case MIPI_DSI_FMT_RGB888:
++		mipi->bus_format = MEDIA_BUS_FMT_RGB888_1X24;
++		break;
++	case MIPI_DSI_FMT_RGB666:
++		mipi->bus_format = MEDIA_BUS_FMT_RGB666_1X24_CPADHI;
++		break;
++	case MIPI_DSI_FMT_RGB666_PACKED:
++		mipi->bus_format = MEDIA_BUS_FMT_RGB666_1X18;
++		break;
++	case MIPI_DSI_FMT_RGB565:
++		mipi->bus_format = MEDIA_BUS_FMT_RGB565_1X16;
++		break;
++	default:
++		return dev_err_probe(&dsi->dev, -EINVAL, "Unsupported DSI format\n");
++	}
++
++	err = mipi_dsi_attach(dsi);
++	if (err)
++		return dev_err_probe(&dsi->dev, err,
++				     "Failed to attach to DSI\n");
++
++	return 0;
++}
++
++static int panel_mipi_spi_probe(struct spi_device *spi)
++{
++	struct panel_mipi *mipi;
++	struct gpio_desc *dc;
++	int err;
++
++	err = panel_mipi_probe(&spi->dev, DRM_MODE_CONNECTOR_DPI);
++	if (err)
++		return err;
++
++	mipi = dev_get_drvdata(&spi->dev);
++	mipi->write_command = panel_mipi_dbi_write;
++	mipi->read_command = panel_mipi_dbi_read;
++
++	dc = devm_gpiod_get_optional(&spi->dev, "dc", GPIOD_OUT_LOW);
++	if (IS_ERR(dc))
++		return dev_err_probe(&spi->dev, PTR_ERR(dc),
++				     "Failed to get GPIO for D/CX\n");
++
++	err = mipi_dbi_spi_init(spi, &mipi->dbi, dc);
++	if (err)
++		return dev_err_probe(&spi->dev, err, "Failed to init SPI\n");
++
++	return 0;
++}
++
++static void panel_mipi_dsi_remove(struct mipi_dsi_device *dsi)
++{
++	mipi_dsi_detach(dsi);
++}
++
++static const struct of_device_id panel_mipi_dsi_of_match[] = {
++	{ .compatible = "panel-mipi-dsi" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, panel_mipi_dsi_of_match);
++
++static const struct of_device_id panel_mipi_spi_of_match[] = {
++	{ .compatible = "panel-mipi-dpi-spi" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, panel_mipi_spi_of_match);
++
++static const struct spi_device_id panel_mipi_spi_ids[] = {
++	{ "panel-mipi-dpi-spi" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(spi, panel_mipi_spi_ids);
++
++static struct mipi_dsi_driver panel_mipi_dsi_driver = {
++	.probe		= panel_mipi_dsi_probe,
++	.remove		= panel_mipi_dsi_remove,
++	.driver = {
++		.name		= "panel-mipi",
++		.of_match_table	= panel_mipi_dsi_of_match,
++	},
++};
++
++static struct spi_driver panel_mipi_spi_driver = {
++	.probe		= panel_mipi_spi_probe,
++	.id_table	= panel_mipi_spi_ids,
++	.driver = {
++		.name		= "panel-mipi",
++		.of_match_table	= panel_mipi_spi_of_match,
++	},
++};
++
++static int __init panel_mipi_driver_init(void)
++{
++	int err;
++
++	if (IS_ENABLED(CONFIG_SPI)) {
++		err = spi_register_driver(&panel_mipi_spi_driver);
++		if (err)
++			return err;
++	}
++
++	if (IS_ENABLED(CONFIG_DRM_MIPI_DSI)) {
++		err = mipi_dsi_driver_register(&panel_mipi_dsi_driver);
++		if (err) {
++			if (IS_ENABLED(CONFIG_SPI))
++				spi_unregister_driver(&panel_mipi_spi_driver);
++			return err;
++		}
++	}
++
++	return 0;
++}
++module_init(panel_mipi_driver_init);
++
++static void __exit panel_mipi_driver_exit(void)
++{
++	if (IS_ENABLED(CONFIG_DRM_MIPI_DSI))
++		mipi_dsi_driver_unregister(&panel_mipi_dsi_driver);
++
++	if (IS_ENABLED(CONFIG_SPI))
++		spi_unregister_driver(&panel_mipi_spi_driver);
++}
++module_exit(panel_mipi_driver_exit);
++
++MODULE_DESCRIPTION("Generic MIPI-DSI/DPI(+SPI) Panel Driver");
++MODULE_AUTHOR("Hironori KIKUCHI <kikuchan98@gmail.com>");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/gpu/drm/sun4i/Kconfig b/drivers/gpu/drm/sun4i/Kconfig
+index b56ba00aa..946dd7606 100644
+--- a/drivers/gpu/drm/sun4i/Kconfig
++++ b/drivers/gpu/drm/sun4i/Kconfig
+@@ -85,4 +85,12 @@ config DRM_SUN8I_TCON_TOP
+ 	  TCON TOP is responsible for configuring display pipeline for
+ 	  HDMI, TVE and LCD.
+ 
++config DRM_SUN50I_PLANES
++	tristate
++	default DRM_SUN4I if DRM_SUN8I_MIXER!=n
++	help
++	  Chose this option if you have an Allwinner Soc with the
++	  Display Engine 3.3 or newer. Planes are shared resource
++	  between multiple mixers.
++
+ endif
+diff --git a/drivers/gpu/drm/sun4i/Makefile b/drivers/gpu/drm/sun4i/Makefile
+index bad7497a0..03f002abe 100644
+--- a/drivers/gpu/drm/sun4i/Makefile
++++ b/drivers/gpu/drm/sun4i/Makefile
+@@ -38,3 +38,4 @@ obj-$(CONFIG_DRM_SUN6I_DSI)	+= sun6i_mipi_dsi.o
+ obj-$(CONFIG_DRM_SUN8I_DW_HDMI)	+= sun8i-drm-hdmi.o
+ obj-$(CONFIG_DRM_SUN8I_MIXER)	+= sun8i-mixer.o
+ obj-$(CONFIG_DRM_SUN8I_TCON_TOP) += sun8i_tcon_top.o
++obj-$(CONFIG_DRM_SUN50I_PLANES)	+= sun50i_planes.o
+diff --git a/drivers/gpu/drm/sun4i/sun4i_drv.c b/drivers/gpu/drm/sun4i/sun4i_drv.c
+index e9baca360..d76f39031 100644
+--- a/drivers/gpu/drm/sun4i/sun4i_drv.c
++++ b/drivers/gpu/drm/sun4i/sun4i_drv.c
+@@ -440,6 +440,7 @@ static const struct of_device_id sun4i_drv_of_table[] = {
+ 	{ .compatible = "allwinner,sun20i-d1-display-engine" },
+ 	{ .compatible = "allwinner,sun50i-a64-display-engine" },
+ 	{ .compatible = "allwinner,sun50i-h6-display-engine" },
++	{ .compatible = "allwinner,sun50i-h616-display-engine" },
+ 	{ }
+ };
+ MODULE_DEVICE_TABLE(of, sun4i_drv_of_table);
+diff --git a/drivers/gpu/drm/sun4i/sun4i_tcon.c b/drivers/gpu/drm/sun4i/sun4i_tcon.c
+index bf405a2aa..a0f9a1c09 100644
+--- a/drivers/gpu/drm/sun4i/sun4i_tcon.c
++++ b/drivers/gpu/drm/sun4i/sun4i_tcon.c
+@@ -1518,6 +1518,14 @@ static const struct sun4i_tcon_quirks sun8i_a83t_tv_quirks = {
+ 	.has_channel_1		= true,
+ };
+ 
++static const struct sun4i_tcon_quirks sun8i_r40_lcd_quirks = {
++	.supports_lvds		= true,
++	.has_channel_0		= true,
++	.set_mux		= sun8i_r40_tcon_tv_set_mux,
++	.dclk_min_div		= 1,
++	.setup_lvds_phy		= sun6i_tcon_setup_lvds_phy,
++};
++
+ static const struct sun4i_tcon_quirks sun8i_r40_tv_quirks = {
+ 	.has_channel_1		= true,
+ 	.polarity_in_ch0	= true,
+@@ -1559,6 +1567,7 @@ const struct of_device_id sun4i_tcon_of_table[] = {
+ 	{ .compatible = "allwinner,sun8i-a33-tcon", .data = &sun8i_a33_quirks },
+ 	{ .compatible = "allwinner,sun8i-a83t-tcon-lcd", .data = &sun8i_a83t_lcd_quirks },
+ 	{ .compatible = "allwinner,sun8i-a83t-tcon-tv", .data = &sun8i_a83t_tv_quirks },
++	{ .compatible = "allwinner,sun8i-r40-tcon-lcd", .data = &sun8i_r40_lcd_quirks },
+ 	{ .compatible = "allwinner,sun8i-r40-tcon-tv", .data = &sun8i_r40_tv_quirks },
+ 	{ .compatible = "allwinner,sun8i-v3s-tcon", .data = &sun8i_v3s_quirks },
+ 	{ .compatible = "allwinner,sun9i-a80-tcon-lcd", .data = &sun9i_a80_tcon_lcd_quirks },
+diff --git a/drivers/gpu/drm/sun4i/sun50i_planes.c b/drivers/gpu/drm/sun4i/sun50i_planes.c
+new file mode 100644
+index 000000000..265b7a421
+--- /dev/null
++++ b/drivers/gpu/drm/sun4i/sun50i_planes.c
+@@ -0,0 +1,205 @@
++// SPDX-License-Identifier: GPL-2.0+
++/* Copyright (c) 2025 Jernej Skrabec <jernej.skrabec@gmail.com> */
++
++#include <linux/device.h>
++#include <linux/io.h>
++#include <linux/mfd/syscon.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/of_graph.h>
++#include <linux/platform_device.h>
++
++#include "sun50i_planes.h"
++#include "sun8i_ui_layer.h"
++#include "sun8i_vi_layer.h"
++
++static bool sun50i_planes_node_is_planes(struct device_node *node)
++{
++	return !!of_match_node(sun50i_planes_of_table, node);
++}
++
++struct drm_plane **
++sun50i_planes_setup(struct device *dev, struct drm_device *drm,
++		    unsigned int mixer)
++{
++	struct sun50i_planes *planes = dev_get_drvdata(dev);
++	const struct sun50i_planes_quirks *quirks;
++	struct drm_plane **drm_planes;
++	const struct default_map *map;
++	unsigned int i;
++
++	if (!sun50i_planes_node_is_planes(dev->of_node)) {
++		dev_err(dev, "Device is not planes driver!\n");
++		return ERR_PTR(-ENODEV);
++	}
++
++	if (!planes) {
++		dev_err(dev, "Planes driver is not loaded yet!\n");
++		return ERR_PTR(-ENODEV);
++	}
++
++	if (mixer > 1) {
++		dev_err(dev, "Mixer index is too high!\n");
++		return ERR_PTR(-ENODEV);
++	}
++
++	quirks = planes->quirks;
++	map = &quirks->def_map[mixer];
++
++	drm_planes = devm_kcalloc(drm->dev, map->num_ch + 1,
++				  sizeof(*drm_planes), GFP_KERNEL);
++	if (!drm_planes)
++		return ERR_PTR(-ENOMEM);
++
++	for (i = 0; i < map->num_ch; i++) {
++		unsigned int phy_ch = map->map[i];
++		struct sun8i_layer *layer;
++		enum drm_plane_type type;
++
++		if ((i == 0 && map->num_ch == 1) || i == 1)
++			type = DRM_PLANE_TYPE_PRIMARY;
++		else
++			type = DRM_PLANE_TYPE_OVERLAY;
++
++		if (phy_ch < UI_PLANE_OFFSET)
++			layer = sun8i_vi_layer_init_one(drm, type, planes->regs,
++							i, phy_ch, map->num_ch,
++							&quirks->cfg);
++		else
++			layer = sun8i_ui_layer_init_one(drm, type, planes->regs,
++							i, phy_ch, map->num_ch,
++							&quirks->cfg);
++
++		if (IS_ERR(layer)) {
++			dev_err(drm->dev,
++				"Couldn't initialize DRM plane\n");
++			return ERR_CAST(layer);
++		}
++
++		drm_planes[i] = &layer->plane;
++	}
++
++	return drm_planes;
++}
++EXPORT_SYMBOL(sun50i_planes_setup);
++
++static void sun50i_planes_init_mapping(struct sun50i_planes *planes)
++{
++	const struct sun50i_planes_quirks *quirks = planes->quirks;
++	unsigned int i, j;
++	u32 mapping;
++
++	mapping = 0;
++	for (j = 0; j < MAX_DISP; j++)
++		for (i = 0; i < quirks->def_map[j].num_ch; i++) {
++			unsigned int ch = quirks->def_map[j].map[i];
++
++			if (ch < UI_PLANE_OFFSET)
++				mapping |= j << (ch * 2);
++			else
++				mapping |= j << ((ch - UI_PLANE_OFFSET) * 2 + 16);
++		}
++	regmap_write(planes->mapping, SUNXI_DE33_DE_CHN2CORE_MUX_REG, mapping);
++
++	for (j = 0; j < MAX_DISP; j++) {
++		mapping = 0;
++		for (i = 0; i < quirks->def_map[j].num_ch; i++) {
++			unsigned int ch = quirks->def_map[j].map[i];
++
++			if (ch >= UI_PLANE_OFFSET)
++				ch += 2;
++
++			mapping |= ch << (i * 4);
++		}
++		regmap_write(planes->mapping, SUNXI_DE33_DE_PORT02CHN_MUX_REG + j * 4, mapping);
++	}
++}
++
++static const struct regmap_config sun50i_planes_regmap_config = {
++	.name		= "planes",
++	.reg_bits	= 32,
++	.val_bits	= 32,
++	.reg_stride	= 4,
++	.max_register	= 0x17fffc,
++};
++
++static int sun50i_planes_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct sun50i_planes *planes;
++	void __iomem *regs;
++
++	planes = devm_kzalloc(dev, sizeof(*planes), GFP_KERNEL);
++	if (!planes)
++		return -ENOMEM;
++
++	planes->quirks = of_device_get_match_data(&pdev->dev);
++	if (!planes->quirks)
++		return dev_err_probe(dev, -EINVAL, "Unable to get quirks\n");
++
++	planes->mapping = syscon_regmap_lookup_by_phandle(dev->of_node,
++							  "allwinner,plane-mapping");
++	if (IS_ERR(planes->mapping))
++		return dev_err_probe(dev, PTR_ERR(planes->mapping),
++				     "Unable to get mapping\n");
++
++	regs = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(regs))
++		return PTR_ERR(regs);
++
++	planes->regs = devm_regmap_init_mmio(dev, regs, &sun50i_planes_regmap_config);
++	if (IS_ERR(planes->regs))
++		return PTR_ERR(planes->regs);
++
++	dev_set_drvdata(dev, planes);
++
++	sun50i_planes_init_mapping(planes);
++
++	return 0;
++}
++
++static const struct sun50i_planes_quirks sun50i_h616_planes_quirks = {
++	.def_map = {
++		{
++			.map = {0, 6, 7},
++			.num_ch = 3,
++		},
++		{
++			.map = {1, 2, 8},
++			.num_ch = 3,
++		},
++	},
++	.cfg = {
++		.de_type	= SUN8I_MIXER_DE33,
++		/*
++		 * TODO: All planes support scaling, but driver needs
++		 * improvements to properly support it.
++		 */
++		.scaler_mask    = 0,
++		.scanline_yuv	= 4096,
++	},
++};
++
++/* sun4i_drv uses this list to check if a device node is a plane */
++const struct of_device_id sun50i_planes_of_table[] = {
++	{
++		.compatible = "allwinner,sun50i-h616-de33-planes",
++		.data = &sun50i_h616_planes_quirks
++	},
++	{ }
++};
++MODULE_DEVICE_TABLE(of, sun50i_planes_of_table);
++EXPORT_SYMBOL(sun50i_planes_of_table);
++
++static struct platform_driver sun50i_planes_platform_driver = {
++	.probe		= sun50i_planes_probe,
++	.driver		= {
++		.name		= "sun50i-planes",
++		.of_match_table	= sun50i_planes_of_table,
++	},
++};
++module_platform_driver(sun50i_planes_platform_driver);
++
++MODULE_AUTHOR("Jernej Skrabec <jernej.skrabec@gmail.com>");
++MODULE_DESCRIPTION("Allwinner DE33 planes driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/gpu/drm/sun4i/sun50i_planes.h b/drivers/gpu/drm/sun4i/sun50i_planes.h
+new file mode 100644
+index 000000000..446feaeb0
+--- /dev/null
++++ b/drivers/gpu/drm/sun4i/sun50i_planes.h
+@@ -0,0 +1,43 @@
++/* SPDX-License-Identifier: GPL-2.0+ */
++/* Copyright (c) 2025 Jernej Skrabec <jernej.skrabec@gmail.com> */
++
++#ifndef _SUN50I_PLANES_H_
++#define _SUN50I_PLANES_H_
++
++#include <drm/drm_device.h>
++#include <linux/regmap.h>
++
++#include "sun8i_mixer.h"
++
++/* mapping registers, located in clock register space */
++#define SUNXI_DE33_DE_CHN2CORE_MUX_REG	0x24
++#define SUNXI_DE33_DE_PORT02CHN_MUX_REG	0x28
++#define SUNXI_DE33_DE_PORT12CHN_MUX_REG	0x2c
++
++#define MAX_DISP	2
++#define MAX_CHANNELS	8
++#define UI_PLANE_OFFSET	6
++
++struct default_map {
++	unsigned int map[MAX_CHANNELS];
++	unsigned int num_ch;
++};
++
++struct sun50i_planes_quirks {
++	struct default_map	def_map[MAX_DISP];
++	struct sun8i_layer_cfg	cfg;
++};
++
++struct sun50i_planes {
++	struct regmap				*regs;
++	struct regmap				*mapping;
++	const struct sun50i_planes_quirks	*quirks;
++};
++
++extern const struct of_device_id sun50i_planes_of_table[];
++
++struct drm_plane **
++sun50i_planes_setup(struct device *dev, struct drm_device *drm,
++		    unsigned int mixer);
++
++#endif /* _SUN50I_PLANES_H_ */
+diff --git a/drivers/gpu/drm/sun4i/sun8i_mixer.c b/drivers/gpu/drm/sun4i/sun8i_mixer.c
+index b6cd7352e..9f0ecad22 100644
+--- a/drivers/gpu/drm/sun4i/sun8i_mixer.c
++++ b/drivers/gpu/drm/sun4i/sun8i_mixer.c
+@@ -13,6 +13,7 @@
+ #include <linux/of.h>
+ #include <linux/of_device.h>
+ #include <linux/of_graph.h>
++#include <linux/of_platform.h>
+ #include <linux/platform_device.h>
+ #include <linux/reset.h>
+ 
+@@ -25,6 +26,7 @@
+ #include <drm/drm_probe_helper.h>
+ 
+ #include "sun4i_drv.h"
++#include "sun50i_planes.h"
+ #include "sun8i_mixer.h"
+ #include "sun8i_ui_layer.h"
+ #include "sun8i_vi_layer.h"
+@@ -257,7 +259,6 @@ static void sun8i_mixer_commit(struct sunxi_engine *engine,
+ {
+ 	struct sun8i_mixer *mixer = engine_to_sun8i_mixer(engine);
+ 	u32 bld_base = sun8i_blender_base(mixer);
+-	struct regmap *bld_regs = sun8i_blender_regmap(mixer);
+ 	struct drm_plane_state *plane_state;
+ 	struct drm_plane *plane;
+ 	u32 route = 0, pipe_en = 0;
+@@ -294,16 +295,16 @@ static void sun8i_mixer_commit(struct sunxi_engine *engine,
+ 		route |= layer->index << SUN8I_MIXER_BLEND_ROUTE_PIPE_SHIFT(zpos);
+ 		pipe_en |= SUN8I_MIXER_BLEND_PIPE_CTL_EN(zpos);
+ 
+-		regmap_write(bld_regs,
++		regmap_write(engine->regs,
+ 			     SUN8I_MIXER_BLEND_ATTR_COORD(bld_base, zpos),
+ 			     SUN8I_MIXER_COORD(x, y));
+-		regmap_write(bld_regs,
++		regmap_write(engine->regs,
+ 			     SUN8I_MIXER_BLEND_ATTR_INSIZE(bld_base, zpos),
+ 			     SUN8I_MIXER_SIZE(w, h));
+ 	}
+ 
+-	regmap_write(bld_regs, SUN8I_MIXER_BLEND_ROUTE(bld_base), route);
+-	regmap_write(bld_regs, SUN8I_MIXER_BLEND_PIPE_CTL(bld_base),
++	regmap_write(engine->regs, SUN8I_MIXER_BLEND_ROUTE(bld_base), route);
++	regmap_write(engine->regs, SUN8I_MIXER_BLEND_PIPE_CTL(bld_base),
+ 		     pipe_en | SUN8I_MIXER_BLEND_PIPE_CTL_FC_EN(0));
+ 
+ 	if (mixer->cfg->de_type != SUN8I_MIXER_DE33)
+@@ -318,7 +319,6 @@ static struct drm_plane **sun8i_layers_init(struct drm_device *drm,
+ 	struct sun8i_mixer *mixer = engine_to_sun8i_mixer(engine);
+ 	int plane_cnt = mixer->cfg->ui_num + mixer->cfg->vi_num;
+ 	enum drm_plane_type type;
+-	unsigned int phy_index;
+ 	int i;
+ 
+ 	planes = devm_kcalloc(drm->dev, plane_cnt + 1, sizeof(*planes), GFP_KERNEL);
+@@ -333,12 +333,8 @@ static struct drm_plane **sun8i_layers_init(struct drm_device *drm,
+ 		else
+ 			type = DRM_PLANE_TYPE_OVERLAY;
+ 
+-		phy_index = i;
+-		if (mixer->cfg->de_type == SUN8I_MIXER_DE33)
+-			phy_index = mixer->cfg->map[i];
+-
+ 		layer = sun8i_vi_layer_init_one(drm, type, mixer->engine.regs,
+-						i, phy_index, plane_cnt,
++						i, i, plane_cnt,
+ 						&mixer->cfg->lay_cfg);
+ 		if (IS_ERR(layer)) {
+ 			dev_err(drm->dev,
+@@ -358,12 +354,8 @@ static struct drm_plane **sun8i_layers_init(struct drm_device *drm,
+ 		else
+ 			type = DRM_PLANE_TYPE_OVERLAY;
+ 
+-		phy_index = index;
+-		if (mixer->cfg->de_type == SUN8I_MIXER_DE33)
+-			phy_index = mixer->cfg->map[index];
+-
+ 		layer = sun8i_ui_layer_init_one(drm, type, mixer->engine.regs,
+-						index, phy_index, plane_cnt,
++						index, index, plane_cnt,
+ 						&mixer->cfg->lay_cfg);
+ 		if (IS_ERR(layer)) {
+ 			dev_err(drm->dev, "Couldn't initialize %s plane\n",
+@@ -377,16 +369,25 @@ static struct drm_plane **sun8i_layers_init(struct drm_device *drm,
+ 	return planes;
+ }
+ 
++static struct drm_plane **sun50i_layers_init(struct drm_device *drm,
++					     struct sunxi_engine *engine)
++{
++	struct sun8i_mixer *mixer = engine_to_sun8i_mixer(engine);
++
++	if (IS_ENABLED(CONFIG_DRM_SUN50I_PLANES))
++		return sun50i_planes_setup(mixer->planes_dev, drm, engine->id);
++
++	return NULL;
++}
++
+ static void sun8i_mixer_mode_set(struct sunxi_engine *engine,
+ 				 const struct drm_display_mode *mode)
+ {
+ 	struct sun8i_mixer *mixer = engine_to_sun8i_mixer(engine);
+-	struct regmap *bld_regs;
+ 	u32 bld_base, size, val;
+ 	bool interlaced;
+ 
+ 	bld_base = sun8i_blender_base(mixer);
+-	bld_regs = sun8i_blender_regmap(mixer);
+ 	interlaced = !!(mode->flags & DRM_MODE_FLAG_INTERLACE);
+ 	size = SUN8I_MIXER_SIZE(mode->hdisplay, mode->vdisplay);
+ 
+@@ -398,14 +399,14 @@ static void sun8i_mixer_mode_set(struct sunxi_engine *engine,
+ 	else
+ 		regmap_write(mixer->engine.regs, SUN8I_MIXER_GLOBAL_SIZE, size);
+ 
+-	regmap_write(bld_regs, SUN8I_MIXER_BLEND_OUTSIZE(bld_base), size);
++	regmap_write(engine->regs, SUN8I_MIXER_BLEND_OUTSIZE(bld_base), size);
+ 
+ 	if (interlaced)
+ 		val = SUN8I_MIXER_BLEND_OUTCTL_INTERLACED;
+ 	else
+ 		val = 0;
+ 
+-	regmap_update_bits(bld_regs, SUN8I_MIXER_BLEND_OUTCTL(bld_base),
++	regmap_update_bits(engine->regs, SUN8I_MIXER_BLEND_OUTCTL(bld_base),
+ 			   SUN8I_MIXER_BLEND_OUTCTL_INTERLACED, val);
+ 
+ 	DRM_DEBUG_DRIVER("Switching display mixer interlaced mode %s\n",
+@@ -418,8 +419,14 @@ static const struct sunxi_engine_ops sun8i_engine_ops = {
+ 	.mode_set	= sun8i_mixer_mode_set,
+ };
+ 
++static const struct sunxi_engine_ops sun50i_engine_ops = {
++	.commit		= sun8i_mixer_commit,
++	.layers_init	= sun50i_layers_init,
++	.mode_set	= sun8i_mixer_mode_set,
++};
++
+ static const struct regmap_config sun8i_mixer_regmap_config = {
+-	.name		= "layers",
++	.name		= "mixer",
+ 	.reg_bits	= 32,
+ 	.val_bits	= 32,
+ 	.reg_stride	= 4,
+@@ -434,14 +441,6 @@ static const struct regmap_config sun8i_top_regmap_config = {
+ 	.max_register	= 0x3c,
+ };
+ 
+-static const struct regmap_config sun8i_disp_regmap_config = {
+-	.name		= "display",
+-	.reg_bits	= 32,
+-	.val_bits	= 32,
+-	.reg_stride	= 4,
+-	.max_register	= 0x20000,
+-};
+-
+ static int sun8i_mixer_of_get_id(struct device_node *node)
+ {
+ 	struct device_node *ep, *remote;
+@@ -464,17 +463,14 @@ static int sun8i_mixer_of_get_id(struct device_node *node)
+ 
+ static void sun8i_mixer_init(struct sun8i_mixer *mixer)
+ {
+-	struct regmap *top_regs, *disp_regs;
+ 	unsigned int base = sun8i_blender_base(mixer);
++	struct regmap *top_regs;
+ 	int plane_cnt, i;
+ 
+-	if (mixer->cfg->de_type == SUN8I_MIXER_DE33) {
++	if (mixer->cfg->de_type == SUN8I_MIXER_DE33)
+ 		top_regs = mixer->top_regs;
+-		disp_regs = mixer->disp_regs;
+-	} else {
++	else
+ 		top_regs = mixer->engine.regs;
+-		disp_regs = mixer->engine.regs;
+-	}
+ 
+ 	/* Enable the mixer */
+ 	regmap_write(top_regs, SUN8I_MIXER_GLOBAL_CTL,
+@@ -484,25 +480,25 @@ static void sun8i_mixer_init(struct sun8i_mixer *mixer)
+ 		regmap_write(top_regs, SUN50I_MIXER_GLOBAL_CLK, 1);
+ 
+ 	/* Set background color to black */
+-	regmap_write(disp_regs, SUN8I_MIXER_BLEND_BKCOLOR(base),
++	regmap_write(mixer->engine.regs, SUN8I_MIXER_BLEND_BKCOLOR(base),
+ 		     SUN8I_MIXER_BLEND_COLOR_BLACK);
+ 
+ 	/*
+ 	 * Set fill color of bottom plane to black. Generally not needed
+ 	 * except when VI plane is at bottom (zpos = 0) and enabled.
+ 	 */
+-	regmap_write(disp_regs, SUN8I_MIXER_BLEND_PIPE_CTL(base),
++	regmap_write(mixer->engine.regs, SUN8I_MIXER_BLEND_PIPE_CTL(base),
+ 		     SUN8I_MIXER_BLEND_PIPE_CTL_FC_EN(0));
+-	regmap_write(disp_regs, SUN8I_MIXER_BLEND_ATTR_FCOLOR(base, 0),
++	regmap_write(mixer->engine.regs, SUN8I_MIXER_BLEND_ATTR_FCOLOR(base, 0),
+ 		     SUN8I_MIXER_BLEND_COLOR_BLACK);
+ 
+ 	plane_cnt = mixer->cfg->vi_num + mixer->cfg->ui_num;
+ 	for (i = 0; i < plane_cnt; i++)
+-		regmap_write(disp_regs,
++		regmap_write(mixer->engine.regs,
+ 			     SUN8I_MIXER_BLEND_MODE(base, i),
+ 			     SUN8I_MIXER_BLEND_MODE_DEF);
+ 
+-	regmap_update_bits(disp_regs, SUN8I_MIXER_BLEND_PIPE_CTL(base),
++	regmap_update_bits(mixer->engine.regs, SUN8I_MIXER_BLEND_PIPE_CTL(base),
+ 			   SUN8I_MIXER_BLEND_PIPE_CTL_EN_MSK, 0);
+ }
+ 
+@@ -533,7 +529,6 @@ static int sun8i_mixer_bind(struct device *dev, struct device *master,
+ 	if (!mixer)
+ 		return -ENOMEM;
+ 	dev_set_drvdata(dev, mixer);
+-	mixer->engine.ops = &sun8i_engine_ops;
+ 	mixer->engine.node = dev->of_node;
+ 
+ 	/*
+@@ -566,6 +561,11 @@ static int sun8i_mixer_bind(struct device *dev, struct device *master,
+ 	if (!mixer->cfg)
+ 		return -EINVAL;
+ 
++	if (mixer->cfg->de_type == SUN8I_MIXER_DE33)
++		mixer->engine.ops = &sun50i_engine_ops;
++	else
++		mixer->engine.ops = &sun8i_engine_ops;
++
+ 	regs = devm_platform_ioremap_resource(pdev, 0);
+ 	if (IS_ERR(regs))
+ 		return PTR_ERR(regs);
+@@ -578,7 +578,7 @@ static int sun8i_mixer_bind(struct device *dev, struct device *master,
+ 	}
+ 
+ 	if (mixer->cfg->de_type == SUN8I_MIXER_DE33) {
+-		regs = devm_platform_ioremap_resource_byname(pdev, "top");
++		regs = devm_platform_ioremap_resource(pdev, 1);
+ 		if (IS_ERR(regs))
+ 			return PTR_ERR(regs);
+ 
+@@ -588,17 +588,6 @@ static int sun8i_mixer_bind(struct device *dev, struct device *master,
+ 			dev_err(dev, "Couldn't create the top regmap\n");
+ 			return PTR_ERR(mixer->top_regs);
+ 		}
+-
+-		regs = devm_platform_ioremap_resource_byname(pdev, "display");
+-		if (IS_ERR(regs))
+-			return PTR_ERR(regs);
+-
+-		mixer->disp_regs = devm_regmap_init_mmio(dev, regs,
+-							 &sun8i_disp_regmap_config);
+-		if (IS_ERR(mixer->disp_regs)) {
+-			dev_err(dev, "Couldn't create the disp regmap\n");
+-			return PTR_ERR(mixer->disp_regs);
+-		}
+ 	}
+ 
+ 	mixer->reset = devm_reset_control_get(dev, NULL);
+@@ -638,6 +627,35 @@ static int sun8i_mixer_bind(struct device *dev, struct device *master,
+ 
+ 	clk_prepare_enable(mixer->mod_clk);
+ 
++	if (mixer->cfg->de_type == SUN8I_MIXER_DE33) {
++		struct platform_device *pdev;
++		struct device_node *np;
++		void *data;
++
++		np = of_parse_phandle(dev->of_node, "allwinner,planes", 0);
++		if (!np) {
++			ret = -ENODEV;
++			goto err_disable_mod_clk;
++		}
++
++		pdev = of_find_device_by_node(np);
++		of_node_put(np);
++		if (!pdev) {
++			ret = -EPROBE_DEFER;
++			goto err_disable_mod_clk;
++		}
++
++		data = platform_get_drvdata(pdev);
++		if (!data) {
++			put_device(&pdev->dev);
++			ret = -EPROBE_DEFER;
++			goto err_disable_mod_clk;
++		}
++
++		mixer->planes_dev = &pdev->dev;
++		put_device(&pdev->dev);
++	}
++
+ 	list_add_tail(&mixer->engine.list, &drv->engine_list);
+ 
+ 	/* Reset registers and disable unused sub-engines */
+@@ -672,6 +690,8 @@ static int sun8i_mixer_bind(struct device *dev, struct device *master,
+ 
+ 	return 0;
+ 
++err_disable_mod_clk:
++	clk_disable_unprepare(mixer->mod_clk);
+ err_disable_bus_clk:
+ 	clk_disable_unprepare(mixer->bus_clk);
+ err_assert_reset:
+@@ -867,16 +887,8 @@ static const struct sun8i_mixer_cfg sun50i_h6_mixer0_cfg = {
+ };
+ 
+ static const struct sun8i_mixer_cfg sun50i_h616_mixer0_cfg = {
+-	.lay_cfg = {
+-		.de_type	= SUN8I_MIXER_DE33,
+-		.scaler_mask	= 0xf,
+-		.scanline_yuv	= 4096,
+-	},
+ 	.de_type	= SUN8I_MIXER_DE33,
+ 	.mod_rate	= 600000000,
+-	.ui_num		= 3,
+-	.vi_num		= 1,
+-	.map		= {0, 6, 7, 8},
+ };
+ 
+ static const struct of_device_id sun8i_mixer_of_table[] = {
+diff --git a/drivers/gpu/drm/sun4i/sun8i_mixer.h b/drivers/gpu/drm/sun4i/sun8i_mixer.h
+index e2f83301a..7abc88c89 100644
+--- a/drivers/gpu/drm/sun4i/sun8i_mixer.h
++++ b/drivers/gpu/drm/sun4i/sun8i_mixer.h
+@@ -202,7 +202,6 @@ struct sun8i_mixer_cfg {
+ 	int			ui_num;
+ 	unsigned int		de_type;
+ 	unsigned long		mod_rate;
+-	unsigned int		map[6];
+ };
+ 
+ struct sun8i_mixer {
+@@ -216,7 +215,7 @@ struct sun8i_mixer {
+ 	struct clk			*mod_clk;
+ 
+ 	struct regmap			*top_regs;
+-	struct regmap			*disp_regs;
++	struct device			*planes_dev;
+ };
+ 
+ enum {
+@@ -252,13 +251,6 @@ sun8i_blender_base(struct sun8i_mixer *mixer)
+ 	return mixer->cfg->de_type == SUN8I_MIXER_DE3 ? DE3_BLD_BASE : DE2_BLD_BASE;
+ }
+ 
+-static inline struct regmap *
+-sun8i_blender_regmap(struct sun8i_mixer *mixer)
+-{
+-	return mixer->cfg->de_type == SUN8I_MIXER_DE33 ?
+-		mixer->disp_regs : mixer->engine.regs;
+-}
+-
+ static inline u32
+ sun8i_channel_base(struct sun8i_layer *layer)
+ {
+diff --git a/drivers/gpu/drm/sun4i/sun8i_vi_layer.c b/drivers/gpu/drm/sun4i/sun8i_vi_layer.c
+index 09f668c8a..a0bfa05f4 100644
+--- a/drivers/gpu/drm/sun4i/sun8i_vi_layer.c
++++ b/drivers/gpu/drm/sun4i/sun8i_vi_layer.c
+@@ -380,6 +380,37 @@ static const u32 sun8i_vi_layer_de3_formats[] = {
+ 	DRM_FORMAT_YVU422,
+ };
+ 
++/*
++ * TODO: DE33 VI planes naturally support YUV formats but
++ * driver needs improvements in order to support them.
++ */
++static const u32 sun8i_vi_layer_de33_formats[] = {
++	DRM_FORMAT_ABGR1555,
++	DRM_FORMAT_ABGR2101010,
++	DRM_FORMAT_ABGR4444,
++	DRM_FORMAT_ABGR8888,
++	DRM_FORMAT_ARGB1555,
++	DRM_FORMAT_ARGB2101010,
++	DRM_FORMAT_ARGB4444,
++	DRM_FORMAT_ARGB8888,
++	DRM_FORMAT_BGR565,
++	DRM_FORMAT_BGR888,
++	DRM_FORMAT_BGRA1010102,
++	DRM_FORMAT_BGRA5551,
++	DRM_FORMAT_BGRA4444,
++	DRM_FORMAT_BGRA8888,
++	DRM_FORMAT_BGRX8888,
++	DRM_FORMAT_RGB565,
++	DRM_FORMAT_RGB888,
++	DRM_FORMAT_RGBA1010102,
++	DRM_FORMAT_RGBA4444,
++	DRM_FORMAT_RGBA5551,
++	DRM_FORMAT_RGBA8888,
++	DRM_FORMAT_RGBX8888,
++	DRM_FORMAT_XBGR8888,
++	DRM_FORMAT_XRGB8888,
++};
++
+ static const uint64_t sun8i_layer_modifiers[] = {
+ 	DRM_FORMAT_MOD_LINEAR,
+ 	DRM_FORMAT_MOD_INVALID
+@@ -409,7 +440,10 @@ struct sun8i_layer *sun8i_vi_layer_init_one(struct drm_device *drm,
+ 	layer->regs = regs;
+ 	layer->cfg = cfg;
+ 
+-	if (layer->cfg->de_type >= SUN8I_MIXER_DE3) {
++	if (layer->cfg->de_type == SUN8I_MIXER_DE33) {
++		formats = sun8i_vi_layer_de33_formats;
++		format_count = ARRAY_SIZE(sun8i_vi_layer_de33_formats);
++	} else if (layer->cfg->de_type == SUN8I_MIXER_DE3) {
+ 		formats = sun8i_vi_layer_de3_formats;
+ 		format_count = ARRAY_SIZE(sun8i_vi_layer_de3_formats);
+ 	} else {
+diff --git a/drivers/pwm/Kconfig b/drivers/pwm/Kconfig
+index 729776086..d3c35a118 100644
+--- a/drivers/pwm/Kconfig
++++ b/drivers/pwm/Kconfig
+@@ -748,6 +748,18 @@ config PWM_SUN4I
+ 	  To compile this driver as a module, choose M here: the module
+ 	  will be called pwm-sun4i.
+ 
++config PWM_SUN8I
++	tristate "Allwinner sun8i/sun50i PWM support"
++	depends on ARCH_SUNXI || COMPILE_TEST
++	depends on HAS_IOMEM && COMMON_CLK
++	help
++	  PWM framework driver for Allwinner controllers whose channels share
++	  paired source clocks. In addition to PWM operation, each channel's
++	  hardware bypass path can be exported as a clock output.
++
++	  To compile this driver as a module, choose M here: the module
++	  will be called pwm-sun8i.
++
+ config PWM_SUNPLUS
+ 	tristate "Sunplus PWM support"
+ 	depends on ARCH_SUNPLUS || COMPILE_TEST
+diff --git a/drivers/pwm/Makefile b/drivers/pwm/Makefile
+index 5630a521a..9c922b1fd 100644
+--- a/drivers/pwm/Makefile
++++ b/drivers/pwm/Makefile
+@@ -68,6 +68,7 @@ obj-$(CONFIG_PWM_STM32)		+= pwm-stm32.o
+ obj-$(CONFIG_PWM_STM32_LP)	+= pwm-stm32-lp.o
+ obj-$(CONFIG_PWM_STMPE)		+= pwm-stmpe.o
+ obj-$(CONFIG_PWM_SUN4I)		+= pwm-sun4i.o
++obj-$(CONFIG_PWM_SUN8I)		+= pwm-sun8i.o
+ obj-$(CONFIG_PWM_SUNPLUS)	+= pwm-sunplus.o
+ obj-$(CONFIG_PWM_TEGRA)		+= pwm-tegra.o
+ obj-$(CONFIG_PWM_TH1520)	+= pwm_th1520.o
+diff --git a/drivers/pwm/pwm-sun8i.c b/drivers/pwm/pwm-sun8i.c
+new file mode 100644
+index 000000000..5c3580a09
+--- /dev/null
++++ b/drivers/pwm/pwm-sun8i.c
+@@ -0,0 +1,1542 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Driver for Allwinner sun8i Pulse Width Modulation Controller
++ *
++ * (C) Copyright 2025 Richard Genoud, Bootlin <richard.genoud@bootlin.com>
++ * (C) Copyright 2026 James Hilliard <james.hilliard1@gmail.com>
++ *
++ * Based on drivers/pwm/pwm-sun4i.c with Copyright:
++ *
++ * Copyright (C) 2014 Alexandre Belloni <alexandre.belloni@bootlin.com>
++ *
++ * Channels are paired (0/1, 2/3, 4/5). Each pair shares a clock source and
++ * first prescaler (div_m), while each channel has its own second prescaler
++ * (div_k) and bypass path.
++ *
++ */
++
++#include <linux/bitfield.h>
++#include <linux/bits.h>
++#include <linux/clk.h>
++#include <linux/clk-provider.h>
++#include <linux/device.h>
++#include <linux/err.h>
++#include <linux/io.h>
++#include <linux/iopoll.h>
++#include <linux/limits.h>
++#include <linux/math64.h>
++#include <linux/module.h>
++#include <linux/notifier.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/pwm.h>
++#include <linux/reset.h>
++#include <linux/slab.h>
++#include <linux/spinlock.h>
++#include <linux/time.h>
++
++/* PWMCC Pairs Clock Configuration Registers */
++#define SUN8I_PWM_PCCR(pair)		(0x20 + ((pair) * 0x4))
++#define SUN8I_PWM_PCCR_SRC_SHIFT	7
++#define SUN8I_PWM_PCCR_SRC_MASK		GENMASK(1, 0)
++#define SUN8I_PWM_PCCR_GATE_BIT		4
++#define SUN8I_PWM_PCCR_GATE		BIT(SUN8I_PWM_PCCR_GATE_BIT)
++#define SUN8I_PWM_PCCR_BYPASS_BIT(chan)	((chan) % 2 + 5)
++#define SUN8I_PWM_PCCR_DIV_M_SHIFT	0
++#define SUN8I_PWM_PCCR_DIV_M_WIDTH	4
++
++/* PWM Enable Register */
++#define SUN8I_PWM_PER			0x40
++#define SUN8I_PWM_ENABLE(chan)		BIT(chan)
++
++/* PWM Control Register */
++#define SUN8I_PWM_PCR(chan)		(0x60 + (chan) * 0x20)
++#define SUN8I_PWM_PCR_PRESCAL_K_MASK	GENMASK(7, 0)
++#define SUN8I_PWM_PCR_ACTIVE_STATE	BIT(8)
++#define SUN8I_PWM_PCR_MODE		BIT(9)
++#define SUN8I_PWM_PCR_PULSE_START	BIT(10)
++#define SUN8I_PWM_PCR_PERIOD_READY	BIT(11) /* 0: ready, 1: busy */
++
++/* PWM Period Register */
++#define SUN8I_PWM_PPR(chan)		(0x64 + (chan) * 0x20)
++#define SUN8I_PWM_PPR_PERIOD_MASK	GENMASK(31, 16)
++#define SUN8I_PWM_PPR_DUTY_MASK		GENMASK(15, 0)
++#define SUN8I_PWM_PPR_PERIOD_VALUE(reg)	(FIELD_GET(SUN8I_PWM_PPR_PERIOD_MASK, reg) + 1)
++#define SUN8I_PWM_PPR_DUTY_VALUE(reg)	FIELD_GET(SUN8I_PWM_PPR_DUTY_MASK, reg)
++#define SUN8I_PWM_PPR_PERIOD(prd)	FIELD_PREP(SUN8I_PWM_PPR_PERIOD_MASK, (prd) - 1)
++#define SUN8I_PWM_PPR_DUTY(dty)		FIELD_PREP(SUN8I_PWM_PPR_DUTY_MASK, dty)
++#define SUN8I_PWM_PPR_PERIOD_MAX	(FIELD_MAX(SUN8I_PWM_PPR_PERIOD_MASK) + 1)
++
++/* PWM pair dead-zone control registers. */
++#define SUN8I_PWM_PDZCR(pair)		(0x30 + ((pair) * 0x4))
++#define SUN8I_PWM_PDZCR_ENABLE		BIT(0)
++
++#define SUN8I_PWM_PERIOD_READY_MARGIN_US	50
++#define SUN8I_PWM_PERIOD_READY_MIN_POLL_US	10
++#define SUN8I_PWM_PERIOD_READY_MAX_POLL_US	10000
++#define SUN8I_PWM_PERIOD_READY_POLL_COUNT	1024
++
++#define SUN8I_PWM_PAIR_IDX(chan)	((chan) >> 1)
++
++/*
++ * Block diagram of the PWM clock controller:
++ *
++ *             _____      ______      ________
++ * OSC24M --->|     |    |      |    |        |
++ * APB1 ----->| Mux |--->| Gate |--->| /div_m |-----> SUN8I_PWM_clock_src_xy
++ *            |_____|    |______|    |________|
++ *                               ________
++ *                              |        |
++ *                           +->| /div_k |---> SUN8I_PWM_clock_x
++ *                           |  |________|
++ *                           |    ______
++ *                           |   |      |
++ *                           +-->| Gate |----> SUN8I_PWM_bypass_clock_x
++ *                           |   |______|
++ * SUN8I_PWM_clock_src_xy ---+   ________
++ *                           |  |        |
++ *                           +->| /div_k |---> SUN8I_PWM_clock_y
++ *                           |  |________|
++ *                           |    ______
++ *                           |   |      |
++ *                           +-->| Gate |----> SUN8I_PWM_bypass_clock_y
++ *                               |______|
++ *
++ * NB: when the bypass is set, all the PWM logic is bypassed.
++ * So, the duty cycle and polarity can't be modified (we just have a clock).
++ * The bypass in PWM mode is used to achieve a 1/2 relative duty cycle with the
++ * fastest clock.
++ *
++ * SUN8I_PWM_clock_x/y serve for the PWM purpose.
++ * SUN8I_PWM_bypass_clock_x/y serve for the clock-provider purpose.
++ *
++ */
++
++/* /div_m is a power-of-two divider limited to /256. */
++static const struct clk_div_table sun8i_pwm_div_m_table[] = {
++	{ .val = 0, .div = 1 },
++	{ .val = 1, .div = 2 },
++	{ .val = 2, .div = 4 },
++	{ .val = 3, .div = 8 },
++	{ .val = 4, .div = 16 },
++	{ .val = 5, .div = 32 },
++	{ .val = 6, .div = 64 },
++	{ .val = 7, .div = 128 },
++	{ .val = 8, .div = 256 },
++	{ /* sentinel */ }
++};
++
++enum sun8i_pwm_mode {
++	SUN8I_PWM_MODE_NONE,
++	SUN8I_PWM_MODE_PWM,
++	SUN8I_PWM_MODE_CLK,
++};
++
++struct sun8i_pwm_data {
++	unsigned int npwm;
++};
++
++struct sun8i_pwm_chip;
++
++struct sun8i_pwm_pair {
++	struct clk_mux mux;
++	struct clk_hw gate_hw;
++	struct clk_divider divider;
++	struct clk_hw *hw;
++	struct notifier_block rate_nb;
++	struct sun8i_pwm_chip *chip;
++	unsigned int index;
++};
++
++struct sun8i_pwm_bypass {
++	struct clk_hw hw;
++	struct sun8i_pwm_chip *chip;
++	unsigned int index;
++};
++
++struct sun8i_pwm_channel {
++	struct sun8i_pwm_bypass bypass;
++	struct clk *pair_clk;
++	enum sun8i_pwm_mode mode;
++	u64 pending_period_ns;
++	bool rate_exclusive;
++};
++
++struct sun8i_pwm_chip {
++	struct clk_hw_onecell_data *hw_data;
++	struct sun8i_pwm_pair *pairs;
++	struct sun8i_pwm_channel *channels;
++	struct clk *bus_clk;
++	void __iomem *base;
++	const struct sun8i_pwm_data *data;
++	/* Protects shared registers and channel ownership. */
++	spinlock_t lock;
++};
++
++struct sun8i_pwm_waveform {
++	u32 duty_ticks;
++	u32 period_ticks;
++	u32 pair_rate;
++	u16 div_k;
++	u8 enabled:1;
++	u8 active_state:1;
++	u8 bypass_en:1;
++};
++
++static inline struct sun8i_pwm_chip *sun8i_pwm_from_chip(const struct pwm_chip *chip)
++{
++	return pwmchip_get_drvdata(chip);
++}
++
++static inline u32 sun8i_pwm_readl(struct sun8i_pwm_chip *sun8i_chip,
++				  unsigned long offset)
++{
++	return readl(sun8i_chip->base + offset);
++}
++
++static inline void sun8i_pwm_writel(struct sun8i_pwm_chip *sun8i_chip,
++				    u32 val, unsigned long offset)
++{
++	writel(val, sun8i_chip->base + offset);
++}
++
++static void sun8i_pwm_set_bypass_locked(struct sun8i_pwm_chip *sun8i_chip,
++					unsigned int idx, bool enable)
++{
++	unsigned long reg_offset;
++	u32 val;
++
++	lockdep_assert_held(&sun8i_chip->lock);
++
++	reg_offset = SUN8I_PWM_PCCR(SUN8I_PWM_PAIR_IDX(idx));
++	val = sun8i_pwm_readl(sun8i_chip, reg_offset);
++	if (enable)
++		val |= BIT(SUN8I_PWM_PCCR_BYPASS_BIT(idx));
++	else
++		val &= ~BIT(SUN8I_PWM_PCCR_BYPASS_BIT(idx));
++
++	sun8i_pwm_writel(sun8i_chip, val, reg_offset);
++}
++
++static void sun8i_pwm_set_enabled_locked(struct sun8i_pwm_chip *sun8i_chip,
++					 unsigned int idx, bool enable)
++{
++	u32 val;
++
++	lockdep_assert_held(&sun8i_chip->lock);
++
++	val = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER);
++	if (enable)
++		val |= SUN8I_PWM_ENABLE(idx);
++	else
++		val &= ~SUN8I_PWM_ENABLE(idx);
++	sun8i_pwm_writel(sun8i_chip, val, SUN8I_PWM_PER);
++}
++
++static bool
++sun8i_pwm_channel_is_enabled_locked(struct sun8i_pwm_chip *sun8i_chip,
++				    unsigned int idx)
++{
++	unsigned int pair = SUN8I_PWM_PAIR_IDX(idx);
++	u32 pccr, per;
++
++	lockdep_assert_held(&sun8i_chip->lock);
++
++	pccr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCCR(pair));
++	per = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER);
++
++	return (pccr & SUN8I_PWM_PCCR_GATE) &&
++	       (per & SUN8I_PWM_ENABLE(idx));
++}
++
++static u32 sun8i_pwm_pair_enable_mask(struct sun8i_pwm_chip *sun8i_chip,
++				      unsigned int pair)
++{
++	unsigned int first = pair * 2;
++	u32 mask = SUN8I_PWM_ENABLE(first);
++
++	if (first + 1 < sun8i_chip->data->npwm)
++		mask |= SUN8I_PWM_ENABLE(first + 1);
++
++	return mask;
++}
++
++static u32
++sun8i_pwm_pair_owner_mask_locked(struct sun8i_pwm_chip *sun8i_chip,
++				 unsigned int pair)
++{
++	unsigned int first = pair * 2;
++	u32 mask = 0;
++
++	lockdep_assert_held(&sun8i_chip->lock);
++
++	if (sun8i_chip->channels[first].mode != SUN8I_PWM_MODE_NONE)
++		mask |= SUN8I_PWM_ENABLE(first);
++	if (first + 1 < sun8i_chip->data->npwm &&
++	    sun8i_chip->channels[first + 1].mode != SUN8I_PWM_MODE_NONE)
++		mask |= SUN8I_PWM_ENABLE(first + 1);
++
++	return mask;
++}
++
++static inline struct sun8i_pwm_pair *
++sun8i_pwm_pair_from_gate_hw(struct clk_hw *hw)
++{
++	return container_of(hw, struct sun8i_pwm_pair, gate_hw);
++}
++
++static int sun8i_pwm_pair_gate_enable(struct clk_hw *hw)
++{
++	struct sun8i_pwm_pair *pair = sun8i_pwm_pair_from_gate_hw(hw);
++	struct sun8i_pwm_chip *sun8i_chip = pair->chip;
++	unsigned long flags;
++	u32 pccr;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	pccr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCCR(pair->index));
++	pccr |= SUN8I_PWM_PCCR_GATE;
++	sun8i_pwm_writel(sun8i_chip, pccr, SUN8I_PWM_PCCR(pair->index));
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return 0;
++}
++
++static void sun8i_pwm_pair_gate_disable(struct clk_hw *hw)
++{
++	struct sun8i_pwm_pair *pair = sun8i_pwm_pair_from_gate_hw(hw);
++	struct sun8i_pwm_chip *sun8i_chip = pair->chip;
++	unsigned long reg = SUN8I_PWM_PCCR(pair->index);
++	unsigned long flags;
++	u32 pccr, per;
++
++	/* CCF counts do not include outputs awaiting firmware-state handoff. */
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	per = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER);
++	if (!(per & sun8i_pwm_pair_enable_mask(sun8i_chip, pair->index))) {
++		pccr = sun8i_pwm_readl(sun8i_chip, reg);
++		pccr &= ~SUN8I_PWM_PCCR_GATE;
++		sun8i_pwm_writel(sun8i_chip, pccr, reg);
++	}
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++}
++
++static int sun8i_pwm_pair_gate_is_enabled(struct clk_hw *hw)
++{
++	struct sun8i_pwm_pair *pair = sun8i_pwm_pair_from_gate_hw(hw);
++	struct sun8i_pwm_chip *sun8i_chip = pair->chip;
++	unsigned long reg = SUN8I_PWM_PCCR(pair->index);
++	unsigned long flags;
++	bool enabled;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	enabled = sun8i_pwm_readl(sun8i_chip, reg) & SUN8I_PWM_PCCR_GATE;
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return enabled;
++}
++
++static const struct clk_ops sun8i_pwm_pair_gate_ops = {
++	.enable = sun8i_pwm_pair_gate_enable,
++	.disable = sun8i_pwm_pair_gate_disable,
++	.is_enabled = sun8i_pwm_pair_gate_is_enabled,
++};
++
++static int sun8i_pwm_pair_rate_notifier(struct notifier_block *nb,
++					unsigned long event, void *data)
++{
++	struct sun8i_pwm_pair *pair =
++		container_of(nb, struct sun8i_pwm_pair, rate_nb);
++	struct sun8i_pwm_chip *sun8i_chip = pair->chip;
++	unsigned long flags;
++	bool active;
++
++	if (event != PRE_RATE_CHANGE)
++		return NOTIFY_DONE;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	active = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER) &
++		 sun8i_pwm_pair_enable_mask(sun8i_chip, pair->index);
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return active ? NOTIFY_BAD : NOTIFY_OK;
++}
++
++static inline struct sun8i_pwm_bypass *
++sun8i_pwm_bypass_from_hw(struct clk_hw *hw)
++{
++	return container_of(hw, struct sun8i_pwm_bypass, hw);
++}
++
++static int sun8i_pwm_bypass_prepare(struct clk_hw *hw)
++{
++	struct sun8i_pwm_bypass *bypass = sun8i_pwm_bypass_from_hw(hw);
++	struct sun8i_pwm_chip *sun8i_chip = bypass->chip;
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[bypass->index];
++	unsigned long flags;
++	int ret = 0;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	if (chan->mode != SUN8I_PWM_MODE_NONE)
++		ret = -EBUSY;
++	else
++		chan->mode = SUN8I_PWM_MODE_CLK;
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return ret;
++}
++
++static void sun8i_pwm_bypass_unprepare(struct clk_hw *hw)
++{
++	struct sun8i_pwm_bypass *bypass = sun8i_pwm_bypass_from_hw(hw);
++	struct sun8i_pwm_chip *sun8i_chip = bypass->chip;
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[bypass->index];
++	unsigned long flags;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	if (WARN_ON_ONCE(chan->mode != SUN8I_PWM_MODE_CLK))
++		goto out_unlock;
++
++	chan->mode = SUN8I_PWM_MODE_NONE;
++
++out_unlock:
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++}
++
++static int sun8i_pwm_bypass_enable(struct clk_hw *hw)
++{
++	struct sun8i_pwm_bypass *bypass = sun8i_pwm_bypass_from_hw(hw);
++	struct sun8i_pwm_chip *sun8i_chip = bypass->chip;
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[bypass->index];
++	unsigned int pair = SUN8I_PWM_PAIR_IDX(bypass->index);
++	unsigned long flags;
++	u32 pccr, per;
++	int ret = 0;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	if (WARN_ON_ONCE(chan->mode != SUN8I_PWM_MODE_CLK)) {
++		ret = -EBUSY;
++		goto out_unlock;
++	}
++
++	pccr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCCR(pair));
++	per = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER);
++	if (!(pccr & BIT(SUN8I_PWM_PCCR_BYPASS_BIT(bypass->index))) ||
++	    !(per & SUN8I_PWM_ENABLE(bypass->index))) {
++		sun8i_pwm_set_enabled_locked(sun8i_chip, bypass->index, false);
++		sun8i_pwm_set_bypass_locked(sun8i_chip, bypass->index, true);
++		sun8i_pwm_set_enabled_locked(sun8i_chip, bypass->index, true);
++	}
++
++out_unlock:
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return ret;
++}
++
++static void sun8i_pwm_bypass_disable(struct clk_hw *hw)
++{
++	struct sun8i_pwm_bypass *bypass = sun8i_pwm_bypass_from_hw(hw);
++	struct sun8i_pwm_chip *sun8i_chip = bypass->chip;
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[bypass->index];
++	unsigned long flags;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	if (WARN_ON_ONCE(chan->mode != SUN8I_PWM_MODE_CLK))
++		goto out_unlock;
++
++	sun8i_pwm_set_enabled_locked(sun8i_chip, bypass->index, false);
++	sun8i_pwm_set_bypass_locked(sun8i_chip, bypass->index, false);
++
++out_unlock:
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++}
++
++static void sun8i_pwm_bypass_disable_unused(struct clk_hw *hw)
++{
++	/* Defer inherited-output cleanup to sun8i_pwm_sync_state(). */
++}
++
++static int sun8i_pwm_bypass_is_enabled(struct clk_hw *hw)
++{
++	struct sun8i_pwm_bypass *bypass = sun8i_pwm_bypass_from_hw(hw);
++	struct sun8i_pwm_chip *sun8i_chip = bypass->chip;
++	unsigned int pair = SUN8I_PWM_PAIR_IDX(bypass->index);
++	unsigned long flags;
++	bool enabled;
++	u32 val;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++
++	val = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCCR(pair));
++	enabled = (val & SUN8I_PWM_PCCR_GATE) &&
++		  (val & BIT(SUN8I_PWM_PCCR_BYPASS_BIT(bypass->index)));
++
++	val = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER);
++	enabled = enabled && (val & SUN8I_PWM_ENABLE(bypass->index));
++
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return enabled;
++}
++
++static unsigned long sun8i_pwm_bypass_recalc_rate(struct clk_hw *hw,
++						  unsigned long parent_rate)
++{
++	return parent_rate;
++}
++
++static const struct clk_ops sun8i_pwm_bypass_ops = {
++	.prepare = sun8i_pwm_bypass_prepare,
++	.unprepare = sun8i_pwm_bypass_unprepare,
++	.enable = sun8i_pwm_bypass_enable,
++	.disable = sun8i_pwm_bypass_disable,
++	.disable_unused = sun8i_pwm_bypass_disable_unused,
++	.is_enabled = sun8i_pwm_bypass_is_enabled,
++	.recalc_rate = sun8i_pwm_bypass_recalc_rate,
++};
++
++static int sun8i_pwm_request(struct pwm_chip *chip, struct pwm_device *pwm)
++{
++	struct sun8i_pwm_chip *sun8i_chip = sun8i_pwm_from_chip(chip);
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[pwm->hwpwm];
++	unsigned int idx = pwm->hwpwm;
++	unsigned long flags;
++	bool was_enabled = false;
++	int ret;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	if (chan->mode != SUN8I_PWM_MODE_NONE) {
++		ret = -EBUSY;
++	} else {
++		was_enabled =
++			sun8i_pwm_channel_is_enabled_locked(sun8i_chip, idx);
++		chan->mode = SUN8I_PWM_MODE_PWM;
++		ret = 0;
++	}
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++	if (ret)
++		return ret;
++
++	if (was_enabled) {
++		ret = clk_rate_exclusive_get(chan->pair_clk);
++		if (ret)
++			goto err_release_channel;
++		WRITE_ONCE(chan->rate_exclusive, true);
++	}
++
++	ret = clk_prepare_enable(chan->pair_clk);
++	if (ret) {
++		if (READ_ONCE(chan->rate_exclusive)) {
++			clk_rate_exclusive_put(chan->pair_clk);
++			WRITE_ONCE(chan->rate_exclusive, false);
++		}
++		goto err_release_channel;
++	}
++
++	return 0;
++
++err_release_channel:
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	chan->mode = SUN8I_PWM_MODE_NONE;
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return ret;
++}
++
++static void sun8i_pwm_free(struct pwm_chip *chip, struct pwm_device *pwm)
++{
++	struct sun8i_pwm_chip *sun8i_chip = sun8i_pwm_from_chip(chip);
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[pwm->hwpwm];
++	unsigned long flags;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	if (WARN_ON_ONCE(chan->mode != SUN8I_PWM_MODE_PWM)) {
++		spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++		return;
++	}
++
++	sun8i_pwm_set_enabled_locked(sun8i_chip, pwm->hwpwm, false);
++	sun8i_pwm_set_bypass_locked(sun8i_chip, pwm->hwpwm, false);
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	if (READ_ONCE(chan->rate_exclusive)) {
++		clk_rate_exclusive_put(chan->pair_clk);
++		WRITE_ONCE(chan->rate_exclusive, false);
++	}
++	clk_disable_unprepare(chan->pair_clk);
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	chan->mode = SUN8I_PWM_MODE_NONE;
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++}
++
++static int sun8i_pwm_read_waveform(struct pwm_chip *chip,
++				   struct pwm_device *pwm,
++				   void *_wfhw)
++{
++	struct sun8i_pwm_waveform *wfhw = _wfhw;
++	struct sun8i_pwm_chip *sun8i_chip = sun8i_pwm_from_chip(chip);
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[pwm->hwpwm];
++	unsigned int pair = SUN8I_PWM_PAIR_IDX(pwm->hwpwm);
++	unsigned long flags, pair_rate;
++	u32 pccr, pcr, pdzcr, per, ppr;
++
++	pair_rate = clk_get_rate(chan->pair_clk);
++	if (pair_rate > U32_MAX)
++		return -ERANGE;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	pccr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCCR(pair));
++	per = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER);
++	pcr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCR(pwm->hwpwm));
++	ppr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PPR(pwm->hwpwm));
++	pdzcr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PDZCR(pair));
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	*wfhw = (struct sun8i_pwm_waveform) {
++		.enabled = !!(pccr & SUN8I_PWM_PCCR_GATE) &&
++			   !!(per & SUN8I_PWM_ENABLE(pwm->hwpwm)),
++		.bypass_en = !!(pccr &
++				 BIT(SUN8I_PWM_PCCR_BYPASS_BIT(pwm->hwpwm))),
++		.active_state = !!(pcr & SUN8I_PWM_PCR_ACTIVE_STATE),
++		.duty_ticks = SUN8I_PWM_PPR_DUTY_VALUE(ppr),
++		.period_ticks = SUN8I_PWM_PPR_PERIOD_VALUE(ppr),
++		.pair_rate = pair_rate,
++		.div_k = FIELD_GET(SUN8I_PWM_PCR_PRESCAL_K_MASK, pcr) + 1,
++	};
++
++	if (wfhw->enabled && !wfhw->bypass_en &&
++	    (pdzcr & SUN8I_PWM_PDZCR_ENABLE))
++		return -EOPNOTSUPP;
++	if (wfhw->enabled && !wfhw->bypass_en &&
++	    (pcr & SUN8I_PWM_PCR_MODE))
++		return -EOPNOTSUPP;
++
++	return 0;
++}
++
++static u64 sun8i_pwm_ticks_to_ns(u32 ticks, u16 div_k, u32 pair_rate)
++{
++	return DIV_ROUND_UP_ULL(NSEC_PER_SEC * (u64)ticks * div_k,
++				pair_rate);
++}
++
++static void
++sun8i_pwm_waveform_to_ns(const struct sun8i_pwm_waveform *wfhw,
++			 struct pwm_waveform *wf)
++{
++	u32 pair_rate = wfhw->pair_rate;
++	u16 div_k = wfhw->div_k;
++
++	wf->duty_offset_ns = 0;
++
++	if (!wfhw->enabled || !pair_rate) {
++		wf->period_length_ns = 0;
++		wf->duty_length_ns = 0;
++		return;
++	}
++
++	if (wfhw->bypass_en) {
++		wf->period_length_ns = DIV_ROUND_UP_ULL(NSEC_PER_SEC,
++							pair_rate);
++		wf->duty_length_ns =
++			DIV_ROUND_UP_ULL(NSEC_PER_SEC,
++					 2ULL * pair_rate);
++	} else {
++		wf->period_length_ns = sun8i_pwm_ticks_to_ns(wfhw->period_ticks,
++							     div_k, pair_rate);
++		if (wfhw->active_state) {
++			u32 duty_ticks = min(wfhw->duty_ticks,
++					     wfhw->period_ticks);
++
++			wf->duty_length_ns =
++				sun8i_pwm_ticks_to_ns(duty_ticks, div_k, pair_rate);
++		} else if (!wfhw->duty_ticks) {
++			wf->duty_length_ns = wf->period_length_ns;
++		} else if (wfhw->duty_ticks >= wfhw->period_ticks) {
++			wf->duty_length_ns = 0;
++		} else {
++			u32 low_ticks = wfhw->duty_ticks;
++			u32 high_ticks = wfhw->period_ticks - wfhw->duty_ticks;
++
++			wf->duty_length_ns =
++				sun8i_pwm_ticks_to_ns(high_ticks, div_k, pair_rate);
++			wf->duty_offset_ns =
++				sun8i_pwm_ticks_to_ns(low_ticks, div_k, pair_rate);
++		}
++	}
++}
++
++static int sun8i_pwm_round_waveform_fromhw(struct pwm_chip *chip,
++					   struct pwm_device *pwm,
++					   const void *_wfhw,
++					   struct pwm_waveform *wf)
++{
++	const struct sun8i_pwm_waveform *wfhw = _wfhw;
++
++	sun8i_pwm_waveform_to_ns(wfhw, wf);
++
++	dev_dbg(pwmchip_parent(chip),
++		"pwm#%u: pair-rate=%u, div-k=%u, period=%u, duty=%u, bypass=%u, active-high=%u -> %llu/%llu [+%llu]\n",
++		pwm->hwpwm, wfhw->pair_rate, wfhw->div_k,
++		wfhw->period_ticks, wfhw->duty_ticks, wfhw->bypass_en,
++		wfhw->active_state,
++		wf->duty_length_ns, wf->period_length_ns,
++		wf->duty_offset_ns);
++
++	return 0;
++}
++
++static bool
++sun8i_pwm_pair_rate_constrained(struct sun8i_pwm_chip *sun8i_chip,
++				unsigned int idx)
++{
++	unsigned int sibling = idx ^ 1;
++	unsigned long flags;
++	bool constrained;
++
++	if (sibling >= sun8i_chip->data->npwm)
++		return false;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	constrained = sun8i_chip->channels[sibling].mode ==
++			SUN8I_PWM_MODE_CLK ||
++		      READ_ONCE(sun8i_chip->channels[sibling].rate_exclusive) ||
++		      sun8i_pwm_channel_is_enabled_locked(sun8i_chip,
++							  sibling);
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return constrained;
++}
++
++static int sun8i_pwm_clear_idle_deadzone(struct sun8i_pwm_chip *sun8i_chip,
++					 unsigned int idx)
++{
++	unsigned int pair = SUN8I_PWM_PAIR_IDX(idx);
++	unsigned long flags;
++	u32 pdzcr, per;
++	int ret = 0;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	pdzcr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PDZCR(pair));
++	if (!(pdzcr & SUN8I_PWM_PDZCR_ENABLE))
++		goto out_unlock;
++
++	per = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER);
++	if (per & sun8i_pwm_pair_enable_mask(sun8i_chip, pair)) {
++		ret = -EOPNOTSUPP;
++		goto out_unlock;
++	}
++
++	pdzcr &= ~SUN8I_PWM_PDZCR_ENABLE;
++	sun8i_pwm_writel(sun8i_chip, pdzcr, SUN8I_PWM_PDZCR(pair));
++
++out_unlock:
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return ret;
++}
++
++static u64 sun8i_pwm_max_period_ns(struct sun8i_pwm_chip *sun8i_chip,
++				   unsigned int idx)
++{
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[idx];
++	unsigned long flags, pair_rate;
++	u32 pcr;
++	u16 div_k;
++
++	pair_rate = clk_get_rate(chan->pair_clk);
++	if (!pair_rate || pair_rate > U32_MAX)
++		return 0;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	pcr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCR(idx));
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++	div_k = FIELD_GET(SUN8I_PWM_PCR_PRESCAL_K_MASK, pcr) + 1;
++
++	return sun8i_pwm_ticks_to_ns(SUN8I_PWM_PPR_PERIOD_MAX, div_k,
++				     pair_rate);
++}
++
++static int sun8i_pwm_wait_period_ready(struct sun8i_pwm_chip *sun8i_chip,
++				       unsigned int idx, u64 *timeout_us)
++{
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[idx];
++	unsigned long poll_us;
++	u64 period_ns;
++	u32 val;
++	int ret;
++
++	/* PPR contains the pending value, not necessarily the active period. */
++	period_ns = chan->pending_period_ns;
++	if (!period_ns)
++		period_ns = sun8i_pwm_max_period_ns(sun8i_chip, idx);
++	*timeout_us = DIV_ROUND_UP_ULL(period_ns, NSEC_PER_USEC) +
++		      SUN8I_PWM_PERIOD_READY_MARGIN_US;
++	poll_us = clamp_t(u64,
++			  DIV_ROUND_UP_ULL(*timeout_us,
++					   SUN8I_PWM_PERIOD_READY_POLL_COUNT),
++			  SUN8I_PWM_PERIOD_READY_MIN_POLL_US,
++			  SUN8I_PWM_PERIOD_READY_MAX_POLL_US);
++
++	ret = readl_poll_timeout(sun8i_chip->base + SUN8I_PWM_PCR(idx), val,
++				 !(val & SUN8I_PWM_PCR_PERIOD_READY), poll_us,
++				 *timeout_us);
++	if (!ret)
++		chan->pending_period_ns = 0;
++
++	return ret;
++}
++
++static int sun8i_pwm_write_waveform(struct pwm_chip *chip,
++				    struct pwm_device *pwm, const void *_wfhw)
++{
++	const struct sun8i_pwm_waveform *wfhw = _wfhw;
++	struct sun8i_pwm_chip *sun8i_chip = sun8i_pwm_from_chip(chip);
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[pwm->hwpwm];
++	struct device *dev = pwmchip_parent(chip);
++	unsigned long bus_rate, current_rate, restored_rate;
++	unsigned long flags;
++	u64 new_ns, old_ns, timeout_us;
++	bool acquired_exclusive = false;
++	bool can_restore_enable = true;
++	bool current_bypass, needs_quiesce, was_enabled;
++	u16 current_div_k;
++	u32 old_ticks, pcr, ppr, val;
++	int restore_ret, ret;
++
++	if (!wfhw->enabled) {
++		spin_lock_irqsave(&sun8i_chip->lock, flags);
++		sun8i_pwm_set_enabled_locked(sun8i_chip, pwm->hwpwm, false);
++		sun8i_pwm_set_bypass_locked(sun8i_chip, pwm->hwpwm, false);
++		spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++		if (READ_ONCE(chan->rate_exclusive)) {
++			clk_rate_exclusive_put(chan->pair_clk);
++			WRITE_ONCE(chan->rate_exclusive, false);
++		}
++
++		return 0;
++	}
++
++	if (!wfhw->pair_rate ||
++	    (!wfhw->bypass_en &&
++	     (!wfhw->div_k || wfhw->div_k > 256 ||
++	      !wfhw->period_ticks ||
++	      wfhw->period_ticks > SUN8I_PWM_PPR_PERIOD_MAX ||
++	      wfhw->duty_ticks > FIELD_MAX(SUN8I_PWM_PPR_DUTY_MASK))))
++		return -EINVAL;
++
++	if (!wfhw->bypass_en) {
++		ret = sun8i_pwm_clear_idle_deadzone(sun8i_chip, pwm->hwpwm);
++		if (ret)
++			return ret;
++	}
++
++	current_rate = clk_get_rate(chan->pair_clk);
++	if (!current_rate || current_rate > U32_MAX)
++		return -ERANGE;
++	bus_rate = clk_get_rate(sun8i_chip->bus_clk);
++
++	if (!wfhw->bypass_en) {
++		/* Do not overwrite a PPR update which has not latched yet. */
++		ret = sun8i_pwm_wait_period_ready(sun8i_chip, pwm->hwpwm,
++						  &timeout_us);
++		if (ret) {
++			dev_err_ratelimited(dev, "pwm#%u: update timeout after %llu us\n",
++					    pwm->hwpwm, timeout_us);
++			return ret;
++		}
++	}
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	was_enabled = sun8i_pwm_channel_is_enabled_locked(sun8i_chip,
++							  pwm->hwpwm);
++	val = sun8i_pwm_readl(sun8i_chip,
++			      SUN8I_PWM_PCCR(SUN8I_PWM_PAIR_IDX(pwm->hwpwm)));
++	current_bypass = !!(val &
++				   BIT(SUN8I_PWM_PCCR_BYPASS_BIT(pwm->hwpwm)));
++	pcr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCR(pwm->hwpwm));
++	ppr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PPR(pwm->hwpwm));
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++	current_div_k = FIELD_GET(SUN8I_PWM_PCR_PRESCAL_K_MASK, pcr) + 1;
++
++	if (current_rate != wfhw->pair_rate &&
++	    sun8i_pwm_pair_rate_constrained(sun8i_chip, pwm->hwpwm))
++		return -EBUSY;
++
++	if (was_enabled && !READ_ONCE(chan->rate_exclusive)) {
++		ret = clk_rate_exclusive_get(chan->pair_clk);
++		if (ret)
++			return ret;
++		WRITE_ONCE(chan->rate_exclusive, true);
++	}
++
++	/*
++	 * Updating PPR while running is safe only if the input clocks and
++	 * polarity remain unchanged and PCLK is faster than the PWM clock.
++	 * Otherwise stop the channel before touching its configuration.
++	 */
++	needs_quiesce = was_enabled &&
++		(current_bypass != wfhw->bypass_en ||
++		 current_rate != wfhw->pair_rate ||
++		 (!wfhw->bypass_en &&
++		  (!!(pcr & SUN8I_PWM_PCR_ACTIVE_STATE) !=
++		   wfhw->active_state ||
++		   current_div_k != wfhw->div_k ||
++		   (pcr & SUN8I_PWM_PCR_MODE) ||
++		   !bus_rate ||
++		   bus_rate <= DIV_ROUND_UP_ULL(wfhw->pair_rate,
++						     wfhw->div_k))));
++
++	if (needs_quiesce) {
++		spin_lock_irqsave(&sun8i_chip->lock, flags);
++		sun8i_pwm_set_enabled_locked(sun8i_chip, pwm->hwpwm, false);
++		spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++	}
++
++	if (!was_enabled && !READ_ONCE(chan->rate_exclusive)) {
++		if (current_rate == wfhw->pair_rate)
++			ret = clk_rate_exclusive_get(chan->pair_clk);
++		else
++			ret = clk_set_rate_exclusive(chan->pair_clk,
++						     wfhw->pair_rate);
++		if (ret)
++			return ret;
++		WRITE_ONCE(chan->rate_exclusive, true);
++		acquired_exclusive = true;
++	} else if (current_rate != wfhw->pair_rate) {
++		ret = clk_set_rate(chan->pair_clk, wfhw->pair_rate);
++		if (ret)
++			goto restore_enable;
++	}
++
++	if (clk_get_rate(chan->pair_clk) != wfhw->pair_rate) {
++		ret = -EINVAL;
++		goto restore_rate;
++	}
++
++	if (!wfhw->bypass_en) {
++		/* Return the channel to cycle mode without replaying W1S bits. */
++		pcr &= ~(SUN8I_PWM_PCR_PRESCAL_K_MASK |
++			 SUN8I_PWM_PCR_ACTIVE_STATE | SUN8I_PWM_PCR_MODE |
++			 SUN8I_PWM_PCR_PULSE_START |
++			 SUN8I_PWM_PCR_PERIOD_READY);
++		pcr |= FIELD_PREP(SUN8I_PWM_PCR_PRESCAL_K_MASK,
++				  wfhw->div_k - 1);
++		if (wfhw->active_state)
++			pcr |= SUN8I_PWM_PCR_ACTIVE_STATE;
++		sun8i_pwm_writel(sun8i_chip, pcr, SUN8I_PWM_PCR(pwm->hwpwm));
++
++		val = SUN8I_PWM_PPR_DUTY(wfhw->duty_ticks);
++		val |= SUN8I_PWM_PPR_PERIOD(wfhw->period_ticks);
++		old_ns = 0;
++		if (was_enabled && !current_bypass) {
++			old_ticks = SUN8I_PWM_PPR_PERIOD_VALUE(ppr);
++			old_ns = sun8i_pwm_ticks_to_ns(old_ticks, current_div_k,
++						       current_rate);
++		}
++		new_ns = sun8i_pwm_ticks_to_ns(wfhw->period_ticks,
++					       wfhw->div_k, wfhw->pair_rate);
++		chan->pending_period_ns = max(old_ns, new_ns);
++		sun8i_pwm_writel(sun8i_chip, val, SUN8I_PWM_PPR(pwm->hwpwm));
++	}
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	sun8i_pwm_set_bypass_locked(sun8i_chip, pwm->hwpwm, wfhw->bypass_en);
++	sun8i_pwm_set_enabled_locked(sun8i_chip, pwm->hwpwm, true);
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	return 0;
++
++restore_rate:
++	if (current_rate != wfhw->pair_rate) {
++		restore_ret = clk_set_rate(chan->pair_clk, current_rate);
++		restored_rate = clk_get_rate(chan->pair_clk);
++		if (restore_ret || restored_rate != current_rate) {
++			dev_err(dev,
++				"pwm#%u: failed to restore pair clock rate %lu: %d (got %lu)\n",
++				pwm->hwpwm, current_rate, restore_ret,
++				restored_rate);
++			can_restore_enable = false;
++		}
++	}
++	if (acquired_exclusive) {
++		clk_rate_exclusive_put(chan->pair_clk);
++		WRITE_ONCE(chan->rate_exclusive, false);
++	}
++restore_enable:
++	if (needs_quiesce && can_restore_enable) {
++		spin_lock_irqsave(&sun8i_chip->lock, flags);
++		sun8i_pwm_set_enabled_locked(sun8i_chip, pwm->hwpwm, true);
++		spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++	}
++
++	return ret;
++}
++
++struct sun8i_pwm_rounding {
++	const struct pwm_waveform *requested;
++	struct sun8i_pwm_waveform best;
++	struct pwm_waveform best_wf;
++	u32 current_pair_rate;
++	bool have_best;
++};
++
++static bool
++sun8i_pwm_candidate_is_better(const struct sun8i_pwm_rounding *rounding,
++			      const struct sun8i_pwm_waveform *candidate,
++			      const struct pwm_waveform *candidate_wf)
++{
++	const struct pwm_waveform *requested = rounding->requested;
++	bool candidate_period_down, best_period_down;
++
++	/* A zero-duty, zero-offset cycle-mode candidate always exists. */
++	if (candidate_wf->duty_length_ns > requested->duty_length_ns ||
++	    candidate_wf->duty_offset_ns > requested->duty_offset_ns)
++		return false;
++
++	if (!rounding->have_best)
++		return true;
++
++	candidate_period_down =
++		candidate_wf->period_length_ns <= requested->period_length_ns;
++	best_period_down =
++		rounding->best_wf.period_length_ns <= requested->period_length_ns;
++	if (candidate_period_down != best_period_down)
++		return candidate_period_down;
++
++	if (candidate_wf->period_length_ns !=
++	    rounding->best_wf.period_length_ns) {
++		if (candidate_period_down)
++			return candidate_wf->period_length_ns >
++			       rounding->best_wf.period_length_ns;
++
++		return candidate_wf->period_length_ns <
++		       rounding->best_wf.period_length_ns;
++	}
++
++	if (candidate_wf->duty_length_ns !=
++	    rounding->best_wf.duty_length_ns)
++		return candidate_wf->duty_length_ns >
++		       rounding->best_wf.duty_length_ns;
++
++	if (candidate_wf->duty_offset_ns !=
++	    rounding->best_wf.duty_offset_ns)
++		return candidate_wf->duty_offset_ns >
++		       rounding->best_wf.duty_offset_ns;
++
++	/* Avoid a shared pair-rate change when two settings are equivalent. */
++	return candidate->pair_rate == rounding->current_pair_rate &&
++	       rounding->best.pair_rate != rounding->current_pair_rate;
++}
++
++static void
++sun8i_pwm_consider_candidate(struct sun8i_pwm_rounding *rounding,
++			     const struct sun8i_pwm_waveform *candidate)
++{
++	struct pwm_waveform candidate_wf;
++
++	sun8i_pwm_waveform_to_ns(candidate, &candidate_wf);
++	if (!sun8i_pwm_candidate_is_better(rounding, candidate,
++					   &candidate_wf))
++		return;
++
++	rounding->best = *candidate;
++	rounding->best_wf = candidate_wf;
++	rounding->have_best = true;
++}
++
++static void
++sun8i_pwm_consider_normal(struct sun8i_pwm_rounding *rounding, u32 pair_rate,
++			  u16 div_k)
++{
++	const struct pwm_waveform *requested = rounding->requested;
++	struct sun8i_pwm_waveform candidate = {
++		.enabled = true,
++		.pair_rate = pair_rate,
++		.div_k = div_k,
++	};
++	u64 denominator = NSEC_PER_SEC * (u64)div_k;
++	u64 duty_ticks, period_ticks;
++	u64 duty_ns = requested->duty_length_ns;
++	u64 period_ns = requested->period_length_ns;
++	u32 inactive_ticks;
++
++	period_ticks = mul_u64_u64_div_u64(period_ns, pair_rate, denominator);
++	period_ticks = clamp_t(u64, period_ticks, 1, SUN8I_PWM_PPR_PERIOD_MAX);
++	candidate.period_ticks = period_ticks;
++	if (candidate.period_ticks > 1 &&
++	    sun8i_pwm_ticks_to_ns(candidate.period_ticks, div_k, pair_rate) >
++	    requested->period_length_ns)
++		candidate.period_ticks--;
++
++	duty_ticks = mul_u64_u64_div_u64(duty_ns, pair_rate, denominator);
++	duty_ticks = min_t(u64, duty_ticks, candidate.period_ticks);
++	if (duty_ticks &&
++	    sun8i_pwm_ticks_to_ns(duty_ticks, div_k, pair_rate) >
++	    requested->duty_length_ns)
++		duty_ticks--;
++
++	/*
++	 * Zero active ticks encode either constant level. For a toggling
++	 * waveform, active-low mode places the rising edge after the inactive
++	 * part, which is the only non-zero offset supported by the hardware.
++	 */
++	if (!duty_ticks) {
++		candidate.active_state = true;
++		candidate.duty_ticks = 0;
++	} else if (duty_ticks == candidate.period_ticks) {
++		candidate.active_state = false;
++		candidate.duty_ticks = 0;
++	} else {
++		inactive_ticks = candidate.period_ticks - duty_ticks;
++		if (sun8i_pwm_ticks_to_ns(inactive_ticks, div_k, pair_rate) <=
++		    requested->duty_offset_ns) {
++			candidate.active_state = false;
++			candidate.duty_ticks = inactive_ticks;
++		} else {
++			candidate.active_state = true;
++			candidate.duty_ticks = duty_ticks;
++		}
++	}
++
++	sun8i_pwm_consider_candidate(rounding, &candidate);
++}
++
++static void
++sun8i_pwm_consider_pair_rate(struct sun8i_pwm_rounding *rounding,
++			     u32 pair_rate)
++{
++	struct sun8i_pwm_waveform bypass = {
++		.duty_ticks = 1,
++		.period_ticks = 1,
++		.pair_rate = pair_rate,
++		.div_k = 1,
++		.enabled = true,
++		.active_state = true,
++		.bypass_en = true,
++	};
++
++	for (unsigned int div_k = 1; div_k <= 256; div_k++)
++		sun8i_pwm_consider_normal(rounding, pair_rate, div_k);
++
++	sun8i_pwm_consider_candidate(rounding, &bypass);
++}
++
++static int sun8i_pwm_round_waveform_tohw(struct pwm_chip *chip,
++					 struct pwm_device *pwm,
++					 const struct pwm_waveform *wf,
++					 void *_wfhw)
++{
++	struct sun8i_pwm_chip *sun8i_chip = sun8i_pwm_from_chip(chip);
++	struct sun8i_pwm_channel *chan = &sun8i_chip->channels[pwm->hwpwm];
++	struct sun8i_pwm_pair *pair =
++		&sun8i_chip->pairs[SUN8I_PWM_PAIR_IDX(pwm->hwpwm)];
++	struct sun8i_pwm_waveform *wfhw = _wfhw;
++	struct sun8i_pwm_rounding rounding = {
++		.requested = wf,
++	};
++	unsigned long current_rate;
++
++	if (!wf->period_length_ns) {
++		*wfhw = (struct sun8i_pwm_waveform) {
++			.enabled = false,
++		};
++		return 0;
++	}
++
++	current_rate = clk_get_rate(chan->pair_clk);
++	if (!current_rate || current_rate > U32_MAX)
++		return -ERANGE;
++	rounding.current_pair_rate = current_rate;
++
++	if (sun8i_pwm_pair_rate_constrained(sun8i_chip, pwm->hwpwm)) {
++		sun8i_pwm_consider_pair_rate(&rounding, current_rate);
++	} else {
++		for (unsigned int parent_idx = 0;
++		     parent_idx < clk_hw_get_num_parents(pair->hw);
++		     parent_idx++) {
++			struct clk_hw *parent;
++			unsigned long parent_rate;
++
++			parent = clk_hw_get_parent_by_index(pair->hw, parent_idx);
++			if (!parent)
++				continue;
++			parent_rate = clk_hw_get_rate(parent);
++			if (!parent_rate)
++				continue;
++
++			for (unsigned int i = 0; sun8i_pwm_div_m_table[i].div;
++			     i++) {
++				u16 div_m = sun8i_pwm_div_m_table[i].div;
++				u64 pair_rate;
++
++				pair_rate = DIV_ROUND_UP_ULL(parent_rate, div_m);
++				if (!pair_rate || pair_rate > U32_MAX)
++					continue;
++				sun8i_pwm_consider_pair_rate(&rounding, pair_rate);
++			}
++		}
++	}
++
++	if (!rounding.have_best)
++		return -EINVAL;
++	*wfhw = rounding.best;
++
++	dev_dbg(pwmchip_parent(chip),
++		"pwm#%u: %llu/%llu [+%llu] -> pair-rate=%u, div-k=%u, period=%u, duty=%u, bypass=%u, active-high=%u\n",
++		pwm->hwpwm, wf->duty_length_ns, wf->period_length_ns,
++		wf->duty_offset_ns, wfhw->pair_rate, wfhw->div_k,
++		wfhw->period_ticks, wfhw->duty_ticks, wfhw->bypass_en,
++		wfhw->active_state);
++
++	return rounding.best_wf.period_length_ns > wf->period_length_ns;
++}
++
++static const struct pwm_ops sun8i_pwm_ops = {
++	.request = sun8i_pwm_request,
++	.free = sun8i_pwm_free,
++	.sizeof_wfhw = sizeof(struct sun8i_pwm_waveform),
++	.round_waveform_tohw = sun8i_pwm_round_waveform_tohw,
++	.round_waveform_fromhw = sun8i_pwm_round_waveform_fromhw,
++	.read_waveform = sun8i_pwm_read_waveform,
++	.write_waveform = sun8i_pwm_write_waveform,
++};
++
++/* Register the shared mux, gate and /div_m clock for each channel pair. */
++static int sun8i_pwm_register_pair_clocks(struct device *dev,
++					  struct sun8i_pwm_chip *sun8i_chip)
++{
++	static const struct clk_parent_data parent_data[] = {
++		{ .index = 0 },
++		{ .index = 1 },
++	};
++	unsigned int num_pairs = DIV_ROUND_UP(sun8i_chip->data->npwm, 2);
++
++	for (unsigned int i = 0; i < num_pairs; i++) {
++		struct sun8i_pwm_pair *pair = &sun8i_chip->pairs[i];
++		void __iomem *reg = sun8i_chip->base + SUN8I_PWM_PCCR(i);
++		struct clk *pair_clk;
++		const char *name;
++		int ret;
++
++		name = devm_kasprintf(dev, GFP_KERNEL,
++				      "%s#pwm-clk-src%u%u", dev_name(dev),
++				       i * 2, i * 2 + 1);
++		if (!name)
++			return -ENOMEM;
++
++		pair->mux.reg = reg;
++		pair->mux.shift = SUN8I_PWM_PCCR_SRC_SHIFT;
++		pair->mux.mask = SUN8I_PWM_PCCR_SRC_MASK;
++		pair->mux.flags = CLK_MUX_ROUND_CLOSEST;
++		pair->mux.lock = &sun8i_chip->lock;
++
++		pair->chip = sun8i_chip;
++		pair->index = i;
++
++		pair->divider.reg = reg;
++		pair->divider.shift = SUN8I_PWM_PCCR_DIV_M_SHIFT;
++		pair->divider.width = SUN8I_PWM_PCCR_DIV_M_WIDTH;
++		pair->divider.table = sun8i_pwm_div_m_table;
++		pair->divider.lock = &sun8i_chip->lock;
++
++		pair->hw = devm_clk_hw_register_composite_pdata(dev, name,
++								parent_data,
++								ARRAY_SIZE(parent_data),
++			&pair->mux.hw, &clk_mux_ops,
++			&pair->divider.hw, &clk_divider_ops,
++			&pair->gate_hw, &sun8i_pwm_pair_gate_ops, 0);
++		if (IS_ERR(pair->hw))
++			return dev_err_probe(dev, PTR_ERR(pair->hw),
++					     "Failed to register pair %u clock\n", i);
++
++		pair_clk = devm_clk_hw_get_clk(dev, pair->hw, NULL);
++		if (IS_ERR(pair_clk))
++			return dev_err_probe(dev, PTR_ERR(pair_clk),
++					     "Failed to get pair %u clock\n", i);
++
++		pair->rate_nb.notifier_call = sun8i_pwm_pair_rate_notifier;
++		ret = devm_clk_notifier_register(dev, pair_clk, &pair->rate_nb);
++		if (ret)
++			return dev_err_probe(dev, ret,
++					     "Failed to protect pair %u clock rate\n", i);
++	}
++
++	return 0;
++}
++
++/* Register a pair-clock consumer and the bypass clock for each channel. */
++static int sun8i_pwm_register_channel_clocks(struct device *dev,
++					     struct sun8i_pwm_chip *sun8i_chip)
++{
++	for (unsigned int i = 0; i < sun8i_chip->data->npwm; i++) {
++		struct sun8i_pwm_channel *chan = &sun8i_chip->channels[i];
++		struct clk_hw *parent = sun8i_chip->pairs[SUN8I_PWM_PAIR_IDX(i)].hw;
++		struct clk_parent_data parent_data = { .hw = parent };
++		struct clk_init_data init = {};
++		const char *name;
++		int ret;
++
++		/* Separate handles let CCF arbitrate sibling rate exclusivity. */
++		chan->pair_clk = devm_clk_hw_get_clk(dev, parent, NULL);
++		if (IS_ERR(chan->pair_clk))
++			return dev_err_probe(dev, PTR_ERR(chan->pair_clk),
++					     "Failed to get pair clock for PWM %u\n", i);
++
++		name = devm_kasprintf(dev, GFP_KERNEL, "%s#pwm-bypass%u",
++				      dev_name(dev), i);
++		if (!name)
++			return -ENOMEM;
++
++		chan->bypass.chip = sun8i_chip;
++		chan->bypass.index = i;
++		init.name = name;
++		init.ops = &sun8i_pwm_bypass_ops;
++		init.parent_data = &parent_data;
++		init.num_parents = 1;
++		/* Keep the shared pair rate stable for the prepared lifetime. */
++		init.flags = CLK_SET_RATE_PARENT | CLK_SET_RATE_GATE;
++		chan->bypass.hw.init = &init;
++
++		ret = devm_clk_hw_register(dev, &chan->bypass.hw);
++		if (ret)
++			return dev_err_probe(dev, ret,
++					     "Failed to register bypass clock %u\n", i);
++
++		sun8i_chip->hw_data->hws[i] = &chan->bypass.hw;
++	}
++
++	return 0;
++}
++
++/*
++ * A disabled pair gate makes any set PER bits ineffective. Clear those stale
++ * enables before a clock consumer can turn the shared gate on and expose an
++ * unrequested output.
++ */
++static void
++sun8i_pwm_sanitize_disabled_pairs(struct sun8i_pwm_chip *sun8i_chip)
++{
++	unsigned int num_pairs = DIV_ROUND_UP(sun8i_chip->data->npwm, 2);
++	unsigned long flags;
++	u32 per;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	per = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER);
++	for (unsigned int pair = 0; pair < num_pairs; pair++) {
++		unsigned int first = pair * 2;
++		u32 pccr;
++
++		pccr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCCR(pair));
++		if (pccr & SUN8I_PWM_PCCR_GATE)
++			continue;
++
++		per &= ~SUN8I_PWM_ENABLE(first);
++		pccr &= ~BIT(SUN8I_PWM_PCCR_BYPASS_BIT(first));
++		if (first + 1 < sun8i_chip->data->npwm) {
++			per &= ~SUN8I_PWM_ENABLE(first + 1);
++			pccr &= ~BIT(SUN8I_PWM_PCCR_BYPASS_BIT(first + 1));
++		}
++		sun8i_pwm_writel(sun8i_chip, pccr, SUN8I_PWM_PCCR(pair));
++	}
++	sun8i_pwm_writel(sun8i_chip, per, SUN8I_PWM_PER);
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++}
++
++/*
++ * Keep firmware-active outputs running until all declared consumers have had
++ * a chance to claim them. Once the driver core calls sync_state(), any channel
++ * which still has no PWM or clock owner can be stopped.
++ */
++static void sun8i_pwm_sync_state(struct device *dev)
++{
++	struct sun8i_pwm_chip *sun8i_chip = dev_get_drvdata(dev);
++	unsigned int num_pairs = DIV_ROUND_UP(sun8i_chip->data->npwm, 2);
++	unsigned long empty_pairs = 0;
++	unsigned long flags;
++	u32 active, per, unclaimed = 0;
++
++	spin_lock_irqsave(&sun8i_chip->lock, flags);
++	per = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PER);
++	for (unsigned int pair = 0; pair < num_pairs; pair++) {
++		u32 pair_mask = sun8i_pwm_pair_enable_mask(sun8i_chip, pair);
++		u32 owner_mask;
++		u32 pdzcr;
++
++		owner_mask = sun8i_pwm_pair_owner_mask_locked(sun8i_chip, pair);
++		pdzcr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PDZCR(pair));
++		/* Dead-zone mode couples both outputs into one waveform. */
++		if ((pdzcr & SUN8I_PWM_PDZCR_ENABLE) &&
++		    (per & owner_mask))
++			continue;
++
++		unclaimed |= pair_mask & ~owner_mask;
++	}
++
++	active = per & unclaimed;
++	per &= ~unclaimed;
++	sun8i_pwm_writel(sun8i_chip, per, SUN8I_PWM_PER);
++
++	for (unsigned int pair = 0; pair < num_pairs; pair++) {
++		unsigned int first = pair * 2;
++		u32 pccr;
++
++		pccr = sun8i_pwm_readl(sun8i_chip, SUN8I_PWM_PCCR(pair));
++		if (unclaimed & SUN8I_PWM_ENABLE(first))
++			pccr &= ~BIT(SUN8I_PWM_PCCR_BYPASS_BIT(first));
++		if (first + 1 < sun8i_chip->data->npwm &&
++		    unclaimed & SUN8I_PWM_ENABLE(first + 1))
++			pccr &= ~BIT(SUN8I_PWM_PCCR_BYPASS_BIT(first + 1));
++		sun8i_pwm_writel(sun8i_chip, pccr, SUN8I_PWM_PCCR(pair));
++
++		if (!(per & sun8i_pwm_pair_enable_mask(sun8i_chip, pair)))
++			empty_pairs |= BIT(pair);
++	}
++	spin_unlock_irqrestore(&sun8i_chip->lock, flags);
++
++	/*
++	 * Reconcile empty pair gates through CCF. Taking and dropping a
++	 * temporary reference leaves a gate with another CCF user enabled, but
++	 * disables a firmware-enabled gate whose software count is still zero.
++	 */
++	for (unsigned int pair = 0; pair < num_pairs; pair++) {
++		struct clk *pair_clk;
++		int ret;
++
++		if (!(empty_pairs & BIT(pair)))
++			continue;
++
++		pair_clk = sun8i_chip->channels[pair * 2].pair_clk;
++		ret = clk_prepare_enable(pair_clk);
++		if (ret) {
++			dev_warn(dev, "Failed to synchronize pair %u gate: %pe\n",
++				 pair, ERR_PTR(ret));
++			continue;
++		}
++		clk_disable_unprepare(pair_clk);
++	}
++
++	if (active)
++		dev_dbg(dev, "disabled unclaimed firmware outputs %#x\n", active);
++}
++
++static int sun8i_pwm_init_clocks(struct device *dev,
++				 struct sun8i_pwm_chip *sun8i_chip)
++{
++	unsigned int num_pairs = DIV_ROUND_UP(sun8i_chip->data->npwm, 2);
++	size_t hw_data_size;
++	int ret;
++
++	sun8i_chip->pairs = devm_kcalloc(dev, num_pairs,
++					 sizeof(*sun8i_chip->pairs), GFP_KERNEL);
++	if (!sun8i_chip->pairs)
++		return -ENOMEM;
++
++	hw_data_size = struct_size(sun8i_chip->hw_data, hws,
++				   sun8i_chip->data->npwm);
++	sun8i_chip->hw_data = devm_kzalloc(dev, hw_data_size, GFP_KERNEL);
++	if (!sun8i_chip->hw_data)
++		return -ENOMEM;
++	sun8i_chip->hw_data->num = sun8i_chip->data->npwm;
++	sun8i_pwm_sanitize_disabled_pairs(sun8i_chip);
++
++	ret = sun8i_pwm_register_pair_clocks(dev, sun8i_chip);
++	if (ret)
++		return ret;
++
++	return sun8i_pwm_register_channel_clocks(dev, sun8i_chip);
++}
++
++static int sun8i_pwm_probe(struct platform_device *pdev)
++{
++	const struct sun8i_pwm_data *data;
++	struct device *dev = &pdev->dev;
++	struct sun8i_pwm_chip *sun8i_chip;
++	struct reset_control *rst;
++	struct pwm_chip *chip;
++	int ret;
++
++	data = of_device_get_match_data(dev);
++	if (!data)
++		return dev_err_probe(dev, -ENODEV,
++				     "Missing specific data structure\n");
++
++	chip = devm_pwmchip_alloc(dev, data->npwm, sizeof(*sun8i_chip));
++	if (IS_ERR(chip))
++		return dev_err_probe(dev, PTR_ERR(chip),
++				     "Failed to allocate pwmchip\n");
++
++	sun8i_chip = sun8i_pwm_from_chip(chip);
++	sun8i_chip->data = data;
++	spin_lock_init(&sun8i_chip->lock);
++	sun8i_chip->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(sun8i_chip->base))
++		return dev_err_probe(dev, PTR_ERR(sun8i_chip->base),
++				     "Failed to get PWM base address\n");
++
++	sun8i_chip->bus_clk = devm_clk_get_enabled(dev, "bus");
++	if (IS_ERR(sun8i_chip->bus_clk))
++		return dev_err_probe(dev, PTR_ERR(sun8i_chip->bus_clk),
++				     "Failed to get bus clock\n");
++
++	rst = devm_reset_control_get_shared_deasserted(dev, NULL);
++	if (IS_ERR(rst))
++		return dev_err_probe(dev, PTR_ERR(rst),
++				     "Failed to get reset control\n");
++
++	sun8i_chip->channels = devm_kcalloc(dev, data->npwm,
++					    sizeof(*sun8i_chip->channels),
++					    GFP_KERNEL);
++	if (!sun8i_chip->channels)
++		return dev_err_probe(dev, -ENOMEM,
++				     "Failed to allocate %d channels array\n",
++				     data->npwm);
++
++	chip->ops = &sun8i_pwm_ops;
++
++	ret = sun8i_pwm_init_clocks(dev, sun8i_chip);
++	if (ret)
++		return ret;
++
++	ret = devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get,
++					  sun8i_chip->hw_data);
++	if (ret)
++		return dev_err_probe(dev, ret, "Failed to add HW clock provider\n");
++
++	ret = devm_pwmchip_add(dev, chip);
++	if (ret < 0)
++		return dev_err_probe(dev, ret, "Failed to add PWM chip\n");
++
++	platform_set_drvdata(pdev, sun8i_chip);
++
++	return 0;
++}
++
++static const struct sun8i_pwm_data sun50i_h616_pwm_data = {
++	.npwm = 6,
++};
++
++static const struct of_device_id sun8i_pwm_dt_ids[] = {
++	{
++		.compatible = "allwinner,sun50i-h616-pwm",
++		.data = &sun50i_h616_pwm_data,
++	}, {
++		/* sentinel */
++	}
++};
++MODULE_DEVICE_TABLE(of, sun8i_pwm_dt_ids);
++
++static struct platform_driver sun8i_pwm_driver = {
++	.driver = {
++		.name = "sun8i-pwm",
++		.of_match_table = sun8i_pwm_dt_ids,
++		.sync_state = sun8i_pwm_sync_state,
++	},
++	.probe = sun8i_pwm_probe,
++};
++module_platform_driver(sun8i_pwm_driver);
++
++MODULE_AUTHOR("Richard Genoud <richard.genoud@bootlin.com>");
++MODULE_DESCRIPTION("Allwinner sun8i PWM driver");
++MODULE_LICENSE("GPL");
+diff --git a/include/dt-bindings/clock/sun8i-tcon-top.h b/include/dt-bindings/clock/sun8i-tcon-top.h
+index 25164d767..2a12d047d 100644
+--- a/include/dt-bindings/clock/sun8i-tcon-top.h
++++ b/include/dt-bindings/clock/sun8i-tcon-top.h
+@@ -7,5 +7,7 @@
+ #define CLK_TCON_TOP_TV0	0
+ #define CLK_TCON_TOP_TV1	1
+ #define CLK_TCON_TOP_DSI	2
++#define CLK_TCON_TOP_LCD0	3
++#define CLK_TCON_TOP_LCD1	4
+ 
+ #endif /* _DT_BINDINGS_CLOCK_SUN8I_TCON_TOP_H_ */

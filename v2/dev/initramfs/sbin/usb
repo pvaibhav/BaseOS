@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+export PATH=/bin:/sbin
+ip link set lo up
+mount -t configfs configfs /sys/kernel/config
+g=/sys/kernel/config/usb_gadget/baseos
+mkdir -p "$g/strings/0x409" "$g/configs/c.1/strings/0x409" "$g/functions/ffs.adb"
+printf 0x18d1 > "$g/idVendor"
+printf 0x4e42 > "$g/idProduct"
+cat /etc/serial > "$g/strings/0x409/serialnumber"
+printf BaseOS > "$g/strings/0x409/manufacturer"
+printf 'BaseOS 2 dev' > "$g/strings/0x409/product"
+printf adb > "$g/configs/c.1/strings/0x409/configuration"
+ln -s "$g/functions/ffs.adb" "$g/configs/c.1/ffs.adb"
+mount -t functionfs adb /dev/usb-ffs/adb
+/sbin/adbd > /run/adbd.log 2>&1 &
+n=0
+while [ "$n" -lt 100 ]; do
+ for udc in /sys/class/udc/*; do
+  [ -d "$udc" ] || continue
+  if printf '%s' "${udc##*/}" > "$g/UDC"; then cat /proc/uptime > /run/t-usb; exit 0; fi
+ done
+ n=$((n + 1)); sleep 0.05
+done
+echo 'usb: no UDC' >&2; exit 1

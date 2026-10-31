@@ -1,0 +1,38 @@
+From bf233c0deb4f2716133e6409ef8b80bf6b75ac2d Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:05:10 +0000
+Subject: [PATCH 05/13] 0005-baseos-panel
+
+---
+ drivers/gpu/drm/panel/Kconfig  | 10 ++++++++++
+ drivers/gpu/drm/panel/Makefile |  2 ++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/drivers/gpu/drm/panel/Kconfig b/drivers/gpu/drm/panel/Kconfig
+index 50de98268..4791fe62f 100644
+--- a/drivers/gpu/drm/panel/Kconfig
++++ b/drivers/gpu/drm/panel/Kconfig
+@@ -1425,3 +1425,13 @@ config DRM_PANEL_XINPENG_XPP055C272
+ 	  XPP055C272 controller for 720x1280 LCD panels with MIPI/RGB/SPI
+ 	  system interfaces.
+ endmenu
++
++config DRM_PANEL_BASEOS_H700
++	tristate "BaseOS H700 SPI-DPI panels"
++	depends on OF && SPI && GPIOLIB && PINCTRL && BACKLIGHT_CLASS_DEVICE
++	depends on DRM
++	select DRM_MIPI_DBI
++	select VIDEOMODE_HELPERS
++	help
++	  Built-in vendor streams for the eleven visible BaseOS H700 models.
++	  Requires native nine-bit SPI and bootloader selection in baseos,panel.
+diff --git a/drivers/gpu/drm/panel/Makefile b/drivers/gpu/drm/panel/Makefile
+index 2c599861e..87ce83e53 100644
+--- a/drivers/gpu/drm/panel/Makefile
++++ b/drivers/gpu/drm/panel/Makefile
+@@ -138,3 +138,5 @@ obj-$(CONFIG_DRM_PANEL_VISIONOX_VTDR6130) += panel-visionox-vtdr6130.o
+ obj-$(CONFIG_DRM_PANEL_VISIONOX_R66451) += panel-visionox-r66451.o
+ obj-$(CONFIG_DRM_PANEL_WIDECHIPS_WS2401) += panel-widechips-ws2401.o
+ obj-$(CONFIG_DRM_PANEL_XINPENG_XPP055C272) += panel-xinpeng-xpp055c272.o
++
++obj-$(CONFIG_DRM_PANEL_BASEOS_H700) += panel-baseos-h700.o

@@ -1,0 +1,5 @@
+#!/bin/sh
+export PATH=/bin:/sbin
+cat /proc/uptime > /run/t-rcS
+/sbin/feeder > /run/feeder.log 2>&1 &
+/sbin/usb > /run/usb.log 2>&1 &

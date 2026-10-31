@@ -1,0 +1,4 @@
+::sysinit:/etc/init.d/rcS
+::respawn:/usr/sbin/frontend-session
+::ctrlaltdel:/usr/sbin/reboot
+::shutdown:/etc/init.d/rcK

@@ -1,0 +1,22 @@
+From 95e285452af3ee06168705c71f2c39d38d66838d Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:12:16 +0000
+Subject: [PATCH 11/13] rg28xx: all CPUs, no serial console
+
+---
+ .../boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+index ba327a643..e6b817e66 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -115,7 +115,7 @@ chosen {
+         #size-cells = <2>;
+         ranges;
+         stdout-path = "serial0:115200n8";
+-        bootargs = "rdinit=/init console=ttyS0,115200 panic=3 clk_ignore_unused maxcpus=1 watchdog.stop_on_reboot=0";
++        bootargs = "rdinit=/init panic=3 clk_ignore_unused watchdog.stop_on_reboot=0";
+         baseos,trial;
+         framebuffer@0 {
+             compatible = "simple-framebuffer";

@@ -1,0 +1,31 @@
+From dff188d2c0431cbe70c9e937d84e0ccad91a5f48 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:39:30 +0000
+Subject: [PATCH 13/13] rg28xx overlay: speaker amp rail at 3.3 V
+
+---
+ drivers/of/baseos-rg28xx.dtso | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/of/baseos-rg28xx.dtso b/drivers/of/baseos-rg28xx.dtso
+index d0dc21ea2..e71b34b9a 100644
+--- a/drivers/of/baseos-rg28xx.dtso
++++ b/drivers/of/baseos-rg28xx.dtso
+@@ -28,6 +28,8 @@ reg_vcc5v: regulator-vcc5v {
+ };
+ 
+ &r_i2c {
++	#address-cells = <1>;
++	#size-cells = <0>;
+ 	status = "okay";
+ 
+ 	axp717: pmic@34 {
+@@ -73,6 +75,8 @@ reg_aldo4: aldo4 {
+ 
+ 			reg_cldo1: cldo1 {
+ 				regulator-always-on;
++				regulator-min-microvolt = <3300000>; /* boots at 1.8 V: quiet speaker */
++				regulator-max-microvolt = <3300000>;
+ 				regulator-name = "vcc-spkr-amp";
+ 			};
+ 		};

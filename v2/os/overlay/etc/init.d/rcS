@@ -1,0 +1,50 @@
+#!/bin/sh
+# BaseOS 2 startup. Everything slow runs in the background.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+umask 022
+mount -t proc -o nodev,noexec,nosuid proc /proc
+mount -t sysfs -o nodev,noexec,nosuid sys /sys
+mkdir -p /dev/pts /dev/shm
+mount -t devpts -o gid=5,mode=620 devpts /dev/pts
+mount -t tmpfs -o mode=1777,size=128m tmpfs /dev/shm
+mount -t tmpfs -o mode=1777,size=256m tmpfs /tmp
+mount -t tmpfs -o mode=755,size=32m tmpfs /run
+mount -t tmpfs -o mode=755,size=64m tmpfs /var
+mkdir -p /run/baseos /var/lib /var/log /var/tmp /var/empty
+ln -s /run /var/run
+cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS
+# SDL scans /dev/input by mtime without udev; give it a nonzero one.
+touch -c -d @1 /dev/input
+
+/usr/sbin/baseos-watchdog </dev/null >/run/baseos/watchdog.log 2>&1 &
+/usr/sbin/baseos-usb </dev/null >/run/baseos/usb.log 2>&1 &
+
+mount -t ext4 -o rw,noatime /dev/mmcblk0p6 /data 2>/dev/null || mount -t tmpfs tmpfs /data
+mkdir -p /data/bluetooth /data/bluealsa
+ln -s /data/bluetooth /var/lib/bluetooth
+ln -s /data/bluealsa /var/lib/bluealsa
+card=
+for dev in /dev/mmcblk1p1 /dev/mmcblk0p7; do
+	[ -b "$dev" ] || continue
+	mount -t vfat -o rw,utf8,noatime,shortname=mixed "$dev" /mnt/sdcard && { card=$dev; break; }
+done
+# TF1 holds BaseOS settings even when the frontend is on TF2.
+if [ "$card" = /dev/mmcblk0p7 ]; then
+	/usr/sbin/baseos-config /mnt/sdcard/baseos.conf
+elif [ -n "$card" ]; then
+	mkdir -p /run/baseos/tf1 && mount -t vfat -o ro /dev/mmcblk0p7 /run/baseos/tf1 &&
+		{ /usr/sbin/baseos-config /run/baseos/tf1/baseos.conf; umount /run/baseos/tf1; }
+fi
+cat > /run/baseos/platform <<'PLATFORM'
+BASEOS_VERSION=2.0.0-dev
+KERNEL_ABI=mainline-h700-v1
+MODEL=rg28xx
+GRAPHICS_LIBDIR=/usr/lib/baseos-mainline
+PLATFORM
+chmod 644 /run/baseos/platform
+[ ! -x /usr/bin/timedatectl ] || /usr/bin/timedatectl apply
+[ -z "$card" ] || printf '%s\n' "$card" > /run/baseos/persistence-ready
+cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS-done
+# Keep the last boot's logs on /data (ext4, survives resets) for diagnosis.
+( sleep 8; d=/data/baseos2/last-boot; mkdir -p $d && rm -f $d/* &&
+  dmesg > $d/dmesg; cp /run/baseos/*.log /run/baseos/t-* $d/ 2>/dev/null; ps > $d/ps; sync ) &

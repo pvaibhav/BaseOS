@@ -1,0 +1,34 @@
+From ae5f9f43f4ea61e618300903deba83da18dabf60 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 10:05:10 +0000
+Subject: [PATCH 06/13] 0006-de33-syscon-dependencies
+
+---
+ drivers/clk/sunxi-ng/Kconfig  | 1 +
+ drivers/gpu/drm/sun4i/Kconfig | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/drivers/clk/sunxi-ng/Kconfig b/drivers/clk/sunxi-ng/Kconfig
+index 6af2d020e..1cf91cfc8 100644
+--- a/drivers/clk/sunxi-ng/Kconfig
++++ b/drivers/clk/sunxi-ng/Kconfig
+@@ -115,6 +115,7 @@ config SUN8I_V3S_CCU
+ 
+ config SUN8I_DE2_CCU
+ 	tristate "Support for the Allwinner SoCs DE2 CCU"
++	select MFD_SYSCON
+ 	default ARCH_SUNXI
+ 	depends on MACH_SUN8I || ARM64 || RISCV || COMPILE_TEST
+ 
+diff --git a/drivers/gpu/drm/sun4i/Kconfig b/drivers/gpu/drm/sun4i/Kconfig
+index 946dd7606..395b47122 100644
+--- a/drivers/gpu/drm/sun4i/Kconfig
++++ b/drivers/gpu/drm/sun4i/Kconfig
+@@ -87,6 +87,7 @@ config DRM_SUN8I_TCON_TOP
+ 
+ config DRM_SUN50I_PLANES
+ 	tristate
++	select MFD_SYSCON
+ 	default DRM_SUN4I if DRM_SUN8I_MIXER!=n
+ 	help
+ 	  Chose this option if you have an Allwinner Soc with the

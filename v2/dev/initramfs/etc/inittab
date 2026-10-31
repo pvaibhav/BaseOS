@@ -1,0 +1,2 @@
+::sysinit:/etc/rcS
+::shutdown:/bin/sync
