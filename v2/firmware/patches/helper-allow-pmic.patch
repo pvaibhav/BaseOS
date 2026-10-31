@@ -1,0 +1,13 @@
+Helper: accept x-powers (PMIC) devicetree nodes; still refuse an unterminated compatible string.
+
+--- a/experiments/h700-mainline/helper/fdt-final.c
++++ b/experiments/h700-mainline/helper/fdt-final.c
+@@ -20,7 +20,7 @@
+    int at=0;
+    while (at<len) {
+     int l=strnlen(c+at,len-at);
+-    if (l==len-at || (l>=9 && !memcmp(c+at,"x-powers,",9))) return -1;
++    if (l==len-at) return -1; /* unterminated string */
+     at+=l+1;
+    }
+   }

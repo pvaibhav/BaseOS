@@ -1,0 +1,42 @@
+BL31: drop the patch-0001 ban on x-powers (PMIC) devicetree nodes.
+With a PMIC node in the tree, stock TF-A probes it and uses it for power off.
+
+--- a/plat/allwinner/common/sunxi_prepare_dtb.c
++++ b/plat/allwinner/common/sunxi_prepare_dtb.c
+@@ -21,8 +21,7 @@
+ /* MMU on; descriptor bounds validated before any FDT access. */
+ void sunxi_baseos_validate_dtb(const void *fdt, size_t capacity)
+ {
+-	int node = -1, len, ret;
+-	const char *prop;
++	int len;
+ 
+ 	checked(fdt_check_header(fdt));
+ 	if (fdt_totalsize(fdt) > capacity) {
+@@ -36,26 +35,6 @@
+ 		ERROR("BaseOS: missing trial marker\n");
+ 		panic();
+ 	}
+-	/* Helper enforces trial/secmon/SMC. Defense in depth before PMIC code:
+-	 * refuse any x-powers compatible under the SoC-WDT-only contract. */
+-	while ((node = fdt_next_node(fdt, node, NULL)) >= 0) {
+-		prop = fdt_getprop(fdt, node, "compatible", &len);
+-		if (prop == NULL) {
+-			checked(len == -FDT_ERR_NOTFOUND ? 0 : len);
+-			continue;
+-		}
+-		for (int off = 0; off < len; off += ret + 1) {
+-			const char *end = memchr(prop + off, 0, len - off);
+-			if (end == NULL)
+-				checked(-FDT_ERR_BADVALUE);
+-			ret = end - (prop + off);
+-			if (ret >= 9 && memcmp(prop + off, "x-powers,", 9) == 0) {
+-				ERROR("BaseOS: PMIC forbidden in SoC-WDT trial\n");
+-				panic();
+-			}
+-		}
+-	}
+-	checked(node == -FDT_ERR_NOTFOUND ? 0 : node);
+ }
+ 
+ void sunxi_prepare_dtb(void *fdt, size_t capacity)

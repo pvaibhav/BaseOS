@@ -1,0 +1,69 @@
+From 85d833560d7ef75d6cfadaf9eee194c8a1e0cd67 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 14:47:31 +0000
+Subject: [PATCH 27/29] Revert "ASoC: sun4i-codec: H616 controls under the
+ stock firmware names too"
+
+This reverts commit 5ace1827caab60e5f4060da5f4c6d0316e96ccdb.
+---
+ sound/soc/sunxi/sun4i-codec.c | 39 -----------------------------------
+ 1 file changed, 39 deletions(-)
+
+diff --git a/sound/soc/sunxi/sun4i-codec.c b/sound/soc/sunxi/sun4i-codec.c
+index 6d7f97989..ff56700a9 100644
+--- a/sound/soc/sunxi/sun4i-codec.c
++++ b/sound/soc/sunxi/sun4i-codec.c
+@@ -1885,38 +1885,7 @@ static struct snd_soc_card *sun8i_v3s_codec_create_card(struct device *dev)
+ 	return card;
+ };
+ 
+-/*
+- * Stock Anbernic firmware names: frontends written for it set volume through
+- * these. "digital volume" is the raw DAC attenuation (0 = loudest) and
+- * "LINEOUT" is one switch for both channels, as on the vendor kernel.
+- */
+-static int sun50i_h616_stock_lineout_get(struct snd_kcontrol *kcontrol,
+-					 struct snd_ctl_elem_value *ucontrol)
+-{
+-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+-	unsigned int val = snd_soc_component_read(component, SUN50I_H616_DAC_AC_DAC_REG);
+-
+-	ucontrol->value.integer.value[0] = !!(val & BIT(SUN50I_H616_LINEOUTL_EN));
+-	return 0;
+-}
+-
+-static int sun50i_h616_stock_lineout_put(struct snd_kcontrol *kcontrol,
+-					 struct snd_ctl_elem_value *ucontrol)
+-{
+-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+-	unsigned int mask = BIT(SUN50I_H616_LINEOUTL_EN) | BIT(SUN50I_H616_LINEOUTR_EN);
+-
+-	return snd_soc_component_update_bits(component, SUN50I_H616_DAC_AC_DAC_REG,
+-					     mask, ucontrol->value.integer.value[0] ? mask : 0);
+-}
+-
+ static const struct snd_kcontrol_new sun50i_h616_codec_codec_controls[] = {
+-	SOC_SINGLE("digital volume", SUN4I_CODEC_DAC_DPC,
+-		   SUN4I_CODEC_DAC_DPC_DVOL, 0x3f, 0),
+-	SOC_SINGLE("lineout volume", SUN50I_H616_DAC_AC_DAC_REG,
+-		   SUN50I_H616_LINEOUT_VOL, 0x1f, 0),
+-	SOC_SINGLE_EXT("LINEOUT", SND_SOC_NOPM, 0, 1, 0,
+-		       sun50i_h616_stock_lineout_get, sun50i_h616_stock_lineout_put),
+ 	SOC_SINGLE_TLV("DAC Playback Volume", SUN4I_CODEC_DAC_DPC,
+ 		       SUN4I_CODEC_DAC_DPC_DVOL, 0x3f, 1,
+ 		       sun6i_codec_dvol_scale),
+@@ -1995,14 +1964,6 @@ static const struct snd_soc_component_driver sun50i_h616_codec_codec = {
+ 
+ static const struct snd_kcontrol_new sun50i_h616_card_controls[] = {
+ 	SOC_DAPM_PIN_SWITCH("Speaker"),
+-	/* Stock firmware name for the speaker switch. */
+-	{
+-		.iface = SNDRV_CTL_ELEM_IFACE_MIXER, .name = "SPK",
+-		.info = snd_soc_dapm_info_pin_switch,
+-		.get = snd_soc_dapm_get_pin_switch,
+-		.put = snd_soc_dapm_put_pin_switch,
+-		.private_value = (unsigned long)"Speaker",
+-	},
+ };
+ 
+ static const struct snd_soc_dapm_widget sun50i_h616_codec_card_dapm_widgets[] = {

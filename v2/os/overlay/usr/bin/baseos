@@ -1,0 +1,35 @@
+#!/bin/sh
+# BaseOS 2 platform commands for frontends (see v2/CONTRACT.md).
+#   baseos volume [0-100]      print or set the speaker/headphone volume
+#   baseos brightness [0-100]  print or set the screen brightness (0 = off)
+#   baseos sleep               suspend until the power key wakes the device
+#   baseos boot 1|2            choose BaseOS 1.x or 2 for the next start
+bl=/sys/class/backlight/backlight
+number() { case "$1" in ''|*[!0-9]*) return 1;; esac; [ "$1" -le 100 ]; }
+case "$1" in
+volume)
+	if [ $# -lt 2 ]; then
+		amixer -c 0 sget 'Line Out' | sed -n 's/.*\[\([0-9]*\)%\].*/\1/p' | head -1
+		exit
+	fi
+	number "$2" || exit 2
+	amixer -q -c 0 sset DAC 100% unmute
+	if [ "$2" -eq 0 ]; then amixer -q -c 0 sset 'Line Out' 0% mute
+	else amixer -q -c 0 sset 'Line Out' "$2%" unmute; fi ;;
+brightness)
+	read -r max < $bl/max_brightness
+	if [ $# -lt 2 ]; then read -r v < $bl/brightness; echo $((v * 100 / max)); exit; fi
+	number "$2" || exit 2
+	echo $(($2 * max / 100)) > $bl/brightness ;;
+sleep)
+	echo mem > /sys/power/state ;;
+boot)
+	# The loader starts BaseOS 2 when the RTC pair is zero, BaseOS 1.x otherwise.
+	case "$2" in
+	1) mem 0x07000138 0x9f559c26 >/dev/null && mem 0x0700013c 0x42535031 >/dev/null ;;
+	2) mem 0x07000138 0 >/dev/null && mem 0x0700013c 0 >/dev/null ;;
+	*) exit 2 ;;
+	esac ;;
+*)
+	sed -n '2,7s/^# \{0,1\}//p' "$0" >&2; exit 2 ;;
+esac

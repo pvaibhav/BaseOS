@@ -1,0 +1,316 @@
+Panel init stream during the card read.
+
+The SPL powers the panel before the logo read (every model), and once the
+vendor reset steps are done it sends the panel's init stream (GPIO SPI on
+PI8-PI10) between card reads, honouring every vendor delay as a minimum.
+It records where it stopped in the panel record (version 2). The helper
+checks that record and carries on: the rest of the stream, then the
+vendor's 50 ms, TCON enable, 100 ms and backlight, as before. If the record
+is missing or does not add up, the helper resets the panel and sends the
+whole stream itself, as E1 does when the SPL did not power the panel.
+
+--- a/experiments/h700-boot-speed/spl/native-panel.h
++++ b/experiments/h700-boot-speed/spl/native-panel.h
+@@ -5,9 +5,11 @@
+ 
+ /* The SPL runs the vendor panel power, reset and strap steps (GPIO only) while it
+  * reads the card, then leaves this record for the A32 loader. The loader trusts it
+- * only when every vendor minimum wait is proved and the pins still match. */
++ * only when every vendor minimum wait is proved and the pins still match.
++ * Version 2: after those steps the SPL also sends the panel init stream (GPIO
++ * SPI on PI8-PI10) between card reads, and records where it stopped. */
+ #define BASEOS_NATIVE_PANEL_MAGIC 0x314c4e50u
+-#define BASEOS_NATIVE_PANEL_VERSION 1u
++#define BASEOS_NATIVE_PANEL_VERSION 2u
+ #define BASEOS_NATIVE_PANEL_ADDRESS 0x4a300280u
+ #define BASEOS_PANEL_TICKS_PER_MS 24000u
+ 
+@@ -21,10 +23,23 @@
+      * reset high, and the strap read (or the end of the last wait for fixed panels). */
+     uint64_t ticks[5];
+     unsigned char generation[32];
++    /* Init stream progress: index of the next entry to send, and the wait (counter
++     * ticks from stream_since) that must pass first. stream_next == stream length
++     * means all of it was sent; the wait is then the vendor's 50 ms before the
++     * TCON is enabled. */
++    uint32_t stream_next, stream_reserved;
++    uint64_t stream_since, stream_wait;
+ };
+-_Static_assert(sizeof(struct baseos_native_panel) == 96, "native panel record ABI");
++_Static_assert(sizeof(struct baseos_native_panel) == 120, "native panel record ABI");
++_Static_assert(BASEOS_NATIVE_PANEL_ADDRESS + 120u <= 0x4a300300u, "panel record ends before the display record");
+ _Static_assert(__builtin_offsetof(struct baseos_native_panel, ticks) == 24, "native panel timing ABI");
+ 
++/* What the helper needs to carry on with the stream. */
++struct baseos_panel_resume {
++    uint32_t next;
++    uint64_t since, wait;
++};
++
+ static inline uint32_t baseos_panel_hash(const struct baseos_native_panel *record)
+ {
+     const unsigned char *bytes = (const void *)record;
+--- a/experiments/h700-boot-speed/spl/native-boot.c
++++ b/experiments/h700-boot-speed/spl/native-boot.c
+@@ -11,6 +11,12 @@
+ #include "native-display.h"
+ #include "native-panel.h"
+ #include "boot-logo-file.h"
++/* U-Boot's barrier() macro would rewrite the io.barrier member calls. */
++#pragma push_macro("barrier")
++#undef barrier
++#include "panel-spi9.h"
++#pragma pop_macro("barrier")
++#include "native-panel-stream.h"
+ #ifdef BASEOS_RAW_CAPSULE
+ #include "raw-capsule-generated.h"
+ #endif
+@@ -73,12 +79,18 @@
+     return hash;
+ }
+ 
+-/* Vendor panel power-on (PI15), reset pulse (PI14) and PE6 strap. GPIO only: the SPL
+- * still owns SRAM C, so SYSCTRL and the display engine stay with the A32 loader. */
++/* Vendor panel power-on (PI15), reset pulse (PI14) and PE6 strap, then the panel's
++ * init stream over GPIO SPI (PI8 CS, PI9 clock, PI10 data). GPIO only: the SPL
++ * still owns SRAM C, so SYSCTRL and the display engine stay with the helper. */
+ static struct {
+     unsigned int step; /* 0 idle, 1..4 waiting before step N, 5 done */
+     unsigned int panel;
+     u64 ticks[5];
++    /* Init stream, from step 5 on: next entry, and the wait before it. */
++    const u16 *stream;
++    unsigned int count, next;
++    u64 since, wait;
++    struct baseos_panel_spi9 port;
+ } panel_sequence;
+ 
+ static void panel_update(ulong address, u32 mask, u32 bits)
+@@ -92,8 +104,69 @@
+     u64 now;
+     asm volatile("dsb sy; isb; mrs %0, cntpct_el0" : "=r"(now) :: "memory");
+     return now;
++}
++
++/* Same raw accesses and barriers as the helper's copy of this SPI code. */
++static u32 spi9_read(void *context, u32 address)
++{
++    (void)context;
++    return __raw_readl((void *)(ulong)address);
++}
++
++static void spi9_write(void *context, u32 address, u32 value)
++{
++    (void)context;
++    __raw_writel(value, (void *)(ulong)address);
++}
++
++static void spi9_barrier(void *context)
++{
++    (void)context;
++    asm volatile("dmb sy" ::: "memory");
++}
++
++static void panel_stream_begin(void)
++{
++#if BASEOS_PANEL_RULE == 2
++    panel_sequence.stream = panel_sequence.panel ? baseos_panel_boe : baseos_panel_old;
++    panel_sequence.count = panel_sequence.panel ? ARRAY_SIZE(baseos_panel_boe) : ARRAY_SIZE(baseos_panel_old);
++#elif BASEOS_PANEL_RULE == 1
++    panel_sequence.stream = baseos_panel_boe;
++    panel_sequence.count = ARRAY_SIZE(baseos_panel_boe);
++#else
++    panel_sequence.stream = baseos_panel_old;
++    panel_sequence.count = ARRAY_SIZE(baseos_panel_old);
++#endif
++    panel_sequence.next = 0;
++    panel_sequence.since = panel_sequence.ticks[4];
++    panel_sequence.wait = 0;
++    panel_sequence.port = (struct baseos_panel_spi9){{NULL, spi9_read, spi9_write, spi9_barrier}, 0};
+ }
+ 
++/* Send stream entries up to the next vendor delay, then nothing until it has passed.
++ * Entries: command 0..0xff, data 0x100..0x1ff, delay 0x8000 | ms. After the last
++ * entry the vendor waits 50 ms before the TCON is enabled; the helper does that. */
++static void panel_stream(void)
++{
++    while (panel_sequence.step == 5 && panel_sequence.next < panel_sequence.count) {
++        u64 now;
++        asm volatile("isb; mrs %0, cntpct_el0" : "=r"(now));
++        if (now - panel_sequence.since < panel_sequence.wait)
++            return;
++        unsigned int op = panel_sequence.stream[panel_sequence.next++];
++        if (op & 0x8000u) {
++            panel_sequence.since = panel_mark();
++            panel_sequence.wait = (u64)(op & 0x7fffu) * BASEOS_PANEL_TICKS_PER_MS;
++        } else {
++            baseos_panel_spi9_send(&panel_sequence.port, (u8)op, op & 0x100u);
++        }
++        if (panel_sequence.next == panel_sequence.count) {
++            panel_sequence.since = panel_mark();
++            panel_sequence.wait = 50ull * BASEOS_PANEL_TICKS_PER_MS;
++        }
++    }
++}
++
+ static void panel_start(void)
+ {
+     if (panel_sequence.step)
+@@ -128,7 +201,10 @@
+         }
+         panel_sequence.ticks[step] = panel_mark();
+         panel_sequence.step = step + 1;
++        if (panel_sequence.step == 5)
++            panel_stream_begin();
+     }
++    panel_stream();
+ }
+ 
+ static void panel_publish(void)
+@@ -138,6 +214,7 @@
+         panel_advance();
+     if (panel_sequence.step != 5)
+         return;
++    panel_stream();
+     struct baseos_native_panel *record = (void *)BASEOS_NATIVE_PANEL_ADDRESS, next;
+     memset(&next, 0, sizeof(next));
+     next.magic = BASEOS_NATIVE_PANEL_MAGIC;
+@@ -147,6 +224,9 @@
+     next.rule = BASEOS_PANEL_RULE;
+     memcpy(next.ticks, panel_sequence.ticks, sizeof(next.ticks));
+     memcpy(next.generation, baseos_generation, sizeof(next.generation));
++    next.stream_next = panel_sequence.next;
++    next.stream_since = panel_sequence.since;
++    next.stream_wait = panel_sequence.wait;
+     next.fnv = baseos_panel_hash(&next);
+     memcpy((u8 *)record + 4, (const u8 *)&next + 4, sizeof(next) - 4);
+     asm volatile("dmb sy" ::: "memory");
+@@ -218,13 +298,11 @@
+     struct baseos_native_display *display = (void *)BASEOS_NATIVE_DISPLAY_ADDRESS;
+     memset(display, 0, sizeof(*display));
+     memset((void *)BASEOS_NATIVE_PANEL_ADDRESS, 0, sizeof(struct baseos_native_panel));
+-    /* A strapped model always probes, so start at once. A fixed panel is powered
+-     * only for the splash, as before. */
+-    if (BASEOS_PANEL_RULE == 2)
+-        panel_start();
++    /* Power the panel before the logo read, on every model: the helper lights it with
++     * the logo or a black frame either way, and the earlier the reset steps end, the
++     * more of the init stream fits into the card read. */
++    panel_start();
+     load_boot_logo(card);
+-    if (((struct baseos_native_logo *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS)->magic == BASEOS_NATIVE_LOGO_MAGIC)
+-        panel_start();
+     u8 *package = (void *)0x42e00000;
+     if (!read_polled(card, BASEOS_FIRMWARE_SECTOR, BASEOS_FIRMWARE_BYTES / 512, package) ||
+         fnv(package, BASEOS_FIRMWARE_BYTES) != BASEOS_FIRMWARE_FNV) return -1;
+--- a/experiments/h700-mainline/helper/panel.c
++++ b/experiments/h700-mainline/helper/panel.c
+@@ -6,7 +6,8 @@
+ #include "panel-probe.h"
+ extern uint64_t native_ticks(void);
+ static uint32_t panel_read32(uint32_t a) { uint32_t v=*(volatile uint32_t *)(uintptr_t)a; asm volatile("dmb sy" ::: "memory"); return v; }
+-__attribute__((noinline)) int baseos_spl_panel(void)
++/* Returns the panel (0 old, 1 boe) and where the SPL left its init stream, or -1. */
++__attribute__((noinline)) int baseos_spl_panel(struct baseos_panel_resume *resume)
+ {
+     static const uint32_t wait_ms[4] = BASEOS_PANEL_WAITS_MS;
+     const struct baseos_native_panel *panel = (void *)BASEOS_NATIVE_PANEL_ADDRESS;
+@@ -15,7 +16,9 @@
+         panel->bytes != sizeof(*panel) || panel->rule != BASEOS_PANEL_RULE || panel->panel > 1 ||
+         (BASEOS_PANEL_RULE < 2 && panel->panel != BASEOS_PANEL_RULE) ||
+         baseos_panel_hash(panel) != panel->fnv || memcmp(panel->generation, baseos_generation, 32) ||
+-        panel->ticks[0] < record->started_ticks || panel->ticks[4] > native_ticks()) return -1;
++        panel->ticks[0] < record->started_ticks || panel->ticks[4] > native_ticks() ||
++        panel->stream_reserved || panel->stream_since < panel->ticks[4] ||
++        panel->stream_since > native_ticks()) return -1;
+     for (unsigned i = 0; i < 4; i++)
+         if (panel->ticks[i + 1] < panel->ticks[i] ||
+             panel->ticks[i + 1] - panel->ticks[i] < (uint64_t)wait_ms[i] * BASEOS_PANEL_TICKS_PER_MS) return -1;
+@@ -26,5 +29,11 @@
+         ((panel_read32(0x0300b090u) & 0x0f000000u) != 0x06000000u ||
+          (BASEOS_PANEL_PULL_UP && (panel_read32(0x0300b0acu) & 0x3000u) != 0x1000u) ||
+          (unsigned)!(panel_read32(0x0300b0a0u) & 0x40u) != panel->panel)) return -1;
++    /* Once the stream has started: PI8-PI10 outputs and chip select idle high. */
++    if (panel->stream_next &&
++        ((panel_read32(0x0300b124u) & 0xfffu) != 0x111u || !(panel_read32(0x0300b130u) & 0x100u))) return -1;
++    resume->next = panel->stream_next;
++    resume->since = panel->stream_since;
++    resume->wait = panel->stream_wait;
+     return (int)panel->panel;
+ }
+--- a/experiments/h700-boot-speed/native/early-display.c
++++ b/experiments/h700-boot-speed/native/early-display.c
+@@ -3,13 +3,14 @@
+ #include <string.h>
+ #include "native-logo.h"
+ #include "native-display.h"
++#include "native-panel.h"
+ #include "boot-logo-pixels.h"
+ #include "panel-spi9.h"
+ #include "early-display-generated.h"
+ 
+ extern uint64_t native_ticks(void);
+ extern void release_display_sram(void);
+-extern int baseos_spl_panel(void);
++extern int baseos_spl_panel(struct baseos_panel_resume *);
+ 
+ enum display_operation_kind { DISPLAY_UPDATE, DISPLAY_WRITE, DISPLAY_FRAMEBUFFER,
+                               DISPLAY_DELAY_US, DISPLAY_POLL, DISPLAY_BARRIER };
+@@ -80,11 +81,28 @@
+     return 0;
+ }
+ 
+-static int prepare_panel(void)
++/* The SPL stops right after a delay entry, or at the end with the 50 ms wait. */
++static int stream_resumable(int panel, const struct baseos_panel_resume *resume)
+ {
+-    /* The SPL normally ran these steps while it read the card. */
+-    int ready = baseos_spl_panel();
+-    if (ready >= 0) return ready;
++    const uint16_t *stream = panel ? baseos_panel_boe : baseos_panel_old;
++    size_t count = panel ? sizeof(baseos_panel_boe) / sizeof(*baseos_panel_boe)
++                         : sizeof(baseos_panel_old) / sizeof(*baseos_panel_old);
++    if (resume->next > count) return 0;
++    if (!resume->next) return !resume->wait;
++    if (resume->next == count) return resume->wait == 50000ull * 24u;
++    unsigned op = stream[resume->next - 1];
++    return (op & 0x8000u) && resume->wait == (uint64_t)(op & 0x7fffu) * 1000u * 24u;
++}
++
++static int prepare_panel(struct baseos_panel_resume *resume)
++{
++    /* The SPL normally ran these steps, and began the init stream, while it read the
++     * card. Otherwise reset the panel here and send the whole stream. */
++    int ready = baseos_spl_panel(resume);
++    if (ready >= 0 && stream_resumable(ready, resume)) return ready;
++    resume->next = 0;
++    resume->since = native_ticks();
++    resume->wait = 0;
+     update(0x0300b124u, 0xff000000u, 0x11000000u);
+     update(0x0300b130u, 0x8000u, 0x8000u);
+     if (wait_us(30000)) return -1;
+@@ -259,17 +277,19 @@
+     clean_pixels(pixel_bytes);
+     release_display_sram();
+     if (apply(baseos_display_prepare, sizeof(baseos_display_prepare) / sizeof(*baseos_display_prepare))) return -1;
+-    int panel = prepare_panel();
++    struct baseos_panel_resume resume;
++    int panel = prepare_panel(&resume);
+     if (panel < 0) return -1;
+-    job.stage = DISPLAY_STREAM;
+     job.panel = (unsigned)panel;
+     job.stream = panel ? baseos_panel_boe : baseos_panel_old;
+     job.count = panel ? sizeof(baseos_panel_boe) / sizeof(*baseos_panel_boe)
+                       : sizeof(baseos_panel_old) / sizeof(*baseos_panel_old);
+-    job.next = 0;
++    /* Carry on where the SPL stopped: the rest of the stream, or the 50 ms wait. */
++    job.stage = resume.next < job.count ? DISPLAY_STREAM : DISPLAY_PUBLISH;
++    job.next = resume.next;
+     job.port = (struct baseos_panel_spi9){{NULL, read32, write32, barrier}, 0};
+-    job.since = native_ticks();
+-    job.wait = 0;
++    job.since = resume.since;
++    job.wait = resume.wait;
+     job.logo = logo;
+     return baseos_early_display_poll() < 0 ? -1 : panel;
+ }

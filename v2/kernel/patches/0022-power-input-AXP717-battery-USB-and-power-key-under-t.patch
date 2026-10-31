@@ -1,0 +1,52 @@
+From d2a1960588cd9a6e7be5a7a9a52037218c17a4f6 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 14:42:35 +0000
+Subject: [PATCH 22/29] power, input: AXP717 battery, USB and power key under
+ the stock names
+
+---
+ drivers/input/misc/axp20x-pek.c         | 3 ++-
+ drivers/power/supply/axp20x_battery.c   | 2 +-
+ drivers/power/supply/axp20x_usb_power.c | 2 +-
+ 3 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/input/misc/axp20x-pek.c b/drivers/input/misc/axp20x-pek.c
+index 24f9e9d89..43ebe5d8e 100644
+--- a/drivers/input/misc/axp20x-pek.c
++++ b/drivers/input/misc/axp20x-pek.c
+@@ -239,7 +239,8 @@ static int axp20x_pek_probe_input_device(struct axp20x_pek *axp20x_pek,
+ 
+ 	idev = axp20x_pek->input;
+ 
+-	idev->name = "axp20x-pek";
++	/* The AXP717 is the vendor kernel's axp2202: keep its name for stock software. */
++	idev->name = axp20x->variant == AXP717_ID ? "axp2202-pek" : "axp20x-pek";
+ 	idev->phys = "m1kbd/input2";
+ 	idev->dev.parent = &pdev->dev;
+ 
+diff --git a/drivers/power/supply/axp20x_battery.c b/drivers/power/supply/axp20x_battery.c
+index ee8701a6e..cb8669eaf 100644
+--- a/drivers/power/supply/axp20x_battery.c
++++ b/drivers/power/supply/axp20x_battery.c
+@@ -896,7 +896,7 @@ static const struct power_supply_desc axp209_batt_ps_desc = {
+ };
+ 
+ static const struct power_supply_desc axp717_batt_ps_desc = {
+-	.name = "axp20x-battery",
++	.name = "axp2202-battery" /* stock Anbernic name */,
+ 	.type = POWER_SUPPLY_TYPE_BATTERY,
+ 	.properties = axp717_battery_props,
+ 	.num_properties = ARRAY_SIZE(axp717_battery_props),
+diff --git a/drivers/power/supply/axp20x_usb_power.c b/drivers/power/supply/axp20x_usb_power.c
+index e951b2b64..0134cb35c 100644
+--- a/drivers/power/supply/axp20x_usb_power.c
++++ b/drivers/power/supply/axp20x_usb_power.c
+@@ -683,7 +683,7 @@ static const struct power_supply_desc axp22x_usb_power_desc = {
+ };
+ 
+ static const struct power_supply_desc axp717_usb_power_desc = {
+-	.name = "axp20x-usb",
++	.name = "axp2202-usb" /* stock Anbernic name */,
+ 	.type = POWER_SUPPLY_TYPE_USB,
+ 	.properties = axp717_usb_power_properties,
+ 	.num_properties = ARRAY_SIZE(axp717_usb_power_properties),

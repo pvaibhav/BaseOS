@@ -1,0 +1,142 @@
+From 0652165486f15890663c2d2b005f9ae9fb6b4526 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 14:47:31 +0000
+Subject: [PATCH 26/29] Revert "misc: BaseOS stock compatibility (/dev/disp
+ brightness, power key first, i2c-5)"
+
+This reverts commit a246fc479a3ed3efe11f29dc9a747cb0ff7f86a6.
+---
+ .../sun50i-h700-anbernic-rg28xx-baseos.dts    |  3 -
+ drivers/misc/Kconfig                          |  7 --
+ drivers/misc/Makefile                         |  1 -
+ drivers/misc/baseos-stock-compat.c            | 81 -------------------
+ 4 files changed, 92 deletions(-)
+ delete mode 100644 drivers/misc/baseos-stock-compat.c
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+index 2364ce16f..96d9a8e73 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -263,8 +263,5 @@ &tcon_lcd0 {
+ 
+ &watchdog { timeout-sec = <4>; };
+ 
+-/* The power chip bus is /dev/i2c-5 on the vendor kernel. */
+-/ { aliases { i2c5 = &r_i2c; }; };
+-
+ 
+ #include "sun50i-h700-anbernic-rg28xx-phandles.dtsi"
+diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
+index b19b04415..7364931da 100644
+--- a/drivers/misc/Kconfig
++++ b/drivers/misc/Kconfig
+@@ -568,13 +568,6 @@ config MCHP_LAN966X_PCI
+ 	    - lan966x-miim (MDIO_MSCC_MIIM)
+ 	    - lan966x-switch (LAN966X_SWITCH)
+ 
+-config BASEOS_STOCK_COMPAT
+-	bool "BaseOS: stock Anbernic firmware interfaces"
+-	depends on BACKLIGHT_CLASS_DEVICE && OF
+-	help
+-	  /dev/disp brightness control and power-key input numbering as on the
+-	  vendor kernel, so frontends written for it run unchanged.
+-
+ source "drivers/misc/c2port/Kconfig"
+ source "drivers/misc/eeprom/Kconfig"
+ source "drivers/misc/cb710/Kconfig"
+diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
+index 5689ac0c7..e8d8d5d88 100644
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -71,4 +71,3 @@ obj-y				+= keba/
+ obj-y				+= amd-sbi/
+ obj-$(CONFIG_MISC_RP1)		+= rp1/
+ obj-$(CONFIG_INTEL_SSEI)	+= issei/
+-obj-$(CONFIG_BASEOS_STOCK_COMPAT)	+= baseos-stock-compat.o
+diff --git a/drivers/misc/baseos-stock-compat.c b/drivers/misc/baseos-stock-compat.c
+deleted file mode 100644
+index 520c0374f..000000000
+--- a/drivers/misc/baseos-stock-compat.c
++++ /dev/null
+@@ -1,81 +0,0 @@
+-// SPDX-License-Identifier: GPL-2.0
+-/*
+- * Vendor-kernel interfaces that frontends written for the stock Anbernic
+- * firmware use directly, provided on top of the mainline drivers so those
+- * frontends run unchanged:
+- *  - /dev/disp: DISP_LCD_SET/GET_BRIGHTNESS (0..255) drive the panel backlight.
+- *  - the power key is input event0 (frontends wake from sleep on event0).
+- */
+-#include <linux/backlight.h>
+-#include <linux/device.h>
+-#include <linux/fs.h>
+-#include <linux/init.h>
+-#include <linux/miscdevice.h>
+-#include <linux/platform_device.h>
+-#include <linux/uaccess.h>
+-
+-#define DISP_LCD_SET_BRIGHTNESS	0x102
+-#define DISP_LCD_GET_BRIGHTNESS	0x103
+-
+-static long disp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+-{
+-	struct backlight_device *bd;
+-	unsigned long args[4];
+-	long ret;
+-
+-	if (cmd != DISP_LCD_SET_BRIGHTNESS && cmd != DISP_LCD_GET_BRIGHTNESS)
+-		return -ENOTTY;
+-	if (copy_from_user(args, (void __user *)arg, sizeof(args)))
+-		return -EFAULT;
+-	bd = backlight_device_get_by_name("backlight");
+-	if (!bd)
+-		return -ENODEV;
+-	if (cmd == DISP_LCD_SET_BRIGHTNESS)
+-		ret = backlight_device_set_brightness(bd,
+-			DIV_ROUND_CLOSEST(min(args[1], 255UL) * bd->props.max_brightness, 255));
+-	else
+-		ret = DIV_ROUND_CLOSEST(bd->props.brightness * 255, bd->props.max_brightness);
+-	put_device(&bd->dev);
+-	return ret;
+-}
+-
+-static const struct file_operations disp_fops = {
+-	.owner = THIS_MODULE,
+-	.unlocked_ioctl = disp_ioctl,
+-	.compat_ioctl = compat_ptr_ioctl,
+-};
+-
+-static struct miscdevice disp_dev = {
+-	.minor = MISC_DYNAMIC_MINOR,
+-	.name = "disp",
+-	.fops = &disp_fops,
+-	.mode = 0666,
+-};
+-
+-/* Input numbers follow registration order: register the power key first. */
+-static void __init power_key_first(void)
+-{
+-	struct device *pek, *keys;
+-
+-	pek = bus_find_device_by_name(&platform_bus_type, NULL, "axp20x-pek");
+-	keys = bus_find_device_by_name(&platform_bus_type, NULL, "gpio-keys");
+-	if (pek && keys && pek->driver && keys->driver) {
+-		device_release_driver(keys);
+-		device_release_driver(pek);
+-		if (device_attach(pek) <= 0)
+-			pr_warn("baseos: power key did not rebind\n");
+-		if (device_attach(keys) <= 0)
+-			pr_warn("baseos: keys did not rebind\n");
+-	}
+-	put_device(pek);
+-	put_device(keys);
+-}
+-
+-static int __init baseos_stock_compat_init(void)
+-{
+-	if (!of_machine_is_compatible("allwinner,sun50i-h700"))
+-		return 0;
+-	power_key_first();
+-	return misc_register(&disp_dev);
+-}
+-late_initcall_sync(baseos_stock_compat_init);

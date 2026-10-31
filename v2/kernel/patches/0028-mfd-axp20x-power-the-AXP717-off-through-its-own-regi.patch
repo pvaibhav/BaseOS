@@ -1,0 +1,79 @@
+From f90a8a587a61ddf0e9c1be89e2f22a317b4b05c2 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 14:56:19 +0000
+Subject: [PATCH 28/29] mfd: axp20x: power the AXP717 off through its own
+ register; rg28xx: safe CPU speed before restart
+
+---
+ .../allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts   |  6 ++++++
+ drivers/mfd/axp20x.c                                   | 10 +++++++++-
+ include/linux/mfd/axp20x.h                             |  2 ++
+ 3 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+index 96d9a8e73..9baa33f11 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg28xx-baseos.dts
+@@ -263,5 +263,11 @@ &tcon_lcd0 {
+ 
+ &watchdog { timeout-sec = <4>; };
+ 
++/*
++ * Restart and power-off (and sleep) move the CPU to its boot speed and the
++ * matching voltage first, so the boot code never runs on a lowered voltage.
++ */
++&{/opp-table-cpu/opp-1008000000} { opp-suspend; };
++
+ 
+ #include "sun50i-h700-anbernic-rg28xx-phandles.dtsi"
+diff --git a/drivers/mfd/axp20x.c b/drivers/mfd/axp20x.c
+index 50df66de2..6ddc2cc87 100644
+--- a/drivers/mfd/axp20x.c
++++ b/drivers/mfd/axp20x.c
+@@ -222,6 +222,7 @@ static const struct regmap_range axp717_writeable_ranges[] = {
+ 	regmap_reg_range(AXP717_PMU_FAULT, AXP717_MODULE_EN_CONTROL_1),
+ 	regmap_reg_range(AXP717_MIN_SYS_V_CONTROL, AXP717_BOOST_CONTROL),
+ 	regmap_reg_range(AXP717_VSYS_V_POWEROFF, AXP717_VSYS_V_POWEROFF),
++	regmap_reg_range(AXP717_PWR_OFF_CTRL, AXP717_PWR_OFF_CTRL),
+ 	regmap_reg_range(AXP717_IRQ0_EN, AXP717_IRQ4_EN),
+ 	regmap_reg_range(AXP717_IRQ0_STATE, AXP717_IRQ4_STATE),
+ 	regmap_reg_range(AXP717_TS_PIN_CFG, AXP717_TS_PIN_CFG),
+@@ -1243,17 +1244,24 @@ static int axp20x_power_off(struct sys_off_data *data)
+ 	struct axp20x_dev *axp20x = data->cb_data;
+ 	unsigned int shutdown_reg;
+ 
++	unsigned int shutdown_bit = AXP20X_OFF;
++
+ 	switch (axp20x->variant) {
+ 	case AXP323_ID:
+ 	case AXP313A_ID:
+ 		shutdown_reg = AXP313A_SHUTDOWN_CTRL;
+ 		break;
++	case AXP717_ID:
++		/* Same register and bit as the vendor firmware and TF-A use. */
++		shutdown_reg = AXP717_PWR_OFF_CTRL;
++		shutdown_bit = AXP717_PWR_OFF;
++		break;
+ 	default:
+ 		shutdown_reg = AXP20X_OFF_CTRL;
+ 		break;
+ 	}
+ 
+-	regmap_set_bits(axp20x->regmap, shutdown_reg, AXP20X_OFF);
++	regmap_set_bits(axp20x->regmap, shutdown_reg, shutdown_bit);
+ 
+ 	/* Give capacitors etc. time to drain to avoid kernel panic msg. */
+ 	mdelay(500);
+diff --git a/include/linux/mfd/axp20x.h b/include/linux/mfd/axp20x.h
+index b352661d9..050d12d49 100644
+--- a/include/linux/mfd/axp20x.h
++++ b/include/linux/mfd/axp20x.h
+@@ -127,6 +127,8 @@ enum axp20x_variants {
+ #define AXP717_MODULE_EN_CONTROL_2	0x19
+ #define AXP717_BOOST_CONTROL		0x1e
+ #define AXP717_VSYS_V_POWEROFF		0x24
++#define AXP717_PWR_OFF_CTRL		0x27
++#define AXP717_PWR_OFF			BIT(0)
+ #define AXP717_IRQ0_EN			0x40
+ #define AXP717_IRQ1_EN			0x41
+ #define AXP717_IRQ2_EN			0x42

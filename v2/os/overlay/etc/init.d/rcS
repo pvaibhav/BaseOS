@@ -38,13 +38,6 @@ elif [ -n "$card" ]; then
 	mkdir -p /run/baseos/tf1 && mount -t vfat -o ro /dev/mmcblk0p7 /run/baseos/tf1 &&
 		{ /usr/sbin/baseos-config /run/baseos/tf1/baseos.conf; umount /run/baseos/tf1; }
 fi
-cat > /run/baseos/platform <<'PLATFORM'
-BASEOS_VERSION=2.0.0-dev
-KERNEL_ABI=mainline-h700-v1
-MODEL=rg28xx
-GRAPHICS_LIBDIR=/usr/lib/baseos-mainline
-PLATFORM
-chmod 644 /run/baseos/platform
 [ ! -x /usr/bin/timedatectl ] || /usr/bin/timedatectl apply
 [ -z "$card" ] || printf '%s\n' "$card" > /run/baseos/persistence-ready
 cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS-done

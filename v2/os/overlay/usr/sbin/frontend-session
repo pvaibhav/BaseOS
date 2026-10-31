@@ -3,10 +3,6 @@ set -eu
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 [ ! -e /run/baseos/stopping ] || { sleep 5; exit 1; }
 [ -s /run/baseos/persistence-ready ] || { sleep 5; exit 1; }
-export BASEOS_PRESENT_TRACE=/run/baseos/present
-export PLATFORM=h700
-export LD_LIBRARY_PATH=/usr/lib/baseos-mainline:/usr/lib/aarch64-linux-gnu:/usr/lib
-export GBM_BACKENDS_PATH=/usr/lib/baseos-mainline/gbm
 SD=/mnt/sdcard
 LAUNCH= FRONTEND= LAUNCH_TYPE=script
 # v1.5.3 discovery order. (ALSA reads /etc/asound.conf through its own
