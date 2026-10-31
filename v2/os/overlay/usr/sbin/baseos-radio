@@ -67,28 +67,59 @@ if [ "$1" = daemon ]; then
  [ "$BASEOS_WIFI:$BASEOS_BLUETOOTH" != 0:0 ] || exit 0
  mkdir /run/baseos/radio-worker 2>/dev/null || exit 0
  sleep 3
+ # Every pass looks only at sysfs with shell built-ins (no programs started).
+ # The status commands, which start several programs each, run only when the
+ # Wi-Fi link or the Bluetooth connections change. (Running them every pass
+ # started about 12 programs a second and made games stutter.)
+ wifi_seen=x bt_seen=x bt_started=
  while [ ! -e /run/baseos/stopping ]; do
   if [ "$BASEOS_WIFI" = 1 ]; then
-   if [ ! -e /data/wifi/disabled ]; then "$0" wifi _start >/dev/null 2>&1; fi
-   "$0" wifi status > /run/baseos/wifi-state.new && mv /run/baseos/wifi-state.new /run/baseos/wifi-state
+   pid=; [ ! -f /run/baseos/wpa.pid ] || read -r pid < /run/baseos/wpa.pid
+   if [ ! -e /data/wifi/disabled ] && { [ -z "$pid" ] || [ ! -d "/proc/$pid" ]; }; then
+    "$0" wifi _start >/dev/null 2>&1
+   fi
+   link=none
+   for n in /sys/class/net/wlan*; do [ -f "$n/operstate" ] && read -r link < "$n/operstate"; done
+   state=
+   if [ -f /run/baseos/wifi-state ]; then while read -r l; do state="$state$l "; done < /run/baseos/wifi-state; fi
+   # Refresh on a link change, and while the link is up without an address yet.
+   case "$link:$state" in
+   "$wifi_seen":*) case "$link:$state" in up:*ip_address=?*) ;; up:*) refresh=1 ;; *) refresh= ;; esac ;;
+   *) refresh=1 ;;
+   esac
+   if [ -n "$refresh" ]; then
+    "$0" wifi status > /run/baseos/wifi-state.new && mv /run/baseos/wifi-state.new /run/baseos/wifi-state
+    wifi_seen=$link
+   fi
   fi
   if [ "$BASEOS_BLUETOOTH" = 1 ]; then
-   if [ ! -e /data/bluetooth/disabled ]; then "$0" bt _start >/dev/null 2>&1; fi
-   "$0" bt status > /run/baseos/bt-state.new && mv /run/baseos/bt-state.new /run/baseos/bt-state
-   # A connected controller alone must not steal audio. Require an A2DP sink
-   # and the BlueALSA playback mixer (the transport is ready by then).
-   addr=
-   if pidof bluealsa >/dev/null; then
-    for a in $(timeout 5 bluetoothctl devices Connected 2>/dev/null | awk '/^Device / {print $2}'); do
-     info=$(timeout 5 bluetoothctl info "$a" 2>/dev/null)
-     if echo "$info" | grep -q 'Connected: yes' && echo "$info" | grep -qi '0000110b-' &&
-        amixer -D "bluealsa:DEV=$a" scontrols 2>/dev/null | grep -q A2DP; then addr=$a; break; fi
-    done
+   if [ ! -e /data/bluetooth/disabled ] && { [ -z "$bt_started" ] || [ ! -d /sys/class/bluetooth/hci0 ]; }; then
+    "$0" bt _start >/dev/null 2>&1 && bt_started=1
    fi
-   printf '%s\n' "$addr" > /run/baseos/bt-audio.new; mv /run/baseos/bt-audio.new /run/baseos/bt-audio
+   # Each Bluetooth connection is a sysfs entry hci0:<handle>.
+   conns=
+   for c in /sys/class/bluetooth/hci0:*; do [ -e "$c" ] && conns="$conns ${c##*:}"; done
+   if [ "$conns" != "$bt_seen" ]; then
+    "$0" bt status > /run/baseos/bt-state.new && mv /run/baseos/bt-state.new /run/baseos/bt-state
+    # A connected controller alone must not steal audio. Require an A2DP sink
+    # and the BlueALSA playback mixer (the transport is ready by then; a
+    # headset that is still setting up is picked up by the next change or by
+    # the retry below).
+    addr=
+    if [ -n "$conns" ] && pidof bluealsa >/dev/null; then
+     for a in $(timeout 5 bluetoothctl devices Connected 2>/dev/null | awk '/^Device / {print $2}'); do
+      info=$(timeout 5 bluetoothctl info "$a" 2>/dev/null)
+      if echo "$info" | grep -qi '0000110b-' &&
+         amixer -D "bluealsa:DEV=$a" scontrols 2>/dev/null | grep -q A2DP; then addr=$a; break; fi
+     done
+    fi
+    printf '%s\n' "$addr" > /run/baseos/bt-audio.new; mv /run/baseos/bt-audio.new /run/baseos/bt-audio
+    # Look again on the next pass if a device is connected but its audio is
+    # not ready yet; otherwise wait for the next change.
+    if [ -n "$conns" ] && [ -z "$addr" ] && [ "${bt_retry:-0}" -lt 6 ]; then bt_retry=$((${bt_retry:-0} + 1))
+    else bt_seen=$conns bt_retry=0; fi
+   fi
   fi
-  # Each pass starts a few small programs: often enough to follow a headset
-  # being switched on, rare enough not to cost battery or game smoothness.
   sleep 5
  done
  exit 0
