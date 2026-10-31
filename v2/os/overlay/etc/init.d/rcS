@@ -13,8 +13,6 @@ mount -t tmpfs -o mode=755,size=64m tmpfs /var
 mkdir -p /run/baseos /var/lib /var/log /var/tmp /var/empty
 ln -s /run /var/run
 cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS
-# Boot logo until the frontend's first frame (records its time in t-frontend-frame).
-/usr/sbin/baseos-splash </dev/null >/dev/null 2>&1 &
 # SDL scans /dev/input by mtime without udev; give it a nonzero one.
 touch -c -d @1 /dev/input
 mount -t debugfs -o nodev,noexec,nosuid debugfs /sys/kernel/debug
