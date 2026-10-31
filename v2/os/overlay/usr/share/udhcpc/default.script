@@ -6,9 +6,10 @@ deconfig)
  ip route flush dev "$interface"
  : > /run/resolv.conf;;
 bound|renew)
+ # Flushing the address also drops its routes. (BusyBox "ip route flush dev X
+ # default" drops every route on X, including the local network's.)
  ip addr flush dev "$interface"
  ip addr add "$ip/${subnet:-24}" dev "$interface" || exit 1
- ip route flush dev "$interface" default
  for r in $router; do ip route add default via "$r" dev "$interface"; break; done
  umask 022
  { [ -z "$domain" ] || printf 'search %s\n' "$domain"

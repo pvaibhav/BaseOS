@@ -1,7 +1,7 @@
 From f90a8a587a61ddf0e9c1be89e2f22a317b4b05c2 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 14:56:19 +0000
-Subject: [PATCH 28/37] mfd: axp20x: power the AXP717 off through its own
+Subject: [PATCH 28/38] mfd: axp20x: power the AXP717 off through its own
  register; rg28xx: safe CPU speed before restart
 
 ---

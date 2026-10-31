@@ -17,6 +17,9 @@ model_field() { awk -F'|' -v m="$(model)" -v f="$1" '$1==m {print $f}' /usr/shar
 has() { case " $(model_field 5) " in *" $1 "*) return 0;; esac; return 1; }
 
 BL=/sys/class/backlight/backlight
+# The clock that can wake the handheld (on the RG SP the timekeeping clock,
+# rtc0, has no alarm wired).
+wake_rtc() { for r in /sys/class/rtc/rtc*; do [ -e "$r/wakealarm" ] && { echo "$r"; return; }; done; echo /sys/class/rtc/rtc0; }
 # The power LED is lit while the screen is on, as on the stock firmware.
 power_led() { [ ! -w /sys/class/leds/green:power/brightness ] || echo "$1" > /sys/class/leds/green:power/brightness; }
 BAT=/sys/class/power_supply/axp2202-battery
@@ -177,15 +180,23 @@ power)
 	sleep)
 		if [ "$2" = --wake-in ]; then
 			case "$3" in ''|*[!0-9]*) usage ;; esac
-			echo 0 > /sys/class/rtc/rtc0/wakealarm; echo "+$3" > /sys/class/rtc/rtc0/wakealarm
+			echo 0 > $(wake_rtc)/wakealarm; echo "+$3" > $(wake_rtc)/wakealarm
 		fi
-		echo mem > /sys/power/state ;;
+		# Suspending with Wi-Fi associated crashes the Realtek SDIO driver
+		# (RG SP), so take the link down first; it reconnects by itself after.
+		wifi_up=
+		for n in /sys/class/net/wlan*; do
+			[ -e "$n" ] && grep -q up "$n/operstate" && { ip link set "${n##*/}" down; wifi_up="$wifi_up ${n##*/}"; }
+		done
+		echo mem > /sys/power/state; rc=$?
+		for i in $wifi_up; do ip link set "$i" up; done
+		exit $rc ;;
 	*) usage ;;
 	esac ;;
 rtc)
 	[ "$1" = wake ] || usage
-	echo 0 > /sys/class/rtc/rtc0/wakealarm
-	case "$2" in off) ;; ''|*[!0-9]*) usage ;; *) echo "+$2" > /sys/class/rtc/rtc0/wakealarm ;; esac ;;
+	echo 0 > $(wake_rtc)/wakealarm
+	case "$2" in off) ;; ''|*[!0-9]*) usage ;; *) echo "+$2" > $(wake_rtc)/wakealarm ;; esac ;;
 perf)
 	case "$1" in
 	profile) if [ $# -lt 2 ]; then echo "profile=$(cat /run/baseos/perf-profile 2>/dev/null || echo balanced)"; else perf_set "$2"; fi ;;

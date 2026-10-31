@@ -45,6 +45,12 @@ wifi_start() {
 }
 bt_start() {
  rfkill unblock bluetooth || return 1
+ # The Realtek chip can miss the driver's first reset at boot, and the driver
+ # then waits for it forever. Rebinding repeats the reset; once per boot.
+ d=/sys/bus/serial/drivers/hci_uart_h5
+ if [ ! -d /sys/class/bluetooth/hci0 ] && [ -e $d/serial0-0 ] && mkdir /run/baseos/bt-reset 2>/dev/null; then
+  echo serial0-0 > $d/unbind; sleep 1; echo serial0-0 > $d/bind; sleep 3
+ fi
  [ -S /run/dbus/system_bus_socket ] && [ -d /sys/class/bluetooth/hci0 ] || return 1
  if ! pidof bluetoothd >/dev/null; then
   /usr/libexec/bluetooth/bluetoothd -n >/run/baseos/bluetoothd.log 2>&1 &
@@ -140,7 +146,7 @@ wifi:connect|wifi:forget)
  psk=
  if [ $# = 2 ]; then
   [ ${#2} -ge 8 ] && [ ${#2} -le 63 ] || usage
-  psk=$(printf '%s\n' "$2" | wpa_passphrase "$ssid" | sed -n 's/^[[:space:]]*psk=//p')
+  psk=$(printf '%s\n' "$2" | wpa_passphrase "$ssid" 2>/dev/null | sed -n 's/^[[:space:]]*psk=//p')
   [ ${#psk} = 64 ] || error 'could not derive network key'
  fi
  new=

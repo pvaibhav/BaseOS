@@ -32,6 +32,12 @@ mount -t debugfs -o nodev,noexec,nosuid debugfs /sys/kernel/debug
 
 mount -t ext4 -o rw,noatime /dev/mmcblk0p6 /data 2>/dev/null || mount -t tmpfs tmpfs /data
 mkdir -p /data/bluetooth /data/bluealsa
+# Development boots: keep the kernel log on /data while starting up, since a
+# crash resets the board and RAM does not survive (stock can read /data too).
+case " $(cat /proc/cmdline) " in *' baseos.dev '*)
+	( mkdir -p /data/baseos2; i=0; while [ $i -lt 40 ]; do dmesg > /data/baseos2/early-dmesg.new &&
+	  mv /data/baseos2/early-dmesg.new /data/baseos2/early-dmesg && sync; sleep 0.5; i=$((i+1)); done ) &
+esac
 # MENU held while switching on: go back to BaseOS 1.x (the stock system) for
 # the next start and restart now. Works with any frontend.
 if [ -x /usr/sbin/baseos-charger ] && /usr/sbin/baseos-charger menu-held; then
@@ -89,7 +95,8 @@ fi
 # on its way. Per model: rumble, external clock, Wi-Fi, Bluetooth. (Not the
 # USB host controllers: they would take the port from the device side.)
 case "$(tr '\0' '\n' < /proc/device-tree/compatible | head -1)" in
-anbernic,rgsp) ( sleep 3; modprobe -a gpio-vibra rtc-pcf8563 rtw88_8821cs hci_uart ) </dev/null >/dev/null 2>&1 & ;;
+anbernic,rgsp) [ -e /data/baseos2/no-modules ] ||
+	( sleep 3; modprobe -a gpio-vibra rtc-pcf8563 rtw88_8821cs hci_uart ) </dev/null >/dev/null 2>&1 & ;;
 esac
 # Platform events and automatic audio routing (baseos events, baseos audio).
 /usr/sbin/baseos-events --daemon </dev/null >/dev/null 2>&1 &

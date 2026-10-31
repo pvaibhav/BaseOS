@@ -1,7 +1,7 @@
 From 5ace1827caab60e5f4060da5f4c6d0316e96ccdb Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 14:42:10 +0000
-Subject: [PATCH 21/37] ASoC: sun4i-codec: H616 controls under the stock
+Subject: [PATCH 21/38] ASoC: sun4i-codec: H616 controls under the stock
  firmware names too
 
 ---

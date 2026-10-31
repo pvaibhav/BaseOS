@@ -1,0 +1,62 @@
+From b91facb39d3f3c222082055aabda438dfe6c0b4a Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 18:07:37 +0000
+Subject: [PATCH 38/38] rgsp: keep time with the PCF8563 (rtc0)
+
+The SoC clock loses the time while the RG SP is off, so BaseOS 2 started in
+1970. The PCF8563 is built in and aliased rtc0, so the kernel reads it at
+boot and hwclock writes it; wake-up alarms use the SoC clock (rtc1).
+---
+ .../sun50i-h700-anbernic-rgsp-baseos.dts      | 22 +++++++++++++++++++
+ drivers/of/baseos-rgsp.dtso                   |  9 +-------
+ 2 files changed, 23 insertions(+), 8 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
+index 777d23472..07e3e7027 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
+@@ -126,3 +126,25 @@ bluetooth {
+ };
+ 
+ &tcon_lcd0 { allwinner,dclk-sel = <2>; };
++
++/*
++ * The RG SP keeps time in a PCF8563 on R_I2C; the SoC clock loses it when
++ * the handheld is off. rtc0 is what the kernel reads at boot and hwclock
++ * writes, so it is the PCF8563. Its alarm is not wired, so wake-ups use the
++ * SoC clock (rtc1).
++ */
++&r_i2c {
++    #address-cells = <1>;
++    #size-cells = <0>;
++    rtc_ext: rtc@51 {
++        compatible = "nxp,pcf8563";
++        reg = <0x51>;
++    };
++};
++
++/ {
++    aliases {
++        rtc0 = &rtc_ext;
++        rtc1 = &rtc;
++    };
++};
+diff --git a/drivers/of/baseos-rgsp.dtso b/drivers/of/baseos-rgsp.dtso
+index 6d935090c..4a9585ea1 100644
+--- a/drivers/of/baseos-rgsp.dtso
++++ b/drivers/of/baseos-rgsp.dtso
+@@ -42,13 +42,6 @@ &pio {
+     vcc-pg-supply = <&reg_aldo4>;
+ };
+ 
+-&r_i2c {
+-    #address-cells = <1>;
+-    #size-cells = <0>;
+-    rtc_ext: rtc@51 {
+-        compatible = "nxp,pcf8563";
+-        reg = <0x51>;
+-    };
+-};
++/* The PCF8563 clock is in the board DTS: it must exist for the rtc0 alias. */
+ 
+ 

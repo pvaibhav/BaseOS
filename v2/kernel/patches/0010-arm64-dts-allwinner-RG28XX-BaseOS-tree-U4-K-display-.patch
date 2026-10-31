@@ -1,7 +1,7 @@
 From 4a2d4eb4838148cf3bf8a07c383ccc72eef501f9 Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:10:20 +0000
-Subject: [PATCH 10/37] arm64: dts: allwinner: RG28XX BaseOS tree (U4-K
+Subject: [PATCH 10/38] arm64: dts: allwinner: RG28XX BaseOS tree (U4-K
  display, activated old panel)
 
 ---
