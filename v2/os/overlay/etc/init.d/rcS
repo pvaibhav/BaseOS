@@ -32,16 +32,22 @@ mount -t debugfs -o nodev,noexec,nosuid debugfs /sys/kernel/debug
 
 mount -t ext4 -o rw,noatime /dev/mmcblk0p6 /data 2>/dev/null || mount -t tmpfs tmpfs /data
 mkdir -p /data/bluetooth /data/bluealsa
+# MENU held while switching on: go back to BaseOS 1.x (the stock system) for
+# the next start and restart now. Works with any frontend.
+if [ -x /usr/sbin/baseos-charger ] && /usr/sbin/baseos-charger menu-held; then
+	/usr/sbin/mem 0x07000138 0x9f559c26 >/dev/null && /usr/sbin/mem 0x0700013c 0x42535031 >/dev/null &&
+		sync && umount /data && reboot -f
+fi
 # Started by plugging in a charger while off: switch off again and let the
-# power chip charge, as BaseOS 1.x does (docs/11-charger-only-boot.md). Holding
-# MENU, the /data/no-charger-off opt-out, an unset clock or a switch-off less
+# power chip charge, as BaseOS 1.x does (docs/11-charger-only-boot.md). The
+# /data/no-charger-off opt-out, an unset clock or a switch-off less
 # than two minutes ago (a possible loop) wait for a one-second POWER hold
 # instead, with the screen off.
 case " $(cat /proc/cmdline) " in *' bootreason=charger '*)
 	now=$(cat /sys/class/rtc/rtc0/since_epoch 2>/dev/null) last=$(cat /data/charger-off-stamp 2>/dev/null)
 	case "$now" in ''|*[!0-9]*) now=0 ;; esac
 	case "$last" in ''|*[!0-9]*) last=0 ;; esac
-	if ! /usr/sbin/baseos-charger menu-held && [ ! -e /data/no-charger-off ] &&
+	if [ ! -e /data/no-charger-off ] &&
 	   [ "$now" -gt 1700000000 ] && [ $((now - last)) -ge 120 ]; then
 		# Confirm the boot to the loader first (see the end of this file), or
 		# the next start would be the stock system.
