@@ -44,14 +44,19 @@ audio_apply() {
 	[ -n "$c" ] || fail "no sound card for $o"
 	printf 'pcm.!default { type plug; slave.pcm "hw:%s,0" }\nctl.!default { type hw; card %s }\n' "$c" "$c" \
 		> /run/baseos/asound.conf.new && mv /run/baseos/asound.conf.new /run/baseos/asound.conf
+	# The codec's digital level stays at full; "Line Out" is the volume.
+	[ "$o" = usb ] || amixer -q -c "$c" sset DAC 100% unmute
+	echo "$c" > /run/baseos/audio-card
 	echo "$o" > /run/baseos/audio-resolved
 }
 volume_control() {   # card and simple control for the active output's volume
-	if [ "$(audio_resolved)" = usb ]; then
-		c=$(usb_card)
+	# Frontends call this on every volume key, so use what audio_apply noted.
+	{ read -r o < /run/baseos/audio-resolved && read -r c < /run/baseos/audio-card; } 2>/dev/null ||
+		{ o=$(audio_resolved); c=$(internal_card); [ "$o" = usb ] && c=$(usb_card); }
+	if [ "$o" = usb ]; then
 		echo "$c $(amixer -c "$c" scontrols | sed -n "s/^Simple mixer control '\(.*\)',0/\1/p" | head -1)"
 	else
-		echo "$(internal_card) Line Out"
+		echo "$c Line Out"
 	fi
 }
 volume_get() {
@@ -60,7 +65,6 @@ volume_get() {
 }
 volume_set() {
 	set -- "$1" $(volume_control); v=$1 c=$2; shift 2
-	[ "$c" = "$(internal_card)" ] && amixer -q -c "$c" sset DAC 100% unmute
 	if [ "$v" -eq 0 ]; then amixer -q -c "$c" sset "$*" 0% mute
 	else amixer -q -c "$c" sset "$*" "$v%" unmute; fi
 }

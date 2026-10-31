@@ -50,13 +50,14 @@ def root():
     static(R / 'v2/dev/src/pad.c', tools / 'baseos-pad')
     static(R / 'v2/dev/src/firstframe.c', tools / 'baseos-firstframe')
     static(R / 'v2/os/baseos-events.c', tools / 'baseos-events')
+    static(R / 'v2/os/baseos-prefetch.c', tools / 'baseos-prefetch')
     drop = ' '.join(DROP); dirs = ' '.join(DIRS)
     sh(f'''
 rm -rf /k/root && mkdir /k/root && cp -a /repo/{BASE}/. /k/root/
 cd /k/root
 rm -f {drop}
 cp -a /repo/v2/os/overlay/. .
-install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe /repo/work/v2/os/bin/baseos-events usr/sbin/
+install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe /repo/work/v2/os/bin/baseos-events /repo/work/v2/os/bin/baseos-prefetch usr/sbin/
 for d in {dirs}; do mkdir -p "$d"; done
 # Graphics: Mesa is the system GL stack; BaseOS's KMS SDL lives in /usr/lib/baseos2.
 M=usr/lib/baseos-mainline A=usr/lib/aarch64-linux-gnu
