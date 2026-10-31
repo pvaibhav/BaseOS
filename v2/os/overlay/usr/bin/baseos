@@ -1,35 +1,199 @@
 #!/bin/sh
-# BaseOS 2 platform commands for frontends (see v2/CONTRACT.md).
-#   baseos volume [0-100]      print or set the speaker/headphone volume
-#   baseos brightness [0-100]  print or set the screen brightness (0 = off)
-#   baseos sleep               suspend until the power key wakes the device
-#   baseos boot 1|2            choose BaseOS 1.x or 2 for the next start
-bl=/sys/class/backlight/backlight
-number() { case "$1" in ''|*[!0-9]*) return 1;; esac; [ "$1" -le 100 ]; }
-case "$1" in
-volume)
-	if [ $# -lt 2 ]; then
-		amixer -c 0 sget 'Line Out' | sed -n 's/.*\[\([0-9]*\)%\].*/\1/p' | head -1
-		exit
+# BaseOS 2 platform command for frontends. The interface is v2/CONTRACT.md.
+# Reading commands print key=value lines. Exit: 0 ok, 1 failed, 2 usage,
+# 3 not available on this model.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+usage() { sed -n '/^## /p; /^```$/,/^```$/p' /usr/share/baseos/CONTRACT.md 2>/dev/null >&2; exit 2; }
+fail() { echo "baseos: $*" >&2; exit 1; }
+unavailable() { echo "baseos: $* is not available on this model" >&2; exit 3; }
+percent() { case "$1" in ''|*[!0-9]*) usage;; esac; [ "$1" -le 100 ] || usage; }
+first() { for f in "$@"; do [ -e "$f" ] && { echo "$f"; return 0; }; done; return 1; }
+
+# --- device facts -----------------------------------------------------------
+model() { tr '\0' '\n' < /proc/device-tree/compatible | sed -n '1s/^anbernic,//p'; }
+# One line per model: id:name:rotation (quarter turns, as SDL_ROTATION):features
+MODELS='rg28xx:Anbernic RG28XX:1:battery'
+model_field() { echo "$MODELS" | awk -F: -v m="$(model)" -v f="$1" '$1==m {print $f}'; }
+has() { case " $(model_field 4) " in *" $1 "*) return 0;; esac; return 1; }
+
+BL=/sys/class/backlight/backlight
+BAT=/sys/class/power_supply/axp2202-battery
+USBPSY=/sys/class/power_supply/axp2202-usb
+
+# --- audio ------------------------------------------------------------------
+card() { awk -v n="$1" '$0 ~ n {print $1; exit}' /proc/asound/cards; }
+internal_card() { card 'H616 Audio Codec'; }
+usb_card() { card 'USB-Audio'; }
+headphones() { amixer -c "$(internal_card)" cget iface=CARD,name='Headphone Jack' 2>/dev/null | grep -q ': values=on'; }
+audio_outputs() {
+	o=speaker
+	headphones && o="$o headphones"
+	[ -n "$(usb_card)" ] && o="$o usb"
+	echo "$o"
+}
+audio_auto() {
+	[ -n "$(usb_card)" ] && { echo usb; return; }
+	headphones && echo headphones || echo speaker
+}
+audio_current() { cat /run/baseos/audio-output 2>/dev/null || echo auto; }
+audio_resolved() { o=$(audio_current); [ "$o" = auto ] && o=$(audio_auto); echo "$o"; }
+audio_apply() {
+	o=$(audio_resolved)
+	c=$(internal_card); [ "$o" = usb ] && c=$(usb_card)
+	[ -n "$c" ] || fail "no sound card for $o"
+	printf 'pcm.!default { type plug; slave.pcm "hw:%s,0" }\nctl.!default { type hw; card %s }\n' "$c" "$c" \
+		> /run/baseos/asound.conf.new && mv /run/baseos/asound.conf.new /run/baseos/asound.conf
+	echo "$o" > /run/baseos/audio-resolved
+}
+volume_control() {   # card and simple control for the active output's volume
+	if [ "$(audio_resolved)" = usb ]; then
+		c=$(usb_card)
+		echo "$c $(amixer -c "$c" scontrols | sed -n "s/^Simple mixer control '\(.*\)',0/\1/p" | head -1)"
+	else
+		echo "$(internal_card) Line Out"
 	fi
-	number "$2" || exit 2
-	amixer -q -c 0 sset DAC 100% unmute
-	if [ "$2" -eq 0 ]; then amixer -q -c 0 sset 'Line Out' 0% mute
-	else amixer -q -c 0 sset 'Line Out' "$2%" unmute; fi ;;
-brightness)
-	read -r max < $bl/max_brightness
-	if [ $# -lt 2 ]; then read -r v < $bl/brightness; echo $((v * 100 / max)); exit; fi
-	number "$2" || exit 2
-	echo $(($2 * max / 100)) > $bl/brightness ;;
-sleep)
-	echo mem > /sys/power/state ;;
+}
+volume_get() {
+	set -- $(volume_control); c=$1; shift
+	amixer -c "$c" sget "$*" | sed -n 's/.*\[\([0-9]*\)%\].*/\1/p' | head -1
+}
+volume_set() {
+	set -- "$1" $(volume_control); v=$1 c=$2; shift 2
+	[ "$c" = "$(internal_card)" ] && amixer -q -c "$c" sset DAC 100% unmute
+	if [ "$v" -eq 0 ]; then amixer -q -c "$c" sset "$*" 0% mute
+	else amixer -q -c "$c" sset "$*" "$v%" unmute; fi
+}
+
+# --- performance --------------------------------------------------------------
+CPU=/sys/devices/system/cpu/cpufreq/policy0
+freqs() { tr ' ' '\n' < $CPU/scaling_available_frequencies | grep . | sort -n; }
+perf_set() {
+	case "$1" in
+	powersave)   g=schedutil;   max=$(freqs | awk '$1<=720000' | tail -1) ;;
+	balanced)    g=schedutil;   max=$(freqs | tail -1) ;;
+	performance|max) g=performance; max=$(freqs | tail -1) ;;
+	*) usage ;;
+	esac
+	echo "$g" > $CPU/scaling_governor
+	echo "$(freqs | head -1)" > $CPU/scaling_min_freq
+	echo "$max" > $CPU/scaling_max_freq
+	echo "$1" > /run/baseos/perf-profile
+}
+cpu_load() {   # percent busy over 0.2 s, all cores
+	read -r _ a b c d e f g _ < /proc/stat; t1=$((a+b+c+d+e+f+g)) i1=$((d+e))
+	sleep 0.2
+	read -r _ a b c d e f g _ < /proc/stat; t2=$((a+b+c+d+e+f+g)) i2=$((d+e))
+	[ $((t2-t1)) -gt 0 ] && echo $(( 100 * ((t2-t1) - (i2-i1)) / (t2-t1) )) || echo 0
+}
+zone_temp() { for z in /sys/class/thermal/thermal_zone*; do [ "$(cat $z/type)" = "$1" ] && cat $z/temp; done; }
+gpu_mhz() {
+	f=$(first /sys/class/devfreq/*gpu*/cur_freq /sys/kernel/debug/clk/gpu0/clk_rate) || return
+	echo $(( $(cat "$f") / 1000000 ))
+}
+
+# --- commands -----------------------------------------------------------------
+area=$1; shift 2>/dev/null
+case "$area" in
+info)
+	echo "model=$(model)"
+	echo "name=$(model_field 2)"
+	. /etc/baseos-release; echo "baseos=$BASEOS_VERSION"
+	echo "kernel=$(uname -r)"
+	echo "ram_mb=$(awk '/MemTotal/ {print int(($2 / 1024 + 64) / 128) * 128}' /proc/meminfo)"
+	echo "panel=$(tr -d '\0' < /proc/device-tree/chosen/baseos,panel 2>/dev/null)"
+	echo "screen=$(head -1 /sys/class/drm/card*-*/modes 2>/dev/null | head -1)"
+	echo "features=$(model_field 4)" ;;
+display)
+	case "$1" in
+	info)
+		echo "screen=$(head -1 /sys/class/drm/card*-*/modes | head -1)"
+		echo "rotation=$(model_field 3)"
+		echo "output=lcd" ;;
+	brightness)
+		read -r max < $BL/max_brightness
+		if [ $# -lt 2 ]; then read -r v < $BL/brightness; echo "brightness=$((v * 100 / max))"; exit; fi
+		percent "$2"; echo $(($2 * max / 100)) > $BL/brightness ;;
+	power)
+		case "$2" in on) echo 0 > $BL/bl_power ;; off) echo 4 > $BL/bl_power ;; *) usage ;; esac ;;
+	output) [ "$2" = lcd ] || [ "$2" = auto ] || unavailable "HDMI" ;;
+	*) usage ;;
+	esac ;;
+audio)
+	case "$1" in
+	status)
+		echo "output=$(audio_resolved)"
+		echo "mode=$(audio_current)"
+		echo "outputs=$(audio_outputs)"
+		echo "volume=$(volume_get)" ;;
+	output)
+		case "$2" in auto|speaker|headphones) ;; usb) [ -n "$(usb_card)" ] || fail "no USB audio device" ;;
+		bluetooth) unavailable bluetooth ;; *) usage ;; esac
+		echo "$2" > /run/baseos/audio-output; audio_apply ;;
+	volume)
+		if [ $# -lt 2 ]; then echo "volume=$(volume_get)"; exit; fi
+		percent "$2"; volume_set "$2" ;;
+	mute)
+		set -- "$2" $(volume_control); m=$1 c=$2; shift 2
+		case "$m" in on) amixer -q -c "$c" sset "$*" mute ;; off) amixer -q -c "$c" sset "$*" unmute ;; *) usage ;; esac ;;
+	*) usage ;;
+	esac ;;
+power)
+	case "$1" in
+	status)
+		echo "battery_percent=$(cat $BAT/capacity)"
+		echo "battery_status=$(tr 'A-Z ' 'a-z_' < $BAT/status)"
+		echo "battery_mv=$(( $(cat $BAT/voltage_now) / 1000 ))"
+		echo "battery_ma=$(( $(cat $BAT/current_now 2>/dev/null || echo 0) / 1000 ))"
+		echo "usb_power=$(cat $USBPSY/online)"
+		r=$(sed -n 's/.*bootreason=\([a-z]*\).*/\1/p' /proc/cmdline)
+		case "$r" in button|usb|charger) ;; unknow|'') r=unknown ;; esac
+		echo "boot_reason=$r" ;;
+	off) exec poweroff ;;
+	restart) exec reboot ;;
+	sleep)
+		if [ "$2" = --wake-in ]; then
+			case "$3" in ''|*[!0-9]*) usage ;; esac
+			echo 0 > /sys/class/rtc/rtc0/wakealarm; echo "+$3" > /sys/class/rtc/rtc0/wakealarm
+		fi
+		echo mem > /sys/power/state ;;
+	*) usage ;;
+	esac ;;
+rtc)
+	[ "$1" = wake ] || usage
+	echo 0 > /sys/class/rtc/rtc0/wakealarm
+	case "$2" in off) ;; ''|*[!0-9]*) usage ;; *) echo "+$2" > /sys/class/rtc/rtc0/wakealarm ;; esac ;;
+perf)
+	case "$1" in
+	profile) if [ $# -lt 2 ]; then echo "profile=$(cat /run/baseos/perf-profile 2>/dev/null || echo balanced)"; else perf_set "$2"; fi ;;
+	status)
+		echo "cpu_mhz=$(( $(cat $CPU/scaling_cur_freq) / 1000 ))"
+		echo "cpu_governor=$(cat $CPU/scaling_governor)"
+		echo "cpu_load=$(cpu_load)"
+		echo "gpu_mhz=$(gpu_mhz)"
+		echo "cpu_temp=$(zone_temp cpu-thermal)"
+		echo "gpu_temp=$(zone_temp gpu-thermal)"
+		echo "battery_mw=$(( $(cat $BAT/voltage_now) / 1000 * $(cat $BAT/current_now 2>/dev/null || echo 0) / 1000000 ))" ;;
+	*) usage ;;
+	esac ;;
+usb)
+	case "$1" in
+	mode)
+		if [ $# -lt 2 ]; then
+			[ -n "$(cat /sys/kernel/config/usb_gadget/baseos/UDC 2>/dev/null)" ] && echo mode=adb || echo mode=none
+		else
+			case "$2" in adb|none) ;; host|storage) unavailable "USB $2 mode" ;; *) usage ;; esac
+		fi ;;
+	*) usage ;;
+	esac ;;
+events) exec /usr/sbin/baseos-events ;;
+wifi|bt) unavailable "$area" ;;
 boot)
-	# The loader starts BaseOS 2 when the RTC pair is zero, BaseOS 1.x otherwise.
-	case "$2" in
+	# The boot loader starts BaseOS 2 when the RTC pair is zero, BaseOS 1.x otherwise.
+	case "$1" in
 	1) mem 0x07000138 0x9f559c26 >/dev/null && mem 0x0700013c 0x42535031 >/dev/null ;;
 	2) mem 0x07000138 0 >/dev/null && mem 0x0700013c 0 >/dev/null ;;
-	*) exit 2 ;;
+	*) usage ;;
 	esac ;;
-*)
-	sed -n '2,7s/^# \{0,1\}//p' "$0" >&2; exit 2 ;;
+*) usage ;;
 esac

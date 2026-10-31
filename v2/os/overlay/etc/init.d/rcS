@@ -16,6 +16,7 @@ cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS
 /usr/sbin/baseos-firstframe > /run/baseos/t-first-frame 2>/dev/null &
 # SDL scans /dev/input by mtime without udev; give it a nonzero one.
 touch -c -d @1 /dev/input
+mount -t debugfs -o nodev,noexec,nosuid debugfs /sys/kernel/debug
 
 /usr/sbin/baseos-watchdog </dev/null >/run/baseos/watchdog.log 2>&1 &
 /usr/sbin/baseos-usb </dev/null >/run/baseos/usb.log 2>&1 &
@@ -40,6 +41,8 @@ elif [ -n "$card" ]; then
 fi
 [ ! -x /usr/bin/timedatectl ] || /usr/bin/timedatectl apply
 [ -z "$card" ] || printf '%s\n' "$card" > /run/baseos/persistence-ready
+# Platform events and automatic audio routing (baseos events, baseos audio).
+/usr/sbin/baseos-events --daemon </dev/null >/dev/null 2>&1 &
 cut -d' ' -f1 /proc/uptime > /run/baseos/t-rcS-done
 # Boot succeeded: clear the loader's one-shot RTC pair so the next start is
 # BaseOS 2 again. Development boots keep it, so any reset returns to stock.
