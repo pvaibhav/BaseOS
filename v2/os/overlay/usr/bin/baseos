@@ -27,13 +27,16 @@ card() { awk -v n="$1" '$0 ~ n {print $1; exit}' /proc/asound/cards; }
 internal_card() { card 'H616 Audio Codec'; }
 usb_card() { card 'USB-Audio'; }
 headphones() { amixer -c "$(internal_card)" cget iface=CARD,name='Headphone Jack' 2>/dev/null | grep -q ': values=on'; }
+bluetooth_audio() { [ -s /run/baseos/bt-audio ] && grep -Eq '^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$' /run/baseos/bt-audio; }
 audio_outputs() {
 	o=speaker
+	bluetooth_audio && o="$o bluetooth"
 	headphones && o="$o headphones"
 	[ -n "$(usb_card)" ] && o="$o usb"
 	echo "$o"
 }
 audio_auto() {
+	bluetooth_audio && { echo bluetooth; return; }
 	[ -n "$(usb_card)" ] && { echo usb; return; }
 	headphones && echo headphones || echo speaker
 }
@@ -41,6 +44,16 @@ audio_current() { cat /run/baseos/audio-output 2>/dev/null || echo auto; }
 audio_resolved() { o=$(audio_current); [ "$o" = auto ] && o=$(audio_auto); echo "$o"; }
 audio_apply() {
 	o=$(audio_resolved)
+	if [ "$o" = bluetooth ]; then
+		bluetooth_audio || { echo auto > /run/baseos/audio-output; o=$(audio_auto); }
+	fi
+	if [ "$o" = bluetooth ]; then
+		printf 'pcm.!default { type plug; slave.pcm { type bluealsa; device "%s"; profile "a2dp" } }\nctl.!default { type bluealsa }\n' "$(cat /run/baseos/bt-audio)" > /run/baseos/asound.conf.new &&
+			mv /run/baseos/asound.conf.new /run/baseos/asound.conf
+		echo bluealsa > /run/baseos/audio-card
+		echo bluetooth > /run/baseos/audio-resolved
+		return
+	fi
 	c=$(internal_card); [ "$o" = usb ] && c=$(usb_card)
 	[ -n "$c" ] || fail "no sound card for $o"
 	printf 'pcm.!default { type plug; slave.pcm "hw:%s,0" }\nctl.!default { type hw; card %s }\n' "$c" "$c" \
@@ -54,20 +67,23 @@ volume_control() {   # card and simple control for the active output's volume
 	# Frontends call this on every volume key, so use what audio_apply noted.
 	{ read -r o < /run/baseos/audio-resolved && read -r c < /run/baseos/audio-card; } 2>/dev/null ||
 		{ o=$(audio_resolved); c=$(internal_card); [ "$o" = usb ] && c=$(usb_card); }
-	if [ "$o" = usb ]; then
+	if [ "$o" = bluetooth ]; then
+		echo "bluealsa $(amixer -D "bluealsa:DEV=$(cat /run/baseos/bt-audio)" scontrols | sed -n "s/^Simple mixer control '\(.*A2DP.*\)',0/\1/p" | head -1)"
+	elif [ "$o" = usb ]; then
 		echo "$c $(amixer -c "$c" scontrols | sed -n "s/^Simple mixer control '\(.*\)',0/\1/p" | head -1)"
 	else
 		echo "$c Line Out"
 	fi
 }
+mixer() { c=$1; shift; if [ "$c" = bluealsa ]; then amixer -D "bluealsa:DEV=$(cat /run/baseos/bt-audio)" "$@"; else amixer -c "$c" "$@"; fi; }
 volume_get() {
 	set -- $(volume_control); c=$1; shift
-	amixer -c "$c" sget "$*" | sed -n 's/.*\[\([0-9]*\)%\].*/\1/p' | head -1
+	mixer "$c" sget "$*" | sed -n 's/.*\[\([0-9]*\)%\].*/\1/p' | head -1
 }
 volume_set() {
 	set -- "$1" $(volume_control); v=$1 c=$2; shift 2
-	if [ "$v" -eq 0 ]; then amixer -q -c "$c" sset "$*" 0% mute
-	else amixer -q -c "$c" sset "$*" "$v%" unmute; fi
+	if [ "$v" -eq 0 ]; then mixer "$c" -q sset "$*" 0% mute
+	else mixer "$c" -q sset "$*" "$v%" unmute; fi
 }
 
 # --- performance --------------------------------------------------------------
@@ -127,6 +143,7 @@ display)
 	esac ;;
 audio)
 	case "$1" in
+	refresh) audio_apply ;;
 	status)
 		echo "output=$(audio_resolved)"
 		echo "mode=$(audio_current)"
@@ -134,14 +151,14 @@ audio)
 		echo "volume=$(volume_get)" ;;
 	output)
 		case "$2" in auto|speaker|headphones) ;; usb) [ -n "$(usb_card)" ] || fail "no USB audio device" ;;
-		bluetooth) unavailable bluetooth ;; *) usage ;; esac
+		bluetooth) has bluetooth || unavailable bluetooth; bluetooth_audio || fail "no Bluetooth audio device" ;; *) usage ;; esac
 		echo "$2" > /run/baseos/audio-output; audio_apply ;;
 	volume)
 		if [ $# -lt 2 ]; then echo "volume=$(volume_get)"; exit; fi
 		percent "$2"; volume_set "$2" ;;
 	mute)
 		set -- "$2" $(volume_control); m=$1 c=$2; shift 2
-		case "$m" in on) amixer -q -c "$c" sset "$*" mute ;; off) amixer -q -c "$c" sset "$*" unmute ;; *) usage ;; esac ;;
+		case "$m" in on) mixer "$c" -q sset "$*" mute ;; off) mixer "$c" -q sset "$*" unmute ;; *) usage ;; esac ;;
 	*) usage ;;
 	esac ;;
 power)
@@ -193,7 +210,7 @@ usb)
 	*) usage ;;
 	esac ;;
 events) exec /usr/sbin/baseos-events ;;
-wifi|bt) unavailable "$area" ;;
+wifi|bt) exec /usr/sbin/baseos-radio "$area" "$@" ;;
 boot)
 	# The boot loader starts BaseOS 2 when the RTC pair is zero, BaseOS 1.x otherwise.
 	case "$1" in

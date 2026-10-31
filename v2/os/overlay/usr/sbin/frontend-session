@@ -40,6 +40,8 @@ else
  setsid $WRAP /bin/sh "$LAUNCH" &
 fi
 child=$!
+# Radio firmware, association and DHCP must never hold up the launcher.
+/usr/sbin/baseos-radio daemon </dev/null >/run/baseos/radio.log 2>&1 &
 # First start after boot: read the parts of the card the last boot needed
 # (folder listings above all) in big background batches while the frontend
 # sets itself up. Not earlier: the card is then busy with system startup.

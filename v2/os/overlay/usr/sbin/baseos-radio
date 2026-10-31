@@ -1,0 +1,194 @@
+#!/bin/sh
+# Services and frontend commands share the standard supplicant and BlueZ APIs.
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+umask 077
+. /etc/baseos-release
+W=/data/wifi/wpa_supplicant.conf
+C=/run/wpa_supplicant
+I=$(cat /run/baseos/wifi-interface 2>/dev/null)
+error() { echo "baseos: $*" >&2; exit 1; }
+usage() { echo 'baseos: invalid radio command or arguments' >&2; exit 2; }
+wpa() { wpa_cli -p "$C" -i "$I" "$@"; }
+ok() { result=$(wpa "$@") && [ "$result" = OK ] || error "supplicant rejected $1"; }
+bt() {
+ result=$(timeout 45 bluetoothctl "$@" 2>&1) || error "$result"
+ case "$result" in *Failed*|*failed*|*'not available'*|*'not connected'*) error "$result";; esac
+ printf '%s\n' "$result"
+}
+stop_pid() {
+ if read -r pid < "$1" 2>/dev/null; then
+  case "$pid" in ''|*[!0-9]*) ;; *) kill "$pid" 2>/dev/null || :;; esac
+ fi
+ rm -f "$1"
+}
+wifi_start() {
+ rfkill unblock wifi || return 1
+ if [ -z "$I" ]; then
+  for n in /sys/class/net/*/wireless; do [ -d "$n" ] || continue; I=${n%/wireless}; I=${I##*/}; break; done
+ fi
+ [ -n "$I" ] || return 1
+ echo "$I" > /run/baseos/wifi-interface
+ mkdir -p /data/wifi "$C"; chmod 700 /data/wifi
+ if [ ! -e "$W" ]; then printf 'ctrl_interface=%s\nupdate_config=1\n' "$C" > "$W"; fi
+ chmod 600 "$W"
+ ip link set "$I" up || return 1
+ if ! wpa ping 2>/dev/null | grep -q PONG; then
+  wpa_supplicant -B -P /run/baseos/wpa.pid -D nl80211 -i "$I" -c "$W" -C "$C" -f /run/baseos/wpa.log || return 1
+ fi
+ if [ ! -s /run/baseos/wpa-action.pid ] || ! kill -0 "$(cat /run/baseos/wpa-action.pid)" 2>/dev/null; then
+  wpa_cli -B -P /run/baseos/wpa-action.pid -p "$C" -i "$I" -a /usr/sbin/baseos-wifi-action || return 1
+ fi
+ if wpa status | grep -q '^wpa_state=COMPLETED' &&
+    { [ ! -s /run/baseos/dhcp.pid ] || ! kill -0 "$(cat /run/baseos/dhcp.pid)" 2>/dev/null; }; then
+  /usr/sbin/baseos-wifi-action "$I" CONNECTED
+ fi
+}
+bt_start() {
+ rfkill unblock bluetooth || return 1
+ [ -S /run/dbus/system_bus_socket ] && [ -d /sys/class/bluetooth/hci0 ] || return 1
+ if ! pidof bluetoothd >/dev/null; then
+  /usr/libexec/bluetooth/bluetoothd -n >/run/baseos/bluetoothd.log 2>&1 &
+ fi
+ if ! timeout 5 bluetoothctl show 2>/dev/null | grep -q 'Powered: yes'; then
+  bt power on >/dev/null || return 1
+ fi
+ if ! pidof bluealsa >/dev/null; then
+  bluealsa -p a2dp-source --initial-volume=100 >/run/baseos/bluealsa.log 2>&1 &
+ fi
+}
+# A single worker runs after the frontend launch. Retry late driver enumeration.
+if [ "$1" = daemon ]; then
+ [ "$BASEOS_WIFI:$BASEOS_BLUETOOTH" != 0:0 ] || exit 0
+ mkdir /run/baseos/radio-worker 2>/dev/null || exit 0
+ sleep 3
+ while [ ! -e /run/baseos/stopping ]; do
+  if [ "$BASEOS_WIFI" = 1 ]; then
+   if [ ! -e /data/wifi/disabled ]; then "$0" wifi _start >/dev/null 2>&1; fi
+   "$0" wifi status > /run/baseos/wifi-state.new && mv /run/baseos/wifi-state.new /run/baseos/wifi-state
+  fi
+  if [ "$BASEOS_BLUETOOTH" = 1 ]; then
+   if [ ! -e /data/bluetooth/disabled ]; then "$0" bt _start >/dev/null 2>&1; fi
+   "$0" bt status > /run/baseos/bt-state.new && mv /run/baseos/bt-state.new /run/baseos/bt-state
+   # A connected controller alone must not steal audio. Require an A2DP sink
+   # and the BlueALSA playback mixer (the transport is ready by then).
+   addr=
+   if pidof bluealsa >/dev/null; then
+    for a in $(timeout 5 bluetoothctl devices Connected 2>/dev/null | awk '/^Device / {print $2}'); do
+     info=$(timeout 5 bluetoothctl info "$a" 2>/dev/null)
+     if echo "$info" | grep -q 'Connected: yes' && echo "$info" | grep -qi '0000110b-' &&
+        amixer -D "bluealsa:DEV=$a" scontrols 2>/dev/null | grep -q A2DP; then addr=$a; break; fi
+    done
+   fi
+   printf '%s\n' "$addr" > /run/baseos/bt-audio.new; mv /run/baseos/bt-audio.new /run/baseos/bt-audio
+  fi
+  # Each pass starts a few small programs: often enough to follow a headset
+  # being switched on, rare enough not to cost battery or game smoothness.
+  sleep 5
+ done
+ exit 0
+fi
+area=$1; shift
+case "$area" in
+wifi) [ "$BASEOS_WIFI" = 1 ] || exit 3;;
+bt) [ "$BASEOS_BLUETOOTH" = 1 ] || exit 3;;
+*) usage;;
+esac
+cmd=$1; shift
+# Serialize service changes and saved network edits with the worker.
+case "$cmd" in status|devices|networks|scan) ;;
+*)
+ n=0
+ until mkdir /run/baseos/radio-lock 2>/dev/null; do
+  n=$((n+1)); [ "$n" -lt 100 ] || error 'radio service busy'; sleep 0.1
+ done
+ trap 'rmdir /run/baseos/radio-lock' EXIT
+ ;;
+esac
+case "$area:$cmd" in
+wifi:on|wifi:_start) [ $# = 0 ] || usage; mkdir -p /data/wifi; [ "$cmd" != _start ] || [ ! -e /data/wifi/disabled ] || exit 0; [ "$cmd" != on ] || rm -f /data/wifi/disabled; wifi_start || error 'Wi-Fi interface is not ready';;
+wifi:off)
+ [ $# = 0 ] || usage
+ mkdir -p /data/wifi; touch /data/wifi/disabled
+ stop_pid /run/baseos/wpa-action.pid
+ [ -z "$I" ] || /usr/sbin/baseos-wifi-action "$I" DISCONNECTED
+ stop_pid /run/baseos/wpa.pid
+ [ -z "$I" ] || ip link set "$I" down
+ rfkill block wifi || exit 1;;
+wifi:status)
+ [ $# = 0 ] || usage
+ if [ -e /data/wifi/disabled ]; then echo wifi=off
+ elif s=$(wpa status 2>/dev/null) && echo "$s" | grep -q '^wpa_state=COMPLETED'; then
+  echo wifi=connected; echo "$s" | sed -n '/^ssid=/p; /^ip_address=/p'
+ else echo wifi=disconnected; fi;;
+wifi:scan)
+ [ $# = 0 ] || usage; ok scan; sleep 3
+ results=$(wpa scan_results) || error 'scan failed'
+ printf '%s\n' "$results" | awk -F '\t' 'NR>1 && NF>=5 {printf "bssid=%s frequency=%s signal=%s flags=%s ssid=%s\n",$1,$2,$3,$4,$5}' ;;
+wifi:networks)
+ [ $# = 0 ] || usage; wpa ping | grep -q PONG || error 'Wi-Fi is off'
+ wpa list_networks | awk -F '\t' 'NR>1 && NF>=3 {printf "network=%s ssid=%s\n",$1,$2}' ;;
+wifi:connect|wifi:forget)
+ [ $# -ge 1 ] && [ $# -le 2 ] || usage
+ [ "$cmd" != forget ] || [ $# = 1 ] || usage
+ [ -n "$1" ] && [ "$(printf %s "$1" | wc -c)" -le 32 ] || usage
+ wpa ping | grep -q PONG || error 'Wi-Fi is off'
+ ssid=$1
+ id=$(wpa list_networks | awk -F '\t' -v s="$ssid" 'NR>1 && $2==s {print $1; exit}')
+ if [ "$cmd" = forget ]; then
+  [ -n "$id" ] || error 'unknown network'; ok remove_network "$id"; ok save_config; exit 0
+ fi
+ psk=
+ if [ $# = 2 ]; then
+  [ ${#2} -ge 8 ] && [ ${#2} -le 63 ] || usage
+  psk=$(printf '%s\n' "$2" | wpa_passphrase "$ssid" | sed -n 's/^[[:space:]]*psk=//p')
+  [ ${#psk} = 64 ] || error 'could not derive network key'
+ fi
+ new=
+ if [ -z "$id" ]; then id=$(wpa add_network); new=1; fi
+ case "$id" in ''|*[!0-9]*) error 'could not add network';; esac
+ # Roll back a half-written new entry on command failure.
+ trap '[ -z "$new" ] || wpa remove_network "$id" >/dev/null; rmdir /run/baseos/radio-lock' EXIT
+ hex=$(printf %s "$ssid" | od -An -tx1 | tr -d ' \n')
+ ok set_network "$id" ssid "$hex"
+ ok set_network "$id" scan_ssid 1
+ if [ -n "$psk" ]; then ok set_network "$id" key_mgmt WPA-PSK; ok set_network "$id" psk "$psk"
+ elif [ -n "$new" ]; then ok set_network "$id" key_mgmt NONE; fi
+ ok enable_network "$id"; ok save_config; new=
+ ok select_network "$id"
+ # select_network disables other networks; keep fallback networks enabled.
+ ok enable_network all
+ ;;
+bt:on|bt:_start) [ $# = 0 ] || usage; [ "$cmd" != _start ] || [ ! -e /data/bluetooth/disabled ] || exit 0; [ "$cmd" != on ] || rm -f /data/bluetooth/disabled; bt_start || error 'Bluetooth is not ready';;
+bt:off)
+ [ $# = 0 ] || usage; touch /data/bluetooth/disabled
+ bt power off >/dev/null || :
+ killall bluealsa bluetoothd 2>/dev/null || :
+ : > /run/baseos/bt-audio
+ rfkill block bluetooth || exit 1;;
+bt:status)
+ [ $# = 0 ] || usage
+ if [ -e /data/bluetooth/disabled ]; then echo bluetooth=off
+ elif timeout 5 bluetoothctl show 2>/dev/null | grep -q 'Powered: yes'; then
+  echo bluetooth=on
+  timeout 5 bluetoothctl devices Connected 2>/dev/null | awk '/^Device / {print "connected=" $2}'
+ else echo bluetooth=unavailable; fi
+ exit 0;;
+bt:scan)
+ [ $# = 0 ] || usage
+ # Keep the client alive for discovery, then stop discovery on its own exit.
+ { echo 'scan on'; sleep 10; echo 'scan off'; echo quit; } | timeout 15 bluetoothctl >/dev/null 2>&1
+ "$0" bt devices;;
+bt:devices)
+ [ $# = 0 ] || usage
+ result=$(bt devices) || exit 1
+ printf '%s\n' "$result" | sed -n 's/^Device \([^ ]*\) \(.*\)/address=\1 name=\2/p';;
+bt:pair|bt:connect|bt:disconnect|bt:forget)
+ [ $# = 1 ] || usage
+ echo "$1" | grep -Eq '^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$' || usage
+ case "$cmd" in
+ pair) bt --agent NoInputNoOutput pair "$1" >/dev/null; bt trust "$1" >/dev/null;;
+ forget) bt remove "$1" >/dev/null;;
+ *) bt "$cmd" "$1" >/dev/null;;
+ esac;;
+*) usage;;
+esac

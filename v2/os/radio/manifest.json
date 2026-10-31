@@ -1,0 +1,47 @@
+{
+  "linux_firmware_commit": "377495d9a54c5c3b25b59fbc3068e29aab2c78d0",
+  "wireless_regdb_version": "2026.09.03",
+  "wireless_regdb_archive_sha256": "b22e0901227b820cd1c280abe681a15b773a5103a5e10dc442e94ebb34cbf58d",
+  "files": [
+    {
+      "path": "rtw88/rtw8821c_fw.bin",
+      "sha256": "2ef409bc418549fcf294061dd0cae1fc22fd9da79b60524950b25de18732f3f0",
+      "source": "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/377495d9a54c5c3b25b59fbc3068e29aab2c78d0/rtw88/rtw8821c_fw.bin"
+    },
+    {
+      "path": "rtl_bt/rtl8821cs_fw.bin",
+      "sha256": "3baa2eeaa43c959054687a67771e7435e73b2ff3e79dfb765121d8b7dc719391",
+      "source": "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/377495d9a54c5c3b25b59fbc3068e29aab2c78d0/rtl_bt/rtl8821cs_fw.bin"
+    },
+    {
+      "path": "rtl_bt/rtl8821cs_config.bin",
+      "sha256": "6ddeb15f23588053e00cb08d25588bd7cf98d60fa93d9478efcef4ae8064a7ac",
+      "source": "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/377495d9a54c5c3b25b59fbc3068e29aab2c78d0/rtl_bt/rtl8761b_config.bin"
+    },
+    {
+      "path": "LICENCE.rtlwifi_firmware.txt",
+      "sha256": "a61351665b4f264f6c631364f85b907d8f8f41f8b369533ef4021765f9f3b62e",
+      "source": "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/377495d9a54c5c3b25b59fbc3068e29aab2c78d0/LICENSES/LICENCE.rtlwifi_firmware.txt"
+    },
+    {
+      "path": "WHENCE",
+      "sha256": "f4a259767af26e7584595c412b00b70feee9f297990669db0ca2e1734ab84920",
+      "source": "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/377495d9a54c5c3b25b59fbc3068e29aab2c78d0/WHENCE"
+    },
+    {
+      "path": "regulatory.db",
+      "sha256": "7e236caecd939c8ec98be4870bf30422f28ffef2565a38aaaa2d9ddabd0c2641",
+      "source": "https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz"
+    },
+    {
+      "path": "regulatory.db.p7s",
+      "sha256": "50332f0db09b8bcc719235ec4985c27377f2cc2f42abb7b5dcf951866c5a888a",
+      "source": "https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz"
+    },
+    {
+      "path": "wireless-regdb-LICENSE",
+      "sha256": "678b0df753c86198fc496d1f1033429bbd57f101472132ee7eaaf9f5e0a7fae1",
+      "source": "https://www.kernel.org/pub/software/network/wireless-regdb/wireless-regdb-2026.09.03.tar.xz"
+    }
+  ]
+}

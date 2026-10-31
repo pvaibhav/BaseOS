@@ -71,6 +71,22 @@ rm -rf /k/root && mkdir /k/root && cp -a /repo/{BASE}/. /k/root/
 cd /k/root
 rm -f {drop}
 cp -a /repo/v2/os/overlay/. .
+# Radio files are pinned (v2/os/radio) and fetched into work/v2/radio in a
+# container (v2/os/radio/README.md); builds need no network.
+python3 /repo/v2/os/radio/verify.py
+rm -rf /k/radio-tools && mkdir -p /k/radio-tools
+for p in /repo/work/v2/radio/packages/*.deb; do dpkg-deb -x "$p" /k/radio-tools; done
+cp /k/radio-tools/sbin/wpa_supplicant /k/radio-tools/sbin/wpa_cli /k/radio-tools/sbin/iw usr/sbin/
+cp /k/radio-tools/usr/bin/wpa_passphrase usr/bin/
+cp /k/radio-tools/usr/bin/bluetoothctl usr/bin/
+cp -a /k/radio-tools/usr/lib/aarch64-linux-gnu/libpcsclite.so* usr/lib/aarch64-linux-gnu/
+mkdir -p usr/share/doc
+cp -a /k/radio-tools/usr/share/doc/wpasupplicant /k/radio-tools/usr/share/doc/iw /k/radio-tools/usr/share/doc/libpcsclite1 usr/share/doc/
+cp -a /k/radio-tools/usr/share/doc/bluez usr/share/doc/
+mkdir -p usr/lib/firmware usr/share/licenses/baseos-radio usr/share/baseos
+cp -a /repo/work/v2/radio/firmware/. usr/lib/firmware/
+cp /repo/work/v2/radio/firmware/LIC* /repo/work/v2/radio/firmware/*LICENSE usr/share/licenses/baseos-radio/
+cp /repo/v2/os/radio/manifest.json usr/share/baseos/radio-firmware.json
 install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe /repo/work/v2/os/bin/baseos-events /repo/work/v2/os/bin/baseos-prefetch /repo/work/v2/os/bin/baseos-charger usr/sbin/
 for d in {dirs}; do mkdir -p "$d"; done
 # Kernel modules (USB host, rumble, radios...), loaded per model by rcS.

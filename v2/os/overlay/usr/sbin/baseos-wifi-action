@@ -1,0 +1,16 @@
+#!/bin/sh
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+[ "$1" = "$(cat /run/baseos/wifi-interface 2>/dev/null)" ] || exit 1
+p=/run/baseos/dhcp.pid
+if read -r pid < "$p" 2>/dev/null; then
+ case "$pid" in ''|*[!0-9]*) ;; *) kill "$pid" 2>/dev/null || :;; esac
+fi
+rm -f "$p"
+case "$2" in
+CONNECTED)
+ udhcpc -f -i "$1" -p "$p" -s /usr/share/udhcpc/default.script >/run/baseos/dhcp.log 2>&1 & ;;
+DISCONNECTED)
+ ip addr flush dev "$1"
+ ip route flush dev "$1"
+ : > /run/resolv.conf;;
+esac

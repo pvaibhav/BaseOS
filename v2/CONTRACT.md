@@ -60,7 +60,7 @@ baseos display power on|off       # screen off without sleeping (e.g. music)
 baseos display output lcd|hdmi|auto   # planned: models with HDMI
 ```
 
-## Audio: ALSA + `baseos audio` (works for speaker/headphones; USB untested; BT planned)
+## Audio: ALSA + `baseos audio` (works for speaker/headphones; USB and BT untested)
 
 - Play through the ALSA `default` device. BaseOS points it at the active
   output. When the output changes, `baseos events` reports `audio_output=...`;
@@ -134,7 +134,7 @@ baseos perf status    # cpu_mhz cpu_governor cpu_load gpu_mhz gpu_load
     works).
 - LEDs (planned per model): `/sys/class/leds/*`.
 
-## Networking: `baseos wifi`, `baseos bt` (planned)
+## Networking: `baseos wifi`, `baseos bt` (implemented; device untested)
 
 ```
 baseos wifi on|off|status|scan
@@ -146,6 +146,29 @@ baseos bt pair|connect|disconnect|forget ADDRESS  |  devices
 - Wi-Fi through wpa_supplicant; known networks are kept on the internal
   data partition, so they survive OS updates.
 - Bluetooth through bluez; audio devices through bluealsa (see Audio).
+- Services start in the background after frontend launch, only on models with
+  the radio. `on`/`off` survives reboot. Commands return 3 without the radio,
+  2 for invalid arguments, 1 on failure, and 0 on success. A successful Wi-Fi
+  connect means the configuration was accepted; use status to check association
+  and DHCP. Supplicant uses nl80211, `/run/wpa_supplicant`, and
+  `/data/wifi/wpa_supplicant.conf` (mode 0600). Standard wpa_cli works.
+- Wi-Fi status prints `wifi=off|disconnected|connected`, then `ssid` and
+  `ip_address` when available. Scan prints one `bssid frequency signal flags
+  ssid` record per AP; networks prints `network` and `ssid` per saved network.
+  Fields are key=value; SSID/name is last and may contain spaces. Supplicant's
+  escaping is retained. Connect supports open and WPA/WPA2 PSK networks;
+  omitting the password reuses a saved network or creates an open network.
+  Enterprise and WPA3-only setup needs a supplicant config supplied separately.
+- Bluetooth status prints `bluetooth=off|on|unavailable` and one `connected`
+  address per connection. Scan runs for ten seconds. Devices prints one
+  `address=... name=...` line per known device, including unpaired discoveries.
+  Pair uses a NoInputNoOutput agent and trusts the device on success. Devices
+  needing a PIN or confirmation need a frontend's interactive BlueZ agent.
+- Pairings live in `/data/bluetooth`, BlueALSA state in `/data/bluealsa`.
+  A connected A2DP sink with an available BlueALSA playback mixer becomes the
+  auto audio output. A controller alone does not. Routing takes a few seconds;
+  clients must reopen ALSA default on the audio_output event. Disconnect falls
+  back to auto, including when bluetooth was selected explicitly.
 
 ## USB: `baseos usb` (works for adb; host untested)
 
@@ -157,11 +180,13 @@ baseos usb mode [adb|host|storage|none]   # print or set the USB-C role
 
 ## System services (works)
 
+Radio services are implemented and built, but untested on a device.
+
 - The D-Bus system bus is running (`/run/dbus/system_bus_socket`).
 - The kernel's random number pool is ready early in boot (hardware generator).
 - `/etc/machine-id` is stable across restarts and updates.
 
-## Events: `baseos events` (works)
+## Events: `baseos events` (works; radio events device untested)
 
 Prints one line per change until killed, `name=value` plus extra fields:
 
@@ -172,7 +197,11 @@ battery_percent=14 low=1
 audio_output=usb
 lid=closed
 wifi=connected ssid=…
+bluetooth=on connected=AA:BB:CC:DD:EE:FF
 ```
+
+Radio changes are sampled every few seconds; they are state notifications,
+not a lossless history of discovery or connection attempts.
 
 ## Choosing the system: `baseos boot` (works)
 
