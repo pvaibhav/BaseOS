@@ -83,3 +83,13 @@ Policy simulations and merged DT checks pass for all models; the exported
 modules resolve with both container kmod and the packaged BusyBox modprobe.
 The SquashFS scripts were extracted, compared to source and syntax checked.
 No BaseOS commit, push, device install or host package installation was made.
+
+## Status (2026-11-01): taken out again
+
+The first build broke the normal device mode on an RG SP: the MUSB glue change
+(`baseos,manual-host` makes the notifier return early) stopped cable events
+from starting the gadget session, so adb never connected; the development
+watchdog returned the device to stock. The kernel commit was reverted and
+`baseos usb mode host` again reports "not available". Rework: keep the MUSB
+notifier for the device role and route only explicit host mode to EHCI/OHCI;
+test from a development boot with a USB device attached.

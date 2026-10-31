@@ -1,0 +1,170 @@
+From 12ae7d790c4d6279854ac484af68acfb60469689 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 20:18:03 +0000
+Subject: [PATCH 42/42] Revert "Add explicit USB-C host role with peripheral
+ boot default"
+
+It broke the normal device mode: the MUSB glue ignored cable events, so the
+adb gadget never connected (found on an RG SP). The port stays a USB device
+until host mode is reworked and tested with a USB device attached.
+---
+ drivers/of/baseos-rg28xx.dtso         | 15 ++------
+ drivers/phy/allwinner/phy-sun4i-usb.c | 55 ---------------------------
+ drivers/usb/musb/sunxi.c              |  4 --
+ 3 files changed, 3 insertions(+), 71 deletions(-)
+
+diff --git a/drivers/of/baseos-rg28xx.dtso b/drivers/of/baseos-rg28xx.dtso
+index 6af27f287..076a913d5 100644
+--- a/drivers/of/baseos-rg28xx.dtso
++++ b/drivers/of/baseos-rg28xx.dtso
+@@ -125,24 +125,15 @@ reg_usb_vbus: regulator-usb-vbus {
+ };
+ 
+ &usbphy {
+-    baseos,manual-role-switch;
+     usb0_vbus-supply = <&reg_usb_vbus>;
+     usb0_vbus_power-supply = <&usb_power>;
+ };
+ 
+ &usbotg {
+     dr_mode = "peripheral";
+-    baseos,manual-host;
+ };
+ 
+-/* No generic compatible: only an explicit driver_override can bind port 0.
+- * Loading these modules for the separate USB-A port cannot claim USB-C.
++/*
++ * The host controllers stay off: once their drivers load they take the port
++ * from the USB device side (adb). They are for an explicit host mode.
+  */
+-&ehci0 {
+-    compatible = "baseos,h700-manual-ehci";
+-    status = "okay";
+-};
+-&ohci0 {
+-    compatible = "baseos,h700-manual-ohci";
+-    status = "okay";
+-};
+diff --git a/drivers/phy/allwinner/phy-sun4i-usb.c b/drivers/phy/allwinner/phy-sun4i-usb.c
+index df9f3a765..eecaecda4 100644
+--- a/drivers/phy/allwinner/phy-sun4i-usb.c
++++ b/drivers/phy/allwinner/phy-sun4i-usb.c
+@@ -31,7 +31,6 @@
+ #include <linux/reset.h>
+ #include <linux/spinlock.h>
+ #include <linux/usb/of.h>
+-#include <linux/usb/role.h>
+ #include <linux/workqueue.h>
+ 
+ #define REG_ISCR			0x00
+@@ -114,7 +113,6 @@ struct sun4i_usb_phy_data {
+ 	void __iomem *base;
+ 	const struct sun4i_usb_phy_cfg *cfg;
+ 	enum usb_dr_mode dr_mode;
+-	struct usb_role_switch *role_sw;
+ 	spinlock_t reg_lock; /* guard access to phyctl reg */
+ 	int num_phys;
+ 	struct sun4i_usb_phy {
+@@ -466,10 +464,6 @@ static int sun4i_usb_phy_power_on(struct phy *_phy)
+ 	struct sun4i_usb_phy_data *data = to_sun4i_usb_phy_data(phy);
+ 	int ret;
+ 
+-	if (phy->index == 0 && data->role_sw &&
+-	    data->dr_mode != USB_DR_MODE_HOST)
+-		return -EPERM;
+-
+ 	if (!phy->vbus || phy->regulator_on)
+ 		return 0;
+ 
+@@ -561,33 +555,6 @@ void sun4i_usb_phy_set_squelch_detect(struct phy *_phy, bool enabled)
+ }
+ EXPORT_SYMBOL_GPL(sun4i_usb_phy_set_squelch_detect);
+ 
+-/* Explicit userspace policy only; never infer host mode from the ID pin. */
+-static int sun4i_usb_role_set(struct usb_role_switch *sw, enum usb_role role)
+-{
+-	struct sun4i_usb_phy_data *data = usb_role_switch_get_drvdata(sw);
+-	struct phy *phy = data->phys[0].phy;
+-	int ret;
+-
+-	if (role != USB_ROLE_DEVICE && role != USB_ROLE_HOST)
+-		return -EINVAL;
+-	if (role == USB_ROLE_HOST && data->dr_mode != USB_DR_MODE_HOST &&
+-	    sun4i_usb_phy0_get_vbus_det(data))
+-		return -EBUSY;
+-
+-	ret = phy_set_mode(phy, role == USB_ROLE_HOST ?
+-			   PHY_MODE_USB_HOST : PHY_MODE_USB_DEVICE);
+-	if (!ret)
+-		flush_delayed_work(&data->detect);
+-	return ret;
+-}
+-
+-static enum usb_role sun4i_usb_role_get(struct usb_role_switch *sw)
+-{
+-	struct sun4i_usb_phy_data *data = usb_role_switch_get_drvdata(sw);
+-
+-	return data->dr_mode == USB_DR_MODE_HOST ? USB_ROLE_HOST : USB_ROLE_DEVICE;
+-}
+-
+ static const struct phy_ops sun4i_usb_phy_ops = {
+ 	.init		= sun4i_usb_phy_init,
+ 	.exit		= sun4i_usb_phy_exit,
+@@ -733,7 +700,6 @@ static void sun4i_usb_phy_remove(struct platform_device *pdev)
+ 	struct device *dev = &pdev->dev;
+ 	struct sun4i_usb_phy_data *data = dev_get_drvdata(dev);
+ 
+-	usb_role_switch_unregister(data->role_sw);
+ 	if (data->vbus_power_nb_registered)
+ 		power_supply_unreg_notifier(&data->vbus_power_nb);
+ 	if (data->id_det_irq > 0)
+@@ -800,9 +766,6 @@ static int sun4i_usb_phy_probe(struct platform_device *pdev)
+ 	}
+ 
+ 	data->dr_mode = of_usb_get_dr_mode_by_phy(np, 0);
+-	/* Enabled host companions also reference PHY0; ignore node scan order. */
+-	if (of_property_read_bool(np, "baseos,manual-role-switch"))
+-		data->dr_mode = USB_DR_MODE_PERIPHERAL;
+ 
+ 	data->extcon = devm_extcon_dev_allocate(dev, sun4i_usb_phy0_cable);
+ 	if (IS_ERR(data->extcon)) {
+@@ -935,24 +898,6 @@ static int sun4i_usb_phy_probe(struct platform_device *pdev)
+ 		return PTR_ERR(phy_provider);
+ 	}
+ 
+-	if (of_property_read_bool(np, "baseos,manual-role-switch")) {
+-		struct usb_role_switch_desc desc = {
+-			.name = "baseos-usbc",
+-			.set = sun4i_usb_role_set,
+-			.get = sun4i_usb_role_get,
+-			.allow_userspace_control = true,
+-			.driver_data = data,
+-		};
+-
+-		data->role_sw = usb_role_switch_register(dev, &desc);
+-		if (IS_ERR(data->role_sw)) {
+-			ret = PTR_ERR(data->role_sw);
+-			data->role_sw = NULL;
+-			sun4i_usb_phy_remove(pdev);
+-			return ret;
+-		}
+-	}
+-
+ 	dev_dbg(dev, "successfully loaded\n");
+ 
+ 	return 0;
+diff --git a/drivers/usb/musb/sunxi.c b/drivers/usb/musb/sunxi.c
+index 1aa6883ac..a6bd3e968 100644
+--- a/drivers/usb/musb/sunxi.c
++++ b/drivers/usb/musb/sunxi.c
+@@ -208,10 +208,6 @@ static int sunxi_musb_host_notifier(struct notifier_block *nb,
+ {
+ 	struct sunxi_glue *glue = container_of(nb, struct sunxi_glue, host_nb);
+ 
+-	/* This board routes explicit host mode to EHCI/OHCI, not MUSB. */
+-	if (of_property_read_bool(glue->dev->of_node, "baseos,manual-host"))
+-		return NOTIFY_DONE;
+-
+ 	if (event)
+ 		set_bit(SUNXI_MUSB_FL_HOSTMODE, &glue->flags);
+ 	else

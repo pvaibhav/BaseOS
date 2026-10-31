@@ -1,7 +1,7 @@
 From 87af4ab7a9e5d9dff4a5a7ccd13b01778791a5cd Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 17:33:09 +0000
-Subject: [PATCH 36/41] rg28xx/rgsp: keep the USB host controllers off
+Subject: [PATCH 36/42] rg28xx/rgsp: keep the USB host controllers off
 
 Loading their drivers took the USB-C port from the device side and cut
 adb off. They are for an explicit host mode.

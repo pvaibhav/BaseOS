@@ -1,0 +1,59 @@
+From c9ca5c8a006881bd898b60d1fabfa85669cb340e Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 20:14:46 +0000
+Subject: [PATCH 7/9] arm64: dts: allwinner: describe H616 AHUB HDMI audio link
+
+Adapted from Jernej Skrabec <jernej.skrabec@gmail.com>.
+
+Source tree: https://github.com/jernejsk/LibreELEC.tv/tree/ed5140a734c32c99ba4836dd0d014b2c74c759f0/projects/Allwinner/patches/linux
+Source patches: 0704, 0705. Only the shared SoC additions are carried.
+---
+ .../arm64/boot/dts/allwinner/sun50i-h616.dtsi | 21 +++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+index ec91a77d3..d053bdde9 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+@@ -103,6 +103,13 @@ de: display-engine {
+ 		status = "disabled";
+ 	};
+ 
++	hdmi_sound: sound-hdmi {
++		compatible = "allwinner,sun8i-a83t-hdmi-audio";
++		audio-cpu = <&ahub 1>;
++		audio-codec = <&hdmi>;
++		status = "disabled";
++	};
++
+ 	reserved-memory {
+ 		#address-cells = <2>;
+ 		#size-cells = <2>;
+@@ -944,6 +951,19 @@ codec: codec@5096000 {
+ 			status = "disabled";
+ 		};
+ 
++		ahub: audio-hub@5097000 {
++			#sound-dai-cells = <1>;
++			compatible = "allwinner,sun50i-h616-ahub";
++			reg = <0x05097000 0xb00>;
++			clocks = <&ccu CLK_BUS_AUDIO_HUB>, <&ccu CLK_AUDIO_HUB>;
++			clock-names = "bus", "mod";
++			resets = <&ccu RST_BUS_AUDIO_HUB>;
++			dmas = <&dma 3>, <&dma 3>, <&dma 4>, <&dma 4>,
++			       <&dma 5>, <&dma 5>;
++			dma-names = "tx0", "rx0", "tx1", "rx1", "tx2", "rx2";
++			status = "disabled";
++		};
++
+ 		usbotg: usb@5100000 {
+ 			compatible = "allwinner,sun50i-h616-musb",
+ 				     "allwinner,sun8i-h3-musb";
+@@ -1106,6 +1126,7 @@ ohci3: usb@5311400 {
+ 
+ 
+ 		hdmi: hdmi@6000000 {
++			#sound-dai-cells = <0>;
+ 			compatible = "allwinner,sun50i-h616-dw-hdmi",
+ 				     "allwinner,sun50i-h6-dw-hdmi";
+ 			reg = <0x06000000 0x10000>;

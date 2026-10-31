@@ -1,0 +1,38 @@
+From 18ba28e5d814e71970bd9e82c0f238e01aa5009a Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 20:14:46 +0000
+Subject: [PATCH 5/9] clk: sunxi-ng: fix H616 audio hub rate propagation and
+ PLL rates
+
+Port of Jernej Skrabec <jernej.skrabec@gmail.com>.
+
+Sources: https://github.com/jernejsk/LibreELEC.tv/blob/ed5140a734c32c99ba4836dd0d014b2c74c759f0/projects/Allwinner/patches/linux/0518-clk-sunxi-ng-sun50i-h616-propagate-audio-hub-rate-ch.patch
+https://github.com/jernejsk/LibreELEC.tv/blob/ed5140a734c32c99ba4836dd0d014b2c74c759f0/projects/Allwinner/patches/linux/0519-clk-sunxi-ng-sun50i-h616-Fix-audio-PLL-sigma-delta-table-rates.patch
+---
+ drivers/clk/sunxi-ng/ccu-sun50i-h616.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/clk/sunxi-ng/ccu-sun50i-h616.c b/drivers/clk/sunxi-ng/ccu-sun50i-h616.c
+index 955c61483..50377afef 100644
+--- a/drivers/clk/sunxi-ng/ccu-sun50i-h616.c
++++ b/drivers/clk/sunxi-ng/ccu-sun50i-h616.c
+@@ -223,8 +223,8 @@ static struct ccu_nkmp pll_de_clk = {
+  * frequencies with less error.
+  */
+ static struct ccu_sdm_setting pll_audio_sdm_table[] = {
+-	{ .rate = 90316800, .pattern = 0xc001288d, .m = 3, .n = 22 },
+-	{ .rate = 98304000, .pattern = 0xc001eb85, .m = 5, .n = 40 },
++	{ .rate = 180633600, .pattern = 0xc001288d, .m = 3, .n = 22 },
++	{ .rate = 196608000, .pattern = 0xc001eb85, .m = 5, .n = 40 },
+ };
+ 
+ #define SUN50I_H616_PLL_AUDIO_REG	0x078
+@@ -566,7 +566,7 @@ static struct ccu_div audio_hub_clk = {
+ 		.hw.init	= CLK_HW_INIT_PARENTS("audio-hub",
+ 						      audio_parents,
+ 						      &ccu_div_ops,
+-						      0),
++						      CLK_SET_RATE_PARENT),
+ 	},
+ };
+ 

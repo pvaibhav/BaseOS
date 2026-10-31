@@ -1,0 +1,64 @@
+From e64fc6f4bd0707454c69b38c9d36e3290295c2e9 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 20:14:46 +0000
+Subject: [PATCH 8/9] arm64: dts: enable HDMI video and audio on BaseOS RG SP
+
+Use mixer1 and TV0 while keeping mixer0 assigned to the LCD. Stock RG SP DT enables HDMI at 0x6000000 and an ahubhdmi card. Use the retained firmware 3.3 V supply representation until the vendor supply-name mapping can be verified. Add a config fragment for reproducible build testing.
+---
+ .../sun50i-h700-anbernic-rgsp-baseos.dts      | 34 +++++++++++++++++++
+ arch/arm64/configs/baseos-hdmi.config         |  4 +++
+ 2 files changed, 38 insertions(+)
+ create mode 100644 arch/arm64/configs/baseos-hdmi.config
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
+index 07e3e7027..192cea9a6 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
+@@ -148,3 +148,37 @@ aliases {
+         rtc1 = &rtc;
+     };
+ };
++
++/* Keep LCD on mixer0; HDMI uses mixer1 and TV0. */
++/ {
++    hdmi-connector {
++        compatible = "hdmi-connector";
++        type = "c";
++        port {
++            hdmi_con_in: endpoint {
++                remote-endpoint = <&hdmi_out_con>;
++            };
++        };
++    };
++};
++
++&de { allwinner,pipelines = <&mixer0>, <&mixer1>; };
++&mixer1 { status = "okay"; };
++&mixer1_out_tcon_top_mixer1 { status = "okay"; };
++&tcon_top_mixer1_in_mixer1 { status = "okay"; };
++&tcon_top_mixer1_out { status = "okay"; };
++/* The inherited mixer1 -> LCD route stays disabled. */
++&tcon_tv0 { status = "okay"; };
++&hdmi {
++    /* Retain the boot firmware's supply setup; PMIC HDMI mapping is unknown. */
++    hvcc-supply = <&reg_sd_boot>;
++    status = "okay";
++};
++&hdmi_phy { status = "okay"; };
++&hdmi_out {
++    hdmi_out_con: endpoint {
++        remote-endpoint = <&hdmi_con_in>;
++    };
++};
++&ahub { status = "okay"; };
++&hdmi_sound { status = "okay"; };
+diff --git a/arch/arm64/configs/baseos-hdmi.config b/arch/arm64/configs/baseos-hdmi.config
+new file mode 100644
+index 000000000..c95787f7e
+--- /dev/null
++++ b/arch/arm64/configs/baseos-hdmi.config
+@@ -0,0 +1,4 @@
++CONFIG_DRM_SUN8I_DW_HDMI=y
++CONFIG_DRM_DW_HDMI_I2S_AUDIO=y
++CONFIG_SND_SUN50I_H616_AHUB=y
++CONFIG_SND_SOC_SUNXI_HDMI=y

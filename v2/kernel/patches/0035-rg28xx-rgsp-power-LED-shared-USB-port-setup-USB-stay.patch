@@ -1,7 +1,7 @@
 From dc779df6051c8a21c8c372b47064f54326d5ad4d Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 17:19:51 +0000
-Subject: [PATCH 35/41] rg28xx/rgsp: power LED, shared USB port setup, USB
+Subject: [PATCH 35/42] rg28xx/rgsp: power LED, shared USB port setup, USB
  stays a device
 
 The RG28XX power LED (stock work_led on PI12) is a GPIO LED; BaseOS turns

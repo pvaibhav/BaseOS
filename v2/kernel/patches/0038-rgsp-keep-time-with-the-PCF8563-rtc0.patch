@@ -1,7 +1,7 @@
 From b91facb39d3f3c222082055aabda438dfe6c0b4a Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 18:07:37 +0000
-Subject: [PATCH 38/41] rgsp: keep time with the PCF8563 (rtc0)
+Subject: [PATCH 38/42] rgsp: keep time with the PCF8563 (rtc0)
 
 The SoC clock loses the time while the RG SP is off, so BaseOS 2 started in
 1970. The PCF8563 is built in and aliased rtc0, so the kernel reads it at

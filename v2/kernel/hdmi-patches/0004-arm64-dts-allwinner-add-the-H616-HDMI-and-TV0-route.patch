@@ -1,0 +1,164 @@
+From 15a1e0a612e90392e2f0ea07d0d2abb829bfa6f7 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 20:12:23 +0000
+Subject: [PATCH 4/9] arm64: dts: allwinner: add the H616 HDMI and TV0 route
+
+Adapted from Jernej Skrabec <jernej.skrabec@gmail.com>. Retain BaseOS LCD nodes and labels; route mixer1 to TV0 and leave new blocks disabled by default.
+
+Source: https://github.com/jernejsk/linux-1/commit/bd00b7a5e82d4242123caf869c885c5bb0a63a92
+---
+ .../arm64/boot/dts/allwinner/sun50i-h616.dtsi | 122 +++++++++++++++++-
+ 1 file changed, 117 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+index 6e603296e..ec91a77d3 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+@@ -1105,16 +1105,105 @@ ohci3: usb@5311400 {
+ 		};
+ 
+ 
++		hdmi: hdmi@6000000 {
++			compatible = "allwinner,sun50i-h616-dw-hdmi",
++				     "allwinner,sun50i-h6-dw-hdmi";
++			reg = <0x06000000 0x10000>;
++			reg-io-width = <1>;
++			interrupts = <GIC_SPI 63 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&ccu CLK_BUS_HDMI>, <&ccu CLK_HDMI_SLOW>,
++				 <&ccu CLK_HDMI>, <&ccu CLK_HDMI_CEC>,
++				 <&ccu CLK_HDCP>, <&ccu CLK_BUS_HDCP>;
++			clock-names = "iahb", "isfr", "tmds", "cec", "hdcp",
++				      "hdcp-bus";
++			resets = <&ccu RST_BUS_HDMI>, <&ccu RST_BUS_HDCP>;
++			reset-names = "ctrl", "hdcp";
++			phys = <&hdmi_phy>;
++			phy-names = "phy";
++			status = "disabled";
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				hdmi_in: port@0 {
++					reg = <0>;
++
++					hdmi_in_tcon_top: endpoint {
++						remote-endpoint = <&tcon_top_hdmi_out_hdmi>;
++					};
++				};
++
++				hdmi_out: port@1 {
++					reg = <1>;
++				};
++			};
++		};
++
++
++		hdmi_phy: hdmi-phy@6010000 {
++			status = "disabled";
++			compatible = "allwinner,sun50i-h616-hdmi-phy";
++			reg = <0x06010000 0x10000>;
++			clocks = <&ccu CLK_BUS_HDMI>, <&ccu CLK_HDMI_SLOW>;
++			clock-names = "bus", "mod";
++			resets = <&ccu RST_BUS_HDMI_SUB>;
++			reset-names = "phy";
++			#phy-cells = <0>;
++		};
++
++
++		tcon_tv0: lcd-controller@6515000 {
++			status = "disabled";
++			compatible = "allwinner,sun50i-h616-tcon-tv";
++			reg = <0x06515000 0x1000>;
++			interrupts = <GIC_SPI 66 IRQ_TYPE_LEVEL_HIGH>;
++			clocks = <&ccu CLK_BUS_TCON_TV0>,
++				 <&tcon_top CLK_TCON_TOP_TV0>;
++			clock-names = "ahb",
++				      "tcon-ch1";
++			resets = <&ccu RST_BUS_TCON_TV0>;
++			reset-names = "lcd";
++
++			ports {
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				tcon_tv0_in: port@0 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <0>;
++
++					tcon_tv0_in_tcon_top_mixer1: endpoint@1 {
++						reg = <1>;
++						remote-endpoint = <&tcon_top_mixer1_out_tcon_tv0>;
++					};
++				};
++
++				tcon_tv0_out: port@1 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <1>;
++
++					tcon_tv0_out_tcon_top: endpoint@1 {
++						reg = <1>;
++						remote-endpoint = <&tcon_top_hdmi_in_tcon_tv0>;
++					};
++				};
++			};
++		};
++
++
+ 		tcon_top: tcon-top@6510000 {
+ 				status = "disabled";
+-			compatible = "allwinner,sun50i-h616-tcon-top",
+-				     "allwinner,sun50i-h6-tcon-top";
++			compatible = "allwinner,sun50i-h616-tcon-top";
+ 			reg = <0x06510000 0x1000>;
+ 			clocks = <&ccu CLK_BUS_TCON_TOP>,
+-				 <&ccu CLK_TCON_TV0>;
++				 <&ccu CLK_TCON_TV0>, <&ccu CLK_TVE0>,
++				 <&ccu CLK_TCON_TV1>;
+ 			clock-names = "bus",
+-				      "tcon-tv0";
+-			clock-output-names = "tcon-top-tv0";
++				      "tcon-tv0", "tve0", "tcon-tv1";
++			clock-output-names = "tcon-top-tv0", "tcon-top-tv1";
+ 			resets = <&ccu RST_BUS_TCON_TOP>;
+ 			#clock-cells = <1>;
+ 
+@@ -1162,6 +1251,11 @@ tcon_top_mixer1_out: port@3 {
+ 					#size-cells = <0>;
+ 					reg = <3>;
+ 
++					tcon_top_mixer1_out_tcon_tv0: endpoint@2 {
++						reg = <2>;
++						remote-endpoint = <&tcon_tv0_in_tcon_top_mixer1>;
++					};
++
+ 					tcon_top_mixer1_out_tcon_lcd0: endpoint@0 {
+ 						reg = <0>;
+ 						remote-endpoint = <&tcon_lcd0_in_tcon_top_mixer1>;
+@@ -1169,6 +1263,24 @@ tcon_top_mixer1_out_tcon_lcd0: endpoint@0 {
+ 
+ 				};
+ 
++				tcon_top_hdmi_in: port@4 {
++					#address-cells = <1>;
++					#size-cells = <0>;
++					reg = <4>;
++
++					tcon_top_hdmi_in_tcon_tv0: endpoint@0 {
++						reg = <0>;
++						remote-endpoint = <&tcon_tv0_out_tcon_top>;
++					};
++				};
++
++				tcon_top_hdmi_out: port@5 {
++					reg = <5>;
++
++					tcon_top_hdmi_out_hdmi: endpoint {
++						remote-endpoint = <&hdmi_in_tcon_top>;
++					};
++				};
+ 			};
+ 		};
+ 
