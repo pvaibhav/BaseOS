@@ -12,10 +12,9 @@ first() { for f in "$@"; do [ -e "$f" ] && { echo "$f"; return 0; }; done; retur
 
 # --- device facts -----------------------------------------------------------
 model() { tr '\0' '\n' < /proc/device-tree/compatible | sed -n '1s/^anbernic,//p'; }
-# One line per model: id:name:rotation (quarter turns, as SDL_ROTATION):features
-MODELS='rg28xx:Anbernic RG28XX:1:battery'
-model_field() { echo "$MODELS" | awk -F: -v m="$(model)" -v f="$1" '$1==m {print $f}'; }
-has() { case " $(model_field 4) " in *" $1 "*) return 0;; esac; return 1; }
+# One line per model: id|name|stock model string|panel rotation CCW|features
+model_field() { awk -F'|' -v m="$(model)" -v f="$1" '$1==m {print $f}' /usr/share/baseos/devices; }
+has() { case " $(model_field 5) " in *" $1 "*) return 0;; esac; return 1; }
 
 BL=/sys/class/backlight/backlight
 # The power LED is lit while the screen is on, as on the stock firmware.
@@ -109,12 +108,12 @@ info)
 	echo "ram_mb=$(awk '/MemTotal/ {print int(($2 / 1024 + 64) / 128) * 128}' /proc/meminfo)"
 	echo "panel=$(tr -d '\0' < /proc/device-tree/chosen/baseos,panel 2>/dev/null)"
 	echo "screen=$(head -1 /sys/class/drm/card*-*/modes 2>/dev/null | head -1)"
-	echo "features=$(model_field 4)" ;;
+	echo "features=$(model_field 5)" ;;
 display)
 	case "$1" in
 	info)
 		echo "screen=$(head -1 /sys/class/drm/card*-*/modes | head -1)"
-		echo "rotation=$(model_field 3)"
+		echo "rotation=$(( $(model_field 4) / 90 ))"
 		echo "output=lcd" ;;
 	brightness)
 		read -r max < $BL/max_brightness

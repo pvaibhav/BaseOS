@@ -42,8 +42,21 @@ def static(src, out):
                     '-o', f'/o/{out.name}', f'/s/{src.name}'], check=True)
 
 
+def devices_table():
+    """One line per model for rcS and the baseos command (from devices.json):
+    id|model|model string|panel rotation CCW|features"""
+    lines = []
+    for t in json.loads((R / 'devices.json').read_text())['targets']:
+        features = ['battery'] + [f for f in ('wifi', 'bluetooth') if t.get(f)]
+        if t['id'].endswith('sp'):
+            features.append('lid')
+        lines.append('|'.join([t['id'], t['model'], t['model_string'], str(t['panel_rotation_ccw']), ' '.join(features)]))
+    (OUT / 'devices').write_text('\n'.join(lines) + '\n')
+
+
 def root():
     OUT.mkdir(parents=True, exist_ok=True)
+    devices_table()
     tools = OUT / 'bin'; tools.mkdir(exist_ok=True)
     static(R / 'v2/dev/src/feeder.c', tools / 'baseos-feeder')
     static(R / 'v2/dev/src/mem.c', tools / 'mem')
@@ -75,7 +88,14 @@ cp /repo/work/mainline/u4g/devel/usr/lib/libSDL2-2.0.so.0.2800.5 usr/lib/baseos2
 ln -s libSDL2-2.0.so.0.2800.5 usr/lib/baseos2/libSDL2-2.0.so.0
 rm -rf $M
 ldconfig -r /k/root
-printf 'BASEOS_VERSION=2.0.0-dev\n' > etc/baseos-release
+# Per-model identity, written at boot by rcS (one root for every model): the
+# BaseOS 1.x keys frontends read, and the stock model string.
+mkdir -p usr/share/baseos && cp /repo/work/v2/os/devices usr/share/baseos/devices
+echo 2.0.0-dev > usr/share/baseos/version
+rm -f etc/baseos-release mnt/vendor/bin/dmenu.bin
+ln -s /run/baseos/release etc/baseos-release
+mkdir -p mnt/vendor/bin && ln -s /run/baseos/dmenu.bin mnt/vendor/bin/dmenu.bin
+printf 'NAME="Base OS"\nID=baseos\nVERSION_ID=2.0.0-dev\nPRETTY_NAME="Base OS 2.0.0-dev"\n' > etc/os-release
 mkdir -p usr/share/baseos && cp /repo/v2/CONTRACT.md usr/share/baseos/
 # Audio routing: ALSA's default device follows /run/baseos/asound.conf (baseos audio).
 rm -f etc/asound.conf && ln -s /run/baseos/asound.conf etc/asound.conf
