@@ -1,7 +1,7 @@
 From bf233c0deb4f2716133e6409ef8b80bf6b75ac2d Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 10:05:10 +0000
-Subject: [PATCH 05/36] 0005-baseos-panel
+Subject: [PATCH 05/37] 0005-baseos-panel
 
 ---
  drivers/gpu/drm/panel/Kconfig  | 10 ++++++++++

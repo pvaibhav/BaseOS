@@ -1,0 +1,42 @@
+From 35dab0f150ca5a2cf7c883673aa217051dc842e1 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 17:59:43 +0000
+Subject: [PATCH 37/37] rgsp: lid switch with the pull-up in its GPIO flags
+
+A pinctrl claim on PE7 next to the GPIO made the GPIO request fail, so the
+lid switch never appeared (found on the first RG SP boot).
+---
+ .../allwinner/sun50i-h700-anbernic-rgsp-baseos.dts    | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
+index 6a3bc1002..777d23472 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rgsp-baseos.dts
+@@ -19,11 +19,11 @@ framebuffer@0 {
+ 
+     gpio-keys-lid {
+         compatible = "gpio-keys";
+-        pinctrl-names = "default";
+-        pinctrl-0 = <&lid_pin>;
++        /* The pull-up comes with the GPIO flags: a pinctrl claim on PE7 as
++         * well made the GPIO request fail. */
+         lid-switch {
+             label = "Lid Switch";
+-            gpios = <&pio 4 7 GPIO_ACTIVE_LOW>;
++            gpios = <&pio 4 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+             linux,input-type = <EV_SW>;
+             linux,code = <SW_LID>;
+             wakeup-source;
+@@ -79,11 +79,6 @@ &panel {
+ };
+ 
+ &pio {
+-    lid_pin: lid-pin {
+-        pins = "PE7";
+-        function = "gpio_in";
+-        bias-pull-up;
+-    };
+     tf2_pins: tf2-pins {
+         pins = "PC5", "PC6", "PC8", "PC10", "PC13", "PC15";
+         function = "mmc2";

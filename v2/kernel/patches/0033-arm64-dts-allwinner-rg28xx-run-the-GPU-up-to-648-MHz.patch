@@ -1,7 +1,7 @@
 From c35b67f6965d25117b0025390f475ff4cedc0bed Mon Sep 17 00:00:00 2001
 From: Prashant Vaibhav <prashant@vaibhav.de>
 Date: Sat, 31 Oct 2026 16:47:58 +0000
-Subject: [PATCH 33/36] arm64: dts: allwinner: rg28xx: run the GPU up to 648
+Subject: [PATCH 33/37] arm64: dts: allwinner: rg28xx: run the GPU up to 648
  MHz like stock
 
 The stock firmware runs the GPU at 648 MHz with the shared rail at 0.94 V;

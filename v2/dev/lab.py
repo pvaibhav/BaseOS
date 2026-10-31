@@ -77,7 +77,8 @@ def install(image):
 def boot():
     assert which() == 'stock'
     assert sh('/usr/sbin/native-health --stock-latch').endswith(' idle'), 'trial not armed'
-    pid = sh('pidof nextui.elf')
+    # The frontend to pause: NextUI, or Slot (started through the dynamic loader).
+    pid = sh("ps -o pid,args | grep -E 'nextui[.]elf|System/slot$' | grep -v grep | awk '{print $1}' | tr '\\n' ' '") or '$$'
     stage = '/tmp/baseos-dev-entry'
     script = f'''set -e
 mkdir -p {stage}
