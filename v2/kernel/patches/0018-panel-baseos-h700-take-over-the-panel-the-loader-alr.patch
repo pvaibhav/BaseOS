@@ -1,0 +1,70 @@
+From 8d01827ea2820f5e694573444984f889d88c4cb6 Mon Sep 17 00:00:00 2001
+From: Prashant Vaibhav <prashant@vaibhav.de>
+Date: Sat, 31 Oct 2026 11:28:40 +0000
+Subject: [PATCH 18/19] panel: baseos-h700: take over the panel the loader
+ already started
+
+---
+ drivers/gpu/drm/panel/panel-baseos-h700.c | 23 ++++++++++++++++++++++-
+ 1 file changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/panel/panel-baseos-h700.c b/drivers/gpu/drm/panel/panel-baseos-h700.c
+index 75f097c7f..4b39d4bac 100644
+--- a/drivers/gpu/drm/panel/panel-baseos-h700.c
++++ b/drivers/gpu/drm/panel/panel-baseos-h700.c
+@@ -1,5 +1,5 @@
+ // SPDX-License-Identifier: GPL-2.0-only
+-/* Bootloader-derived SPI-DPI contract; no warm adoption or TCON programming. */
++/* Bootloader-derived SPI-DPI contract; adopts the loader-started panel once. */
+ #include <linux/backlight.h>
+ #include <linux/delay.h>
+ #include <linux/gpio/consumer.h>
+@@ -25,6 +25,7 @@ struct h700_panel {
+ 	struct pinctrl *pinctrl;
+ 	struct pinctrl_state *active, *sleep;
+ 	s64 off_until_ns;
++	bool adopt, adopted;
+ 	u8 params[H700_MAX_PARAMS];
+ };
+ 
+@@ -89,6 +90,20 @@ static int h700_prepare(struct drm_panel *panel)
+ 	s64 remaining = ctx->off_until_ns - ktime_to_ns(ktime_get_boottime());
+ 	int ret, power;
+ 
++	/*
++	 * The loader already ran the full start sequence and is showing the
++	 * boot logo: take the panel over as it is, once.
++	 */
++	ctx->adopted = ctx->adopt;
++	if (ctx->adopt) {
++		ctx->adopt = false;
++		ret = pinctrl_select_state(ctx->pinctrl, ctx->active);
++		if (!ret)
++			ret = gpiod_direction_output(ctx->power, 1);
++		if (!ret)
++			ret = gpiod_direction_output(ctx->reset, 0);
++		return ret;
++	}
+ 	if (remaining > 0)
+ 		msleep(DIV_ROUND_UP_ULL(remaining, NSEC_PER_MSEC));
+ 	ret = backlight_disable(panel->backlight);
+@@ -128,6 +143,8 @@ static int h700_prepare(struct drm_panel *panel)
+ 
+ static int h700_enable(struct drm_panel *panel)
+ {
++	if (to_h700(panel)->adopted)
++		return 0;
+ 	msleep(100);
+ 	return 0; /* Panel core enables backlight after this callback. */
+ }
+@@ -219,6 +236,10 @@ static int h700_probe(struct spi_device *spi)
+ 		return PTR_ERR(ctx->power);
+ 	if (!gpiod_is_active_low(ctx->reset) || gpiod_is_active_low(ctx->power))
+ 		return -EINVAL;
++	/* Powered and out of reset with a loader-reported boot display. */
++	ctx->adopt = of_property_present(of_chosen, "baseos,boot-display") &&
++		     gpiod_get_value_cansleep(ctx->power) == 1 &&
++		     gpiod_get_value_cansleep(ctx->reset) == 0;
+ 	ctx->pinctrl = devm_pinctrl_get(dev);
+ 	if (IS_ERR(ctx->pinctrl))
+ 		return PTR_ERR(ctx->pinctrl);

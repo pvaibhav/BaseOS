@@ -30,10 +30,13 @@ cd "$SD"
 if [ ! -e /run/boot-clock-handoff ]; then
  /usr/bin/boot-clock > /run/boot-clock-handoff 2>/dev/null || :
 fi
+# Development only: /data/baseos2/frontend-wrap (e.g. strace) wraps the launch.
+WRAP=
+[ ! -x /data/baseos2/frontend-wrap ] || WRAP=/data/baseos2/frontend-wrap
 if [ "$LAUNCH_TYPE" = binary ]; then
- setsid /lib/ld-linux-aarch64.so.1 "$LAUNCH" &
+ setsid $WRAP /lib/ld-linux-aarch64.so.1 "$LAUNCH" &
 else
- setsid /bin/sh "$LAUNCH" &
+ setsid $WRAP /bin/sh "$LAUNCH" &
 fi
 child=$!
 printf '%s\n' "$child" > /run/baseos/frontend-pgid

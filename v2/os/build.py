@@ -31,8 +31,8 @@ def static(src, out):
     """Static musl build for aarch64 (OrbStack runs arm64 natively)."""
     subprocess.run(['docker', 'run', '--rm', '-v', f'{src.parent}:/s:ro', '-v', f'{out.parent}:/o',
                     'alpine:3.20', 'sh', '-c',
-                    f'apk add -q gcc musl-dev linux-headers >/dev/null && '
-                    f'gcc -static -Os -s -Wall -Werror -o /o/{out.name} /s/{src.name}'], check=True)
+                    f'apk add -q gcc musl-dev linux-headers libdrm-dev >/dev/null && '
+                    f'gcc -static -Os -s -Wall -Werror -I/usr/include/libdrm -o /o/{out.name} /s/{src.name}'], check=True)
 
 
 def root():
@@ -41,13 +41,14 @@ def root():
     static(R / 'v2/dev/src/feeder.c', tools / 'baseos-feeder')
     static(R / 'v2/dev/src/mem.c', tools / 'mem')
     static(R / 'v2/dev/src/pad.c', tools / 'baseos-pad')
+    static(R / 'v2/dev/src/firstframe.c', tools / 'baseos-firstframe')
     drop = ' '.join(DROP); dirs = ' '.join(DIRS)
     sh(f'''
 rm -rf /k/root && mkdir /k/root && cp -a /repo/{BASE}/. /k/root/
 cd /k/root
 rm -f {drop}
 cp -a /repo/v2/os/overlay/. .
-install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad usr/sbin/
+install -m 755 /repo/work/v2/os/bin/baseos-feeder /repo/work/v2/os/bin/mem /repo/work/v2/os/bin/baseos-pad /repo/work/v2/os/bin/baseos-firstframe usr/sbin/
 for d in {dirs}; do mkdir -p "$d"; done
 test -x usr/sbin/adbd && test -x usr/bin/busybox
 mksquashfs /k/root /k/rootfs.sqfs -noappend -all-root -comp lz4 -Xhc -b 131072 -quiet
@@ -55,7 +56,7 @@ cp /k/rootfs.sqfs /repo/work/v2/os/rootfs.sqfs
 ''')
 
 
-def payload(cmdline_extra):
+def payload(cmdline_extra, dtb_path=None):
     static(R / 'v2/os/firststage.c', OUT / 'firststage')
     D = stat.S_IFDIR | 0o755
     initrd = gzip.compress(dev.write_newc([
@@ -65,7 +66,7 @@ def payload(cmdline_extra):
     ]), compresslevel=9, mtime=0)
     boot, _ = dev.payload.parse(dev.PROVEN.read_bytes(), dev.G)
     segs = dev.android.split(boot)[0]
-    dtb = (R / 'work/v2/kernel/rg28xx.dtb').read_bytes()
+    dtb = Path(dtb_path or R / 'work/v2/kernel/rg28xx.dtb').read_bytes()
     if cmdline_extra:
         dtb = set_bootargs_extra(dtb, cmdline_extra)
     kernel = dev.bol4((R / 'work/v2/kernel/Image').read_bytes())
@@ -75,10 +76,12 @@ def payload(cmdline_extra):
 
 
 def set_bootargs_extra(dtb, extra):
-    """Append to /chosen/bootargs with dtc (decompile, edit, recompile)."""
+    """Append to /chosen/bootargs (fdtget/fdtput: no shell quoting involved)."""
     tmp = OUT / 'tmp.dtb'; tmp.write_bytes(dtb)
-    sh(f'''cd /repo/work/v2/os && dtc -q -I dtb -O dts tmp.dtb > tmp.dts &&
-sed -i 's|\\(bootargs = "[^"]*\\)"|\\1 {extra}"|' tmp.dts && dtc -q -I dts -O dtb tmp.dts > tmp.dtb && rm tmp.dts''')
+    path = '/repo/work/v2/os/tmp.dtb'
+    run = lambda *a: subprocess.run(['docker', 'exec', 'v2-kbuild', *a], check=True,
+                                    capture_output=True, text=True).stdout.strip()
+    run('fdtput', '-t', 's', path, '/chosen', 'bootargs', run('fdtget', path, '/chosen', 'bootargs') + ' ' + extra)
     out = tmp.read_bytes(); tmp.unlink()
     return out
 
@@ -87,8 +90,10 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('what', choices=['root', 'payload', 'all'])
     ap.add_argument('--dev', action='store_true', help='host-heartbeat watchdog (baseos.dev)')
+    ap.add_argument('--args', default='', help='extra kernel arguments')
+    ap.add_argument('--dtb', help='DTB instead of work/v2/kernel/rg28xx.dtb')
     a = ap.parse_args()
     if a.what in ('root', 'all'):
         root()
     if a.what in ('payload', 'all'):
-        payload('baseos.dev' if a.dev else '')
+        payload(' '.join(x for x in ('baseos.dev' if a.dev else '', a.args) if x), a.dtb)
