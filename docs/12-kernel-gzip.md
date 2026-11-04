@@ -1,8 +1,8 @@
-# 12 — Boot files and the one-update migration
+# 12. Boot files and the one-update migration
 
 BaseOS runs the vendor's boot0, U-Boot and kernel code unchanged and alters
 only their inputs. Every supported H700 image ships the same seven changes.
-The build derives them per target from pinned vendor firmware.
+The build derives them for each target from pinned vendor firmware.
 `manifest/kernel-gzip.json` pins each target's original boot0, boot package,
 U-Boot and boot partition by SHA-256. The builder refuses firmware it does not
 recognise. A new vendor build needs a new audit and a new profile.
@@ -60,10 +60,10 @@ EHCI 2 keeps the status `okay`. With every controller of ports 2 and 3 off,
 the OTG port did not enumerate as a USB device and adb over USB stopped
 working. With EHCI 2 left on, it worked.
 
-Two things differ from the vendor boot. USB bus numbers change, because EHCI 2
-now registers first and becomes `usb1`. Each port's EHCI controller still
-registers before its OHCI controller. And a rootfs without the module leaves
-the five controllers off, which matters only for the case described under
+Two things differ from the vendor boot. First, USB bus numbers change, because
+EHCI 2 now registers first and becomes `usb1`. Each port's EHCI controller still
+registers before its OHCI controller. Second, a rootfs without the module leaves
+the five controllers off. That matters only in the case described under
 [migration](#migration-of-existing-cards).
 
 The module calls only exported kernel functions. The build compiles it for
@@ -76,9 +76,9 @@ The kernel clock counts from zero until the RTC driver sets it, and the input
 devices register before that. With the vendor boot files the last of them
 registered in the second second, so `/dev/input` had a modification time of 1.
 With the new files it registers around the one-second mark, and in about a
-third of boots the time is 0. SDL's gamepad detection without udev starts from
-0 and scans the directory only when its time differs, so a program using it
-found no gamepad on those boots.
+third of boots the time is 0. Without udev, SDL's gamepad detection starts from
+0 and scans the directory only when its time differs. On those boots a program
+using it found no gamepad.
 
 `rcS` sets the time to 1 right after it mounts `/dev`, whichever boot files
 are installed. [The experiment notes](../experiments/h700-boot-speed/README.md#the-gamepad-that-sdl-could-not-find)
@@ -98,16 +98,15 @@ piece it checks that only the intended bytes changed.
 - In boot0 it changes the debug byte and the checksum of the copy at 8 KiB.
   boot0 keeps a second copy at 256 KiB and rewrites the first sector of both
   copies on every boot, so the second copy takes the new setting at the first
-  start. The RG SP showed this.
+  start. Testing on the RG SP confirmed this.
 
 The tool also derives the gzip-only pair that release 1.3.0 shipped. The
 migration needs those hashes to recognise cards that carry that pair.
 
 `build-image.sh` installs and verifies all three pieces in fresh images.
 `build-rootfs.sh` puts the boot package, the boot image and a manifest in
-`/usr/share/baseos/boot-gzip/`. An ordinary `baseos-update/1` archive can then
-deliver the migration to existing cards. These files add about 8 MiB to the
-rootfs.
+`/usr/share/baseos/boot-gzip/`, adding about 8 MiB to the rootfs. An ordinary
+`baseos-update/1` archive can then deliver the migration to existing cards.
 
 ## Migration of existing cards
 
@@ -127,8 +126,8 @@ hash. It knows three states and refuses any other.
 | gzip | The pair that release 1.3.0 installed. | It writes and verifies the boot image, then writes and verifies the boot package. The card can boot after every step. |
 | fast | The current files. | It writes nothing. |
 
-The migration hashes exactly the bytes that the image header describes.
-It ignores and preserves whatever follows the image in the partition. An
+The migration hashes exactly the bytes that the image header describes, and
+ignores and preserves whatever follows the image in the partition. An
 interrupted earlier run can leave a gzip file beside a fast file. The
 migration recognises that mixture and completes it.
 
@@ -148,8 +147,8 @@ It also needs external power or at least 50% battery. Without either it leaves
 no marker and tries again at a later boot. Charging-only and USB-storage
 sessions do not migrate.
 
-The migration makes sure a recovery copy is on userdata before the first
-write. If the first migration's copy of the original pair in
+Before the first write, the migration makes sure userdata holds a recovery
+copy. If the first migration's copy of the original pair in
 `/data/boot-gzip-v1/` is intact, that copy is enough. Otherwise the migration
 saves the installed boot package and the installed image's own bytes in
 `/data/boot-pair-v2/`. It never modifies `/data/boot-gzip-v1/`.
@@ -203,8 +202,9 @@ arithmetic, and one run with the files the build produces for the RG SP.
 controller the build holds back. `h700_late_usb.ko` builds for all eleven
 kernels, and every symbol version it imports matches each of them.
 
-An RG SP, an RG40XX V and an RG34XX SP have booted these files. On the RG SP, a card running
-release 1.3.0 took the update from a `.bosupd` and migrated on its first boot.
+An RG SP, an RG40XX V and an RG34XX SP have booted these files. On the RG SP,
+a card running release 1.3.0 took the update from a `.bosupd` and migrated on
+its first boot.
 The updater later installed the final build of this branch the same way, and
 that build passed all 39 checks of `validate-on-device.sh`. Warm
 restarts with USB attached gave these medians, in seconds from the hardware
@@ -225,8 +225,8 @@ TF1. Medians of three boots each:
 
 Measured one change at a time, serial output in the three stages costs about
 0.7 s, the initramfs 0.5 s, the USB host controllers 0.3 s, the slow RCU grace
-periods 0.2 s and the two waits removed from `rcS` under 0.1 s. Those runs were separate, so the parts do not
-sum exactly to the difference. About one boot in twelve spent 0.3 to 0.6 s
+periods 0.2 s and the two waits removed from `rcS` under 0.1 s. Those runs were
+separate, so the parts do not sum exactly to the difference. About one boot in twelve spent 0.3 to 0.6 s
 longer before Linux. Three of those four boots followed a large write to the
 card.
 
@@ -234,10 +234,10 @@ On the new files the RG SP slept for 30 seconds, woke on an RTC alarm and
 resumed with the frontend, Wi-Fi, GPU and all six USB host controllers
 working. A cold power-on with TF2 removed took 4.38 s before the USB change
 and used TF1 without waiting for the empty slot. A USB audio adapter on the
-OTG port worked as a host device after the USB change. The OTG port uses host
-controllers of its own, which the kernel starts on demand, so that test does
-not cover the five controllers the module starts. The RG SP has no known
-connector for those.
+OTG port worked as a host device after the USB change. The OTG port has its
+own host controllers, which the kernel starts on demand, so that test does not
+cover the five controllers the module starts. The RG SP has no known connector
+for those.
 
 An RG40XX V with release 1.3.0 and the Slot frontend on TF2 took the same kind
 of update. It migrated on its first boot and started on the new files at the
