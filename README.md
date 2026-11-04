@@ -60,6 +60,8 @@ says which startup ran and why.
   complete `System/` folder. Put unzipped games in `Games/GB/`, `Games/GBC/`
   or `Games/GBA/`, and optional BIOS files in `BIOS/`. Update by replacing
   `System/` with the folder from the new release. [Slot guide](https://slot-cfw.fyi).
+  For RetroAchievements, cheats and a few extra goodies, try
+  [my Slot fork](https://github.com/pvaibhav/slot).
 - **spruceOS:** extract the full [release archive](https://github.com/spruceUI/spruceOS/releases/latest)
   and copy all contents, including hidden folders, to the card root. The card
   should then contain `spruce/scripts/runtime.sh`. The
