@@ -61,7 +61,7 @@ if sys.version_info < (3, 10):  # build-early-mmc.py, imported for the DRAM edit
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 WORK = ROOT / 'work/v2/firmware'
-PREPARED = Path('/Users/pvaibhav/Code/Me/BaseOS/work')
+PREPARED = ROOT / 'work'  # prepared stock inputs: fetch-prepared.sh, then build-rootfs.sh per model
 INVENTORY = PREPARED / 'h700-loader/native-logo-v1/fleet-v1/inventories/rg28xx'
 UBOOT_ARCHIVE = PREPARED / 'h700-loader/mainline/u-boot-v2026.10.tar.gz'
 UBOOT_SHA = 'f943a88389c8fd70a6b0d061a88267465e143c7ca6ea2b75837ab20f5b60c739'

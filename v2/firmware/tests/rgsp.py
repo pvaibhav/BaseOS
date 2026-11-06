@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import run as suite
 FW=suite.FW
-suite.CARD=Path('/Users/pvaibhav/Code/Me/BaseOS/work/rgsp')
+suite.CARD=suite.ROOT/'work/rgsp'
 V='v2-rgsp'
 suite.LOGS.mkdir(parents=True,exist_ok=True)
 repo=lambda p:'/repo/'+str(p.relative_to(suite.ROOT))

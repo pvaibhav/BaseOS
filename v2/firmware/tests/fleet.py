@@ -40,7 +40,7 @@ def main(target):
     v='v2-'+target; out=suite.FW/v
     spec=json.loads((suite.HERE.parent/'targets.json').read_text())[target]
     m=json.loads((out/'manifest.json').read_text());generation=m['generation']
-    suite.CARD=Path('/Users/pvaibhav/Code/Me/BaseOS/work')/target
+    suite.CARD=suite.ROOT/'work'/target
     suite.LOGS.mkdir(parents=True,exist_ok=True)
     real=suite.ROOT/f'work/v2/os/{v}/image.bin'
     image=real if real.exists() else fixture(target,spec,generation,out)

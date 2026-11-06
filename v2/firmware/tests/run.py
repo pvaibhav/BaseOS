@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
 FW = ROOT / 'work/v2/firmware'
 LOGS = FW / 'build/tests'
-CARD = Path('/Users/pvaibhav/Code/Me/BaseOS/work/rg28xx')  # stock card prefix (boot-resource holds BOOTLOGO.BMP)
+CARD = ROOT / 'work/rg28xx'  # stock card prefix (boot-resource holds BOOTLOGO.BMP)
 PAYLOADS = {'os': ROOT / 'work/v2/os/image.bin', 'u3': ROOT / 'work/mainline/payload/u3-final/image.bin'}
 sys.path.insert(0, str(HERE.parent))
 sys.dont_write_bytecode = True

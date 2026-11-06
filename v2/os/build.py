@@ -20,7 +20,7 @@ BASE = 'work/mainline/alpha1/os/root'
 DROP = ['usr/sbin/baseos-alpha-health', 'usr/sbin/baseos-alpha-usb', 'usr/sbin/baseos-rescue',
         'usr/sbin/baseos-rescue-usb', 'usr/sbin/baseos-rescue-monitor', 'usr/sbin/baseos-rescue-watchdog',
         'etc/baseos-phase.sh', 'etc/baseos-usb-cleanup.sh', 'etc/baseos-usb-development-serial']
-LOGO = Path('/Users/pvaibhav/Code/Me/BaseOS/work/rg28xx/bootlogo.bmp')  # the loader's logo
+LOGO = R / 'work/rg28xx/bootlogo.bmp'  # the loader's logo, from the 1.x prepared inputs
 DIRS = ['data', 'mnt/sdcard', 'proc', 'sys', 'dev', 'run', 'tmp', 'var', 'media']
 
 
