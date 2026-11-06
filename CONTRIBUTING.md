@@ -1,5 +1,21 @@
 # Contributing to BaseOS
 
+## Branches and pull requests
+
+| Branch | What it holds | Send pull requests here for |
+|---|---|---|
+| `main` | Development: the 1.5.x line and everything new | New features and most fixes |
+| `stable` | The 1.4.x release line | Fixes for people on 1.4.x |
+| `feature/mainline-kernel` | BaseOS 2 on mainline Linux, experimental | BaseOS 2 work only |
+
+Start your branch from the branch you are sending it to. Otherwise the pull
+request also shows commits that are not yours. If a fix applies to both 1.5.x
+and 1.4.x, send it to `main` and say in the description that 1.4.x needs it too.
+It is then copied to `stable` after merging.
+
+The release marked Latest on the Releases page is built from `stable`. Pre-releases
+are built from `main`.
+
 ## Development environment
 
 Builds run on macOS using unprivileged Alpine containers (Docker or OrbStack), so
