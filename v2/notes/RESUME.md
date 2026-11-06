@@ -6,7 +6,8 @@ and the RG28XX; see `performance-slot.md` and `PLAN-beta.md` for what works.
 
 ## Start here
 
-- Branch `feature/h700-mainline`. Read [PLAN-beta.md](../PLAN-beta.md) (work
+- Branch `feature/mainline-kernel`. `main` is 1.5.x development and `stable` is
+  1.4.x. Read [PLAN-beta.md](../PLAN-beta.md) (work
   packages, 1.4.0 parity matrix), then [CONTRACT.md](../CONTRACT.md).
 - Everything current is in `v2/`. The firmware build also compiles sources
   outside it, all committed: `experiments/h700-boot-speed/{spl,native}` (the
@@ -22,14 +23,15 @@ and the RG28XX; see `performance-slot.md` and `PLAN-beta.md` for what works.
 ## Setting up a fresh checkout
 
 1. Stock inputs (per model): `./fetch-prepared.sh <model>` restores the stock
-   boot prefix from the published "Prepared artifacts 20260914" release, then
+   boot prefix from the published "Prepared artifacts 20260914" release (add
+   `--from keep/baseos-prepared-20260914.tar.zst` to use the local copy), then
    `python3 tools/kernel_gzip.py prepare <model> work/<model>/boot-prefix.img
    work/<model>/boot-gzip` and `sh tools/make-bootlogo.sh <model>`. Both outputs
    were checked byte-identical to the ones the tested firmware was built from.
 2. Frozen inputs: the root image starts from a staging tree built by an earlier
-   prototype tool that no longer exists, so it is kept as a file outside the
-   repository: `~/Code/Me/baseos2-frozen-inputs-20261106.tar.zst`. Extract it at
-   the checkout root (`tar --zstd -xf ... -C <checkout>`). It holds:
+   prototype tool that no longer exists, so it is kept in the main checkout's
+   ignored `keep/` folder: `keep/baseos2-frozen-inputs-20261106.tar.zst`.
+   Extract it at the checkout root (`tar --zstd -xf ... -C <checkout>`). It holds:
    - `work/mainline/alpha1/os/root` — root staging tree (1.5.3 userspace, NextUI
      and MinArch libraries); `v2/os/build.py` starts from it
    - `work/v2/mesa-cache/runtime` — Mesa 26.2.5 libraries with the shader cache
@@ -45,6 +47,10 @@ and the RG28XX; see `performance-slot.md` and `PLAN-beta.md` for what works.
    firmware rebuilt this way in a clean checkout was byte-identical to the one
    installed on the device.
 6. Radio firmware and tools: `v2/os/radio/README.md` (pinned downloads).
+
+Written reports, plus logs and screen captures from the RG40XX V, CubeXX and
+RG40XX H that were never committed, are in `keep/lab-notes-20261106/`, in their
+original folder layout.
 
 ## Kernel
 

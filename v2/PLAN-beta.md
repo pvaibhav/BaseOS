@@ -23,7 +23,7 @@ The beta ships when:
 
 ## Ground rules for every agent
 
-- Repo: `/Users/pvaibhav/.t3/worktrees/BaseOS/feature-h700-mainline`, BaseOS 2 in
+- Repo: branch `feature/mainline-kernel` (worktree `/Users/pvaibhav/.t3/worktrees/BaseOS/feature-h700-mainline`), BaseOS 2 in
   `v2/`. Read `v2/CONTRACT.md` (frontend contract) and the notes in `v2/notes/`
   that your WP names. BaseOS 1.x is the rest of the repo; tag `v1.4.0` is the
   parity reference (`git show v1.4.0:README.md`, `v1.4.0:docs/`).
@@ -276,7 +276,7 @@ play, battery percentage and charging, unplugged battery tests for WP-20.
 
 ### Phase 4: release
 
-**WP-40 Release engineering (S).** Merge `feature/h700-mainline` into `main`
+**WP-40 Release engineering (S).** Merge `feature/mainline-kernel` into `main`
 (clean history, no stray `experiments/` edits), version the BaseOS 2 beta, build
 every model's package from clean `main` only, publish as a pre-release, and write
 the wiki install guide in the simple style of the 1.x guide (technical detail in
