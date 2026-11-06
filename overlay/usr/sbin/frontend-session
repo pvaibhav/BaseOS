@@ -20,9 +20,9 @@ CARD_MISSING=0
 # builtin, no spawned helper, firmware reads, hashes or backup checks. A fresh
 # image records its already-optimised state once. Maintenance boots never write
 # disks owned by the USB host. Keep this before update-trial confirmation.
-# The marker is boot-pair-v2: a card that finished the earlier gzip migration
-# (boot-gzip-v1) runs the helper once more to receive the faster pair.
-if [ ! -e /data/boot-pair-v2/complete ] && [ ! -s /run/usb-storage-device ] \
+# The marker is boot-pair-v2/complete-60hz: a card that finished an earlier
+# migration runs the helper once more to receive the 60 Hz panel package.
+if [ ! -e /data/boot-pair-v2/complete-60hz ] && [ ! -s /run/usb-storage-device ] \
 	&& [ -x /usr/sbin/baseos-boot-migrate ]; then
 	if ! /usr/sbin/baseos-boot-migrate; then
 		# Failure with an unverified restore must not trigger a reboot or trial

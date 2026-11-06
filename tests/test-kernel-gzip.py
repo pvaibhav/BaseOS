@@ -41,6 +41,21 @@ GZIP_V1 = {
     "rgsp": ("fa745599c9eb95110f03c6c426e6d08e0317146d51059c6a790e25f604ea0942",
              "2b9aeb76ace6c781e21aec1edc200cab967b0bf0d162c54588a9c339caf7490c"),
 }
+# The fast package as shipped before 60 Hz panel timing, derived by
+# tools/kernel_gzip.py at 4a59bc3. Cards in use carry these bytes.
+FAST_V1 = {
+    "rg28xx": "ffabd96eae65a94b0a0dc6ce33db7314688b3ead6169d09553b463a8e58fd490",
+    "rg34xx": "56371d984e29e74db63009ce27f829eb0a55ce9007ee5e40c52479b22418af3d",
+    "rg34xxsp": "32f92785f3e0819acbd60776e2ef839c1fd1924b31960b98363a93c85300db7e",
+    "rg35xxh": "7d4648c429ca5c21b084bb40147b3ababbd0d200bb5a2c2c05beef26902c0c55",
+    "rg35xxplus": "b3cc7ea963177fb9110e26e7772847b0da084fb275d6e955c1bc7c9103ced8be",
+    "rg35xxpro": "04d64e1772066fdd11e05727e89576b783340dd2b5a1238e9248c5be41a1d605",
+    "rg35xxsp": "de38acd6633b7012498c121686f93956fbf625b879fffcea5e85ba5e08dd850c",
+    "rg40xxh": "d022ec52d5cd91aee7b9336d45dc7c9f6825573793e6e6175902af37b695aa80",
+    "rg40xxv": "ea7031f8e64712d9c5a0d8530e4b5b588527f397ebda8239ac4c718c50cd886a",
+    "rgcubexx": "dcd1998046d5174d1f9ffb4e20cbe10fd0e32ce111ef880d9a6d5c9ba6a1e972",
+    "rgsp": "f6664df7c8960297f2e690c10345220471f37282eb564355df1872fcd855cd15",
+}
 # The fast package and boot image that booted on the RG SP: fast-rcu-lateusb
 # in experiments/h700-boot-speed/evidence/variants.json.
 PROVEN = {"rgsp": ("f6664df7c8960297f2e690c10345220471f37282eb564355df1872fcd855cd15",
@@ -127,7 +142,17 @@ def check(target):
     for path, name, at, status in fdt_edit.walk(tree):
         if name == "status" and "hci" in path and path.split("/")[-1] not in k.LATE_USB:
             assert fdt_edit.find(d["package_dtb"], path.split("/")[-1], "status") == (at, status)
-    tree_edits = {debug + 3} | held
+    # 60 Hz panel timing: lcd_ht and lcd_vt only, and only on profiled targets.
+    panel = set()
+    for prop, (stock, sixty) in p.get("panel_timing", {}).items():
+        at, current = fdt_edit.find(tree, k.PANEL_NODE, prop)
+        assert current == struct.pack(">I", stock) and fdt_edit.find(d["package_dtb"], k.PANEL_NODE, prop) == (at, struct.pack(">I", sixty))
+        panel |= {i for i in span(at, 4) if tree[i] != d["package_dtb"][i]}
+    assert bool(panel) == bool(p.get("panel_timing"))
+    fast_v1 = d["fast_v1_package"]
+    assert k.sha(fast_v1) == FAST_V1[target]
+    assert diff(fast_v1, package) <= span(20, 4) | {start + i for i in panel} and (panel or fast_v1 == package)
+    tree_edits = {debug + 3} | held | panel
     assert d["package_dtb"] == package[start:start + size] and diff(tree, d["package_dtb"]) == tree_edits
     selector = p["uboot_offset"] + p["selector_offset"]
     gzip_only = span(20, 4) | span(p["uboot_offset"] + 12, 4) | span(selector, 4)
@@ -238,7 +263,7 @@ def check(target):
                 original_boot_sha256=p["boot_partition_sha256"], package_sha256=k.sha(package),
                 boot_image_sha256=k.sha(boot), boot_partition_sha256=k.sha(d["expected_boot"]),
                 kernel_sha256=k.sha(d["kernel"]), kernel_size=len(d["kernel"]),
-                gzip_package_sha256=GZIP_V1[target][0], gzip_boot_image_size=len(d["gzip_boot"]),
+                gzip_package_sha256=GZIP_V1[target][0], fast_v1_package_sha256=FAST_V1[target], gzip_boot_image_size=len(d["gzip_boot"]),
                 gzip_boot_image_sha256=GZIP_V1[target][1], original_boot_image_size=len(image),
                 original_boot_image_sha256=k.sha(image), boot0_offset=8192, boot0_size=65536,
                 boot0_debug_offset=52, boot0_original_sha256=p["boot0_sha256"], boot0_body_offset=512,

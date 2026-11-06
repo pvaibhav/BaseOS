@@ -3,11 +3,13 @@
 # format change is needed. The caller does not execute us after completion.
 # Shared boot sectors are not A/B protected: uninterrupted power is required.
 #
-# Installs the "fast" boot pair (TOC1 package + Android boot image) over either
+# Installs the "fast" boot pair (TOC1 package + Android boot image) over any
 # audited predecessor, then turns off boot0's serial output:
 #   original  uncompressed kernel. Boots only as a matched pair.
 #   gzip      the first migration (boot-gzip-v1). A gzip half and a fast half
 #             boot together either way round, so every step from here boots.
+#   fast_v1   the fast pair before 60 Hz panel timing. Same image; only the
+#             package's device tree differs, so only the package is written.
 #   fast      gzip kernel, empty ramdisk, quiet U-Boot and kernel.
 # The running kernel is byte-identical under all three: nothing restarts, and
 # the new pair takes effect at the next ordinary boot.
@@ -24,7 +26,7 @@ ASSETS="$ROOT/usr/share/baseos/boot-gzip"
 DISK="$ROOT/dev/mmcblk0"
 BOOT="$ROOT/dev/mmcblk0p4"
 SYS="$ROOT/sys"
-[ ! -e "$STATE/complete" ] || exit 0
+[ ! -e "$STATE/complete-60hz" ] || exit 0
 [ ! -s "$ROOT/run/usb-storage-device" ] || exit 0
 [ -f "$ASSETS/manifest" ] || exit 0
 # rcS can substitute tmpfs when userdata cannot mount. Backups on that fallback
@@ -72,10 +74,13 @@ if ! mkdir -p "$STATE" 2>/dev/null \
 	exit 0
 fi
 exec 3>>"$STATE/migration.log"
+# complete-60hz is the marker frontend-session tests: a card whose earlier
+# run left only complete runs once more to receive the 60 Hz package.
 complete() {
 	printf '%s\n' "$1" > "$STATE/complete.tmp" || return 1
 	sync
 	mv "$STATE/complete.tmp" "$STATE/complete" || return 1
+	: > "$STATE/complete-60hz" || return 1
 	sync
 }
 skip() {
@@ -101,7 +106,7 @@ for key in PACKAGE_OFFSET PACKAGE_SIZE BOOT_START BOOT_SECTORS BOOT_IMAGE_SIZE \
 	eval "value=\${BOOT_$key:-}"
 	case "$value" in ''|*[!0-9]*|0?*) defer "manifest has no usable BOOT_$key" ;; esac
 done
-for key in PACKAGE_SHA256 BOOT_IMAGE_SHA256 GZIP_PACKAGE_SHA256 GZIP_BOOT_IMAGE_SHA256 \
+for key in PACKAGE_SHA256 BOOT_IMAGE_SHA256 GZIP_PACKAGE_SHA256 GZIP_BOOT_IMAGE_SHA256 FAST_V1_PACKAGE_SHA256 \
 	ORIGINAL_PACKAGE_SHA256 ORIGINAL_BOOT_IMAGE_SHA256 ORIGINAL_BOOT_SHA256 \
 	BOOT0_BODY_SHA256; do
 	eval "value=\${BOOT_$key:-}"
@@ -201,6 +206,7 @@ previous_package=$(sha "$WORK/package.cur")
 previous_image=$(sha "$WORK/image.cur")
 case "$previous_package" in
 "$BOOT_PACKAGE_SHA256") package_state=fast ;;
+"$BOOT_FAST_V1_PACKAGE_SHA256") package_state=fast_v1 ;;
 "$BOOT_GZIP_PACKAGE_SHA256") package_state=gzip ;;
 "$BOOT_ORIGINAL_PACKAGE_SHA256") package_state=original ;;
 *) package_state=unknown ;;
@@ -224,6 +230,7 @@ fi
 # not a state this system could have booted from, so it is unknown firmware.
 case "$package_state/$image_state" in
 fast/fast) pair=fast ;;
+fast_v1/fast) pair=fast_v1 ;;
 gzip/gzip|gzip/fast|fast/gzip) pair=gzip ;;
 original/original) pair=original ;;
 *)

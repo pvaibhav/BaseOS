@@ -15,7 +15,17 @@
       "selector_context": "4ff400733046a4f85c30052384f85e30",
       "boot_partition_start": 303104,
       "boot_partition_sectors": 131072,
-      "boot_partition_sha256": "7a837121d6ae9ff1a782906ef9b3ee45fe5eb3b7cf7a204ba6417aa03eacdf88"
+      "boot_partition_sha256": "7a837121d6ae9ff1a782906ef9b3ee45fe5eb3b7cf7a204ba6417aa03eacdf88",
+      "panel_timing": {
+        "lcd_ht": [
+          606,
+          584
+        ],
+        "lcd_vt": [
+          686,
+          685
+        ]
+      }
     },
     "rg34xx": {
       "source_boot_prefix_sha256": "fb75bc4c835fa74ff41c0a1fdbe79b8871a960fc249716847fb7be529835c3c3",
@@ -60,7 +70,17 @@
       "selector_context": "4ff400733046a4f85c30052384f85e30",
       "boot_partition_start": 303104,
       "boot_partition_sectors": 131072,
-      "boot_partition_sha256": "73ee0ebeaacea1877e9b15d2534d6ef7606201e4c6a824e90e87e98fc809db61"
+      "boot_partition_sha256": "73ee0ebeaacea1877e9b15d2534d6ef7606201e4c6a824e90e87e98fc809db61",
+      "panel_timing": {
+        "lcd_ht": [
+          770,
+          759
+        ],
+        "lcd_vt": [
+          528,
+          527
+        ]
+      }
     },
     "rg35xxplus": {
       "source_boot_prefix_sha256": "9bab9c48f0888a8b9d1dc306d106f93eaf6313dd0b566abd58e24a718b2dbacc",
@@ -75,7 +95,17 @@
       "selector_context": "4ff400733046a4f85c30052384f85e30",
       "boot_partition_start": 303104,
       "boot_partition_sectors": 131072,
-      "boot_partition_sha256": "554f9d7f832c14201e835b5b4ad9378955fdba4b354561da819e1e85af7f11e4"
+      "boot_partition_sha256": "554f9d7f832c14201e835b5b4ad9378955fdba4b354561da819e1e85af7f11e4",
+      "panel_timing": {
+        "lcd_ht": [
+          770,
+          759
+        ],
+        "lcd_vt": [
+          526,
+          527
+        ]
+      }
     },
     "rg35xxpro": {
       "source_boot_prefix_sha256": "596e57cbb9a134328d4bbe7fc0dd69dfaeed413fe8d7747e209a55829d4c4fe2",
@@ -90,7 +120,17 @@
       "selector_context": "4ff400733046a4f85c30052384f85e30",
       "boot_partition_start": 303104,
       "boot_partition_sectors": 131072,
-      "boot_partition_sha256": "93f735d1224413510590211894fbb66101bce9762dd5d3692e37a50dfda77982"
+      "boot_partition_sha256": "93f735d1224413510590211894fbb66101bce9762dd5d3692e37a50dfda77982",
+      "panel_timing": {
+        "lcd_ht": [
+          770,
+          759
+        ],
+        "lcd_vt": [
+          528,
+          527
+        ]
+      }
     },
     "rg35xxsp": {
       "source_boot_prefix_sha256": "07e4d9fa0ad10620070072c2893f4f2c0eac19b3bf858915a8456c382a9679ca",
@@ -105,7 +145,17 @@
       "selector_context": "4ff400733046a4f85c30052384f85e30",
       "boot_partition_start": 303104,
       "boot_partition_sectors": 131072,
-      "boot_partition_sha256": "7de1d7ba4d0d2cb4e471dc92de55af1b614a275129d879360d18bac7ac82b261"
+      "boot_partition_sha256": "7de1d7ba4d0d2cb4e471dc92de55af1b614a275129d879360d18bac7ac82b261",
+      "panel_timing": {
+        "lcd_ht": [
+          720,
+          713
+        ],
+        "lcd_vt": [
+          560,
+          561
+        ]
+      }
     },
     "rg40xxh": {
       "source_boot_prefix_sha256": "06aeb355e0f653496933be280d681ecf705e68562247165c4f363ee827bab175",
@@ -120,7 +170,17 @@
       "selector_context": "4ff400733046a4f85c30052384f85e30",
       "boot_partition_start": 303104,
       "boot_partition_sectors": 131072,
-      "boot_partition_sha256": "da555b488b380bcf530939bf2899b038f778d4536ea3cdce00f0ef25a0c89c2c"
+      "boot_partition_sha256": "da555b488b380bcf530939bf2899b038f778d4536ea3cdce00f0ef25a0c89c2c",
+      "panel_timing": {
+        "lcd_ht": [
+          770,
+          759
+        ],
+        "lcd_vt": [
+          522,
+          527
+        ]
+      }
     },
     "rg40xxv": {
       "source_boot_prefix_sha256": "072382178fa744702bacee52f69fd082f23e4498413da15af5085980991a7616",
@@ -135,7 +195,17 @@
       "selector_context": "4ff400733046a4f85c30052384f85e30",
       "boot_partition_start": 303104,
       "boot_partition_sectors": 131072,
-      "boot_partition_sha256": "f34f60966500ca06a4a8bb1acb5ffd7c343dc4ef8192253d8b0dad09af9b47a6"
+      "boot_partition_sha256": "f34f60966500ca06a4a8bb1acb5ffd7c343dc4ef8192253d8b0dad09af9b47a6",
+      "panel_timing": {
+        "lcd_ht": [
+          770,
+          759
+        ],
+        "lcd_vt": [
+          522,
+          527
+        ]
+      }
     },
     "rgcubexx": {
       "source_boot_prefix_sha256": "7918b33f1af05930ead9de2f992a085ff0249275618239a621bf2a143c200dfe",

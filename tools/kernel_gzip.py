@@ -7,8 +7,9 @@ startup only waits for: the initramfs (an empty archive), kernel serial output
 and slow boot-time RCU grace periods (kernel arguments in the Android header),
 U-Boot/boot0 serial output (`debug_mode` 3 -> 0 in the TOC1 device tree and
 the boot0 header) and five USB host controllers (status "okay" -> "late" in
-that device tree; a module starts them once init is running). The package
-and boot image must be installed together. The earlier gzip-only pair is still
+that device tree; a module starts them once init is running). On targets with
+a `panel_timing` profile it also shortens the panel's front porches so it
+refreshes at 60 Hz. The package and boot image must be installed together. The earlier gzip-only pair is still
 derived so cards that carry it can be recognised. These are exact-firmware
 patches, not signatures to apply speculatively to another U-Boot build.
 """
@@ -37,6 +38,9 @@ BOOT0_OFFSET, BOOT0_SIZE, BOOT0_DEBUG, BOOT0_BODY = 8192, 65536, 0x34, 512
 LATE_USB = ("ehci1-controller@0x05200000", "ohci1-controller@0x05200400", "ohci2-controller@0x05310400",
             "ehci3-controller@0x05311000", "ohci3-controller@0x05311400")
 KEPT_USB = "ehci2-controller@0x05310000"
+# Panel timing node. lcd_ht/lcd_vt are the totals; the porches and sync widths
+# stay as the vendor set them, so only the front porches change.
+PANEL_NODE = "lcd0@01c0c000"
 # Android header command-line field (offset 0x40, 512 bytes, NUL padded).
 # U-Boot appends it to the kernel arguments; the kernel still prints panics.
 # loglevel=1 still prints a panic. The kernel waits several 10 ms ticks for
@@ -173,6 +177,23 @@ def derive(target: str, prefix: Path, catalog: Path = CATALOG) -> dict:
     require(quiet.isdisjoint(allowed) and changed(gzip_package, package) <= set(range(20, 24)) | quiet and
             changed(original_package, package) <= allowed | quiet,
             "patch changed bytes outside the instruction, debug_mode, USB status values and checksums")
+    fast_v1_package = bytes(package)
+    timing = profile.get("panel_timing", {})
+    require(set(timing) <= {"lcd_ht", "lcd_vt"}, "unknown panel timing value")
+    panel = set()
+    for prop, (active, porch) in (("lcd_ht", ("lcd_x", "lcd_hbp")), ("lcd_vt", ("lcd_y", "lcd_vbp"))):
+        if prop not in timing:
+            continue
+        old, new = timing[prop]
+        used = sum(struct.unpack(">I", fdt_edit.find(tree, PANEL_NODE, name)[1])[0] for name in (active, porch))
+        require(new > used, f"{prop} {new} leaves no front porch")
+        at = tree_start + fdt_edit.replace(tree, PANEL_NODE, prop, struct.pack(">I", old), struct.pack(">I", new))
+        panel |= set(range(at, at + 4))
+    package[tree_start:tree_start + tree_size] = tree
+    struct.pack_into("<I", package, 20, checksum(package, 20))
+    require(changed(fast_v1_package, package) <= set(range(20, 24)) | panel and
+            changed(original_package, package) <= allowed | quiet | panel,
+            "panel timing changed bytes outside lcd_ht, lcd_vt and the checksum")
 
     boot0 = bytearray(original_boot0)
     require(boot0[4:12] == b"eGON.BT0" and word(boot0, 0x10) == BOOT0_SIZE == len(boot0), "not the expected boot0")
@@ -217,7 +238,8 @@ def derive(target: str, prefix: Path, catalog: Path = CATALOG) -> dict:
                 original_package=original_package, original_boot=original_boot,
                 expected_boot=expected_boot, kernel=kernel, ramdisk=EMPTY_CPIO, dtb=dtb,
                 original_image=original_boot[:original_length], original_ramdisk=original_ramdisk,
-                gzip_package=gzip_package, gzip_boot=gzip_boot, boot0=bytes(boot0),
+                gzip_package=gzip_package, gzip_boot=gzip_boot, fast_v1_package=fast_v1_package,
+                boot0=bytes(boot0),
                 original_boot0=original_boot0, package_dtb=bytes(tree))
 
 
@@ -239,6 +261,8 @@ def prepare(target: str, prefix: Path, output: Path) -> dict:
         # The pair shipped before this one, and the vendor image, by image bytes
         # alone: what a card can hold at the start of p4 before migrating.
         "gzip_package_sha256": sha(change["gzip_package"]),
+        # The package shipped before 60 Hz panel timing, with the same boot image.
+        "fast_v1_package_sha256": sha(change["fast_v1_package"]),
         "gzip_boot_image_size": len(change["gzip_boot"]), "gzip_boot_image_sha256": sha(change["gzip_boot"]),
         "original_boot_image_size": len(change["original_image"]),
         "original_boot_image_sha256": sha(change["original_image"]),
