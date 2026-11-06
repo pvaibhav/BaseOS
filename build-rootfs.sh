@@ -88,6 +88,25 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   mv "$GPU.strip-debug" "$GPU"
   # alsa-lib plugin dir: drop static/libtool litter
   rm -f "$R"/usr/lib/aarch64-linux-gnu/alsa-lib/*.a "$R"/usr/lib/aarch64-linux-gnu/alsa-lib/*.la
+  # GNU tools for PortMaster ports. BaseOS scripts are written for BusyBox, so
+  # these leave /usr/bin and BusyBox gets its applet links back. bash and
+  # python3 stay in /usr/bin. frontend-session puts this directory on PATH.
+  GNU="$R/usr/lib/baseos-gnu/bin"
+  mkdir -p "$GNU"
+  for tool in basename cat chmod cp cut date df dirname du env file find gawk grep gzip \
+    head id killall ln ls md5sum mkdir mount mv pkill printf readlink realpath rm sed \
+    seq sha256sum sort stat tail tar timeout touch tr uname unzip wc xargs xz; do
+    [ -f "$R/usr/bin/$tool" ] && [ ! -L "$R/usr/bin/$tool" ] \
+      || { echo "FATAL: harvest lacks GNU $tool" >&2; exit 1; }
+    mv "$R/usr/bin/$tool" "$GNU/$tool"
+  done
+  ln -s gawk "$GNU/awk"
+  chroot "$R" /usr/bin/busybox --install -s
+  # Python development and test files, which no port uses.
+  rm -rf "$R"/usr/lib/python3.10/config-3.10-* "$R"/usr/lib/python3.10/test \
+    "$R"/usr/lib/python3.10/idlelib "$R"/usr/lib/python3.10/tkinter \
+    "$R"/usr/lib/python3.10/lib2to3 "$R"/usr/lib/python3.10/ensurepip \
+    "$R"/usr/lib/python3.10/pydoc_data "$R"/usr/lib/python3.10/turtledemo
   # The build is mandatory: do not silently ship only its userspace loader.
   install -m 644 /work/audio-module/h700_speaker_amp.ko "$R/usr/lib/modules/h700_speaker_amp.ko"
   # Starts the USB host controllers that the boot files hold back; see rcS.

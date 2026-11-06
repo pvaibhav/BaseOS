@@ -40,6 +40,7 @@ as harvested. See [boot performance](09-boot-profiling.md).
 | `/mnt/system` | Temporary read-only TF1 mount for configuration and update discovery when needed |
 | `/run`, `/tmp`, `/var`, `/dev/shm` | tmpfs runtime state |
 | `/mnt/vendor` | Compatibility files shipped in the rootfs; no vendor partition mounted here |
+| `/usr/lib/baseos-gnu/bin` | GNU tools from stock for PortMaster ports. First on the frontend's PATH; BaseOS scripts keep BusyBox in `/usr/bin` |
 
 The root filesystem is mounted read-write. On a card that still boots through
 the vendor initramfs, the initramfs mounts it that way. Otherwise the kernel
