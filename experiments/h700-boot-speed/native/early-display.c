@@ -102,12 +102,20 @@ static int prepare_panel(void)
 
 static void clean_pixels(size_t bytes)
 {
-    uint32_t ctr;
+    uintptr_t ctr;
+#ifdef __aarch64__
+    asm volatile("mrs %0, ctr_el0" : "=r"(ctr));
+#else
     asm volatile("mrc p15, 0, %0, c0, c0, 1" : "=r"(ctr));
+#endif
     uintptr_t line = (uintptr_t)4 << ((ctr >> 16) & 15);
     uintptr_t start = BASEOS_NATIVE_LOGO_PIXEL_ADDRESS;
     for (uintptr_t address = start & ~(line - 1); address < start + bytes; address += line)
+#ifdef __aarch64__
+        asm volatile("dc cvac, %0" :: "r"(address) : "memory");
+#else
         asm volatile("mcr p15, 0, %0, c7, c10, 1" :: "r"(address) : "memory");
+#endif
     asm volatile("dsb sy" ::: "memory");
 }
 

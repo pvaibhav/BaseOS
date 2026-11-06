@@ -233,13 +233,25 @@ int baseos_vendor_handoff(struct blk_desc *card, u32 *result, const u8 *stock)
         if (item->offset > BASEOS_FIRMWARE_BYTES || item->bytes > BASEOS_FIRMWARE_BYTES - item->offset) return -1;
         memcpy((void *)(ulong)item->destination, package + item->offset, item->bytes);
     }
+#ifdef BASEOS_MAINLINE
+    struct baseos_mainline_header *payload = (void *)BASEOS_NATIVE_IMAGE_ADDRESS;
+    if (!read_polled(card, BASEOS_IMAGE_SECTOR, 1, payload) ||
+        !baseos_payload_header(payload, baseos_generation)) return -1;
+    unsigned int image_bytes = payload->total;
+    if (!read_polled(card, BASEOS_IMAGE_SECTOR + 1, image_bytes / 512 - 1, (u8 *)payload + 512) ||
+        baseos_payload_hash((u8 *)payload + 512, image_bytes - 512) != payload->body_fnv) return -1;
+    unsigned int image_fnv = fnv((void *)payload, image_bytes);
+#else
     if (!read_polled(card, BASEOS_IMAGE_SECTOR, BASEOS_IMAGE_BYTES / 512, (void *)BASEOS_NATIVE_IMAGE_ADDRESS) ||
         fnv((void *)BASEOS_NATIVE_IMAGE_ADDRESS, BASEOS_IMAGE_BYTES) != BASEOS_IMAGE_FNV) return -1;
+    unsigned int image_bytes = BASEOS_IMAGE_BYTES, image_fnv = BASEOS_IMAGE_FNV;
+#endif
     asm volatile("mrs %0, cntpct_el0" : "=r"(loaded));
     panel_publish();
     baseos_checkpoint(card, 32);
-    u8 *uboot = (void *)0x4a000000, *monitor = (void *)0x48000000;
     const u32 *parameters = baseos_selected_vendor_params();
+#ifndef BASEOS_OPEN_FIRMWARE
+    u8 *uboot = (void *)0x4a000000, *monitor = (void *)0x48000000;
     memcpy(uboot + 0x30, parameters, 128);
     *(u32 *)(uboot + 0x4f8) = gd->ram_size >> 20;
     *(u32 *)(uboot + 0x4f4) = 0x140000;
@@ -250,6 +262,7 @@ int baseos_vendor_handoff(struct blk_desc *card, u32 *result, const u8 *stock)
     memcpy(monitor + 0x30, parameters, 128);
     memcpy(monitor + 0x24, board, 8);
     *(u32 *)(monitor + 0xb0) = 0x4a200000;
+#endif
     struct baseos_native_record *record = (void *)BASEOS_NATIVE_RECORD_ADDRESS;
     memset(record, 0, sizeof(*record));
     record->magic = BASEOS_NATIVE_MAGIC;
@@ -263,8 +276,8 @@ int baseos_vendor_handoff(struct blk_desc *card, u32 *result, const u8 *stock)
     record->dram_type = dram_probe_selected_type;
     memcpy(record->dram_words, parameters, 128);
     memcpy(record->board, board, 8);
-    record->image_bytes = BASEOS_IMAGE_BYTES;
-    record->image_fnv = BASEOS_IMAGE_FNV;
+    record->image_bytes = image_bytes;
+    record->image_fnv = image_fnv;
     memcpy(record->generation, baseos_generation, 32);
     record->boot_reason = boot_reason;
     record->boot_reason_source = boot_reason_source;
@@ -282,6 +295,12 @@ int baseos_vendor_handoff(struct blk_desc *card, u32 *result, const u8 *stock)
 #if !defined(BASEOS_PERSISTENT) && !defined(BASEOS_RAW_CAPSULE)
     writel(0x42530023, (void *)0x0700013c);
 #endif
+#ifdef BASEOS_OPEN_FIRMWARE
+    asm volatile("msr daifset, #15; dsb sy; isb; mov x0, %0; "
+                 "mov x1, xzr; mov x2, xzr; mov x3, xzr; br %1"
+                 :: "r"((ulong)BASEOS_NATIVE_RECORD_ADDRESS), "r"(0x4a000000ul)
+                 : "x0", "x1", "x2", "x3", "memory");
+#else
     ulong rvbar = (readl((void *)0x03000024) & 7) == 2 ? 0x08100040 : 0x09010040;
     writel(0x48000000, (void *)rvbar);
     writel(0, (void *)(rvbar + 4));
@@ -291,5 +310,6 @@ int baseos_vendor_handoff(struct blk_desc *card, u32 *result, const u8 *stock)
     asm volatile("dsb sy; isb; mov x0, %0; movz x1, #0x44; movk x1, #0x810, lsl #16; "
                  "mov x2, #3; mov x3, %1; msr rmr_el3, x2; isb; 1: wfi; b 1b"
                  :: "r"(0x48000000ul), "r"(rvbar + 4) : "x0", "x1", "x2", "x3", "memory");
+#endif
     return -1;
 }

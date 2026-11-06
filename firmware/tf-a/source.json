@@ -1,0 +1,30 @@
+{
+  "version": "2.15.0",
+  "repository": "https://github.com/TrustedFirmware-A/trusted-firmware-a.git",
+  "tag": "v2.15.0",
+  "tag_object": "9ad327a8d124ce82002614c23e33992d4de6f7cf",
+  "commit": "da738d5eae93af342fdc4995dd3c05acb4c9d757",
+  "tree": "9b8ab09105e08b5d3593813ec1442e28720e3c00",
+  "provenance": "Official project GitHub mirror; git ls-remote refs/tags/v2.15.0 and peeled tag, then git fsck and tree identity. Git object hashes, not an archive checksum or signature verification.",
+  "release": "https://www.trustedfirmware.org/blog/tf-a-v2_15",
+  "source_date_epoch": 1779985789,
+  "toolchain_image": "ghcr.io/loveretro/h700-toolchain@sha256:bf5d8f9f5442cad789aa77176bc059ec823caefa3258bf30780eee681c777119",
+  "make": {
+    "PLAT": "sun50i_h616",
+    "ARCH": "aarch64",
+    "RESET_TO_BL31": "1",
+    "DEBUG": "0",
+    "LOG_LEVEL": "20",
+    "ENABLE_ASSERTIONS": "1",
+    "SUNXI_PSCI_USE_NATIVE": "1",
+    "SUNXI_PSCI_USE_SCPI": "0",
+    "BUILD_STRING": "baseos-tfa-da738d5eae93",
+    "BUILD_MESSAGE_TIMESTAMP": "\"2026-05-28T16:29:49Z\"",
+    "SUNXI_AMEND_DTB": "1"
+  },
+  "patches": [
+    "0001-baseos-handoff.patch",
+    "0002-sunxi-reset-restart-wdog.patch"
+  ],
+  "baseos_include": "experiments/h700-mainline/include"
+}

@@ -1,0 +1,11 @@
+--- a/plat/allwinner/common/sunxi_native_pm.c
++++ b/plat/allwinner/common/sunxi_native_pm.c
+@@ -58,6 +58,8 @@
+ 	mmio_write_32(SUNXI_WDOG0_CFG_REG, 1);
+ 	/* Enable the watchdog with the shortest timeout (0.5 seconds) */
+ 	mmio_write_32(SUNXI_WDOG0_MODE_REG, (0 << 4) | 1);
++	/* Restart the counter after changing an already-running watchdog. */
++	mmio_write_32(SUNXI_WDOG0_CTRL_REG, (0xa57U << 1) | 1U);
+ 	/* Wait for twice the watchdog timeout before panicking */
+ 	mdelay(1000);
+ 

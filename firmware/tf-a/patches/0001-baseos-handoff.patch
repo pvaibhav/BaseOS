@@ -1,0 +1,332 @@
+--- a/plat/allwinner/common/include/sunxi_private.h
++++ b/plat/allwinner/common/include/sunxi_private.h
+@@ -50,19 +50,24 @@
+ int sunxi_init_platform_r_twi(uint16_t socid, bool use_rsb);
+ void sunxi_execute_arisc_code(uint32_t *code, size_t size, uint16_t param);
+ 
++struct baseos_bl31_handoff;
++const struct baseos_bl31_handoff *sunxi_baseos_handoff(void);
++void sunxi_baseos_validate_dtb(const void *fdt, size_t capacity);
++
+ #if SUNXI_AMEND_DTB
+-void sunxi_prepare_dtb(void *fdt);
++void sunxi_prepare_dtb(void *fdt, size_t capacity);
+ #else
+-static inline void sunxi_prepare_dtb(void *fdt)
++static inline void sunxi_prepare_dtb(void *fdt, size_t capacity)
+ {
+ }
+ #endif
+ 
+ #ifdef PLAT_sun50i_h616
+-void sunxi_soc_fdt_fixup(void *dtb);
++int sunxi_soc_fdt_fixup(void *dtb);
+ #else
+-static inline void sunxi_soc_fdt_fixup(void *dtb)
++static inline int sunxi_soc_fdt_fixup(void *dtb)
+ {
++	return 0;
+ }
+ #endif
+ 
+--- a/plat/allwinner/common/sunxi_bl31_setup.c
++++ b/plat/allwinner/common/sunxi_bl31_setup.c
+@@ -5,6 +5,8 @@
+  */
+ 
+ #include <assert.h>
++#include <string.h>
++#include <baseos-bl31-handoff.h>
+ 
+ #include <libfdt.h>
+ 
+@@ -38,43 +40,12 @@
+ 	.gicc_base = SUNXI_GICC_BASE,
+ };
+ 
+-/*
+- * Try to find a DTB loaded in memory by previous stages.
+- *
+- * At the moment we implement a heuristic to find the DTB attached to U-Boot:
+- * U-Boot appends its DTB to the end of the image. Assuming that BL33 is
+- * U-Boot, try to find the size of the U-Boot image to learn the DTB address.
+- * The generic ARMv8 U-Boot image contains the load address and its size
+- * as u64 variables at the beginning of the image. There might be padding
+- * or other headers before that data, so scan the first 2KB after the BL33
+- * entry point to find the load address, which should be followed by the
+- * size. Adding those together gives us the address of the DTB.
+- */
+-static void sunxi_find_dtb(void)
++/* Secure runtime state: never reread the nonsecure descriptor. */
++static struct baseos_bl31_handoff baseos_handoff __aligned(8);
++
++const struct baseos_bl31_handoff *sunxi_baseos_handoff(void)
+ {
+-	uint64_t *u_boot_base;
+-	int i;
+-
+-	u_boot_base = (void *)SUNXI_BL33_VIRT_BASE;
+-
+-	for (i = 0; i < 2048 / sizeof(uint64_t); i++) {
+-		void *dtb_base;
+-
+-		if (u_boot_base[i] != PRELOADED_BL33_BASE)
+-			continue;
+-
+-		/* Does the suspected U-Boot size look anyhow reasonable? */
+-		if (u_boot_base[i + 1] >= 256 * 1024 * 1024)
+-			continue;
+-
+-		/* end of the image: base address + size */
+-		dtb_base = (char *)u_boot_base + u_boot_base[i + 1];
+-
+-		if (fdt_check_header(dtb_base) == 0) {
+-			fdt = dtb_base;
+-			return;
+-		}
+-	}
++	return &baseos_handoff;
+ }
+ 
+ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
+@@ -83,6 +54,23 @@
+ 	/* Initialize the debug console as soon as possible */
+ 	console_16550_register(SUNXI_UART0_BASE, SUNXI_UART0_CLK_IN_HZ,
+ 			       SUNXI_UART0_BAUDRATE, &console);
++
++	/* Exact physical pointer check precedes every descriptor read.
++	 * Volatile aligned word loads bound the copy independently of memcpy. */
++	if (arg0 != BASEOS_HANDOFF_ADDRESS) {
++		ERROR("BaseOS: invalid descriptor address\n");
++		panic();
++	}
++	for (unsigned int i = 0; i < sizeof(baseos_handoff) / 8; i++) {
++		uint64_t word = ((const volatile uint64_t *)arg0)[i];
++		memcpy((char *)&baseos_handoff + i * 8, &word, 8);
++	}
++	if (!baseos_handoff_valid(&baseos_handoff, BL31_BASE, BL31_LIMIT) ||
++	    baseos_handoff.fdt != BASEOS_HANDOFF_FDT) {
++		ERROR("BaseOS: invalid handoff\n");
++		panic();
++	}
++	fdt = (void *)(uintptr_t)baseos_handoff.fdt;
+ 
+ #ifdef BL32_BASE
+ 	/* Populate entry point information for BL32 */
+@@ -97,7 +85,11 @@
+ 	 * Tell BL31 where the non-trusted software image
+ 	 * is located and the entry state information
+ 	 */
+-	bl33_image_ep_info.pc = PRELOADED_BL33_BASE;
++	bl33_image_ep_info.pc = baseos_handoff.ns_entry;
++	bl33_image_ep_info.args.arg0 = baseos_handoff.fdt;
++	bl33_image_ep_info.args.arg1 = 0;
++	bl33_image_ep_info.args.arg2 = 0;
++	bl33_image_ep_info.args.arg3 = 0;
+ 	bl33_image_ep_info.spsr = SPSR_64(MODE_EL2, MODE_SP_ELX,
+ 					  DISABLE_ALL_EXCEPTIONS);
+ 	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
+@@ -137,17 +129,7 @@
+ 
+ 	generic_delay_timer_init();
+ 
+-	sunxi_find_dtb();
+-	if (fdt) {
+-		const char *model;
+-		int length;
+-
+-		model = fdt_getprop(fdt, 0, "model", &length);
+-		NOTICE("BL31: Found U-Boot DTB at %p, model: %s\n", fdt,
+-		     model ?: "unknown");
+-	} else {
+-		NOTICE("BL31: No DTB found.\n");
+-	}
++	sunxi_baseos_validate_dtb(fdt, baseos_handoff.fdt_capacity);
+ 
+ 	/* Configure the interrupt controller */
+ 	gicv2_driver_init(&sunxi_gic_data);
+@@ -184,7 +166,7 @@
+ void bl31_plat_runtime_setup(void)
+ {
+ 	/* Change the DTB if the configuration requires so. */
+-	sunxi_prepare_dtb(fdt);
++	sunxi_prepare_dtb(fdt, baseos_handoff.fdt_capacity);
+ }
+ 
+ entry_point_info_t *bl31_plat_get_next_image_ep_info(uint32_t type)
+--- a/plat/allwinner/common/sunxi_prepare_dtb.c
++++ b/plat/allwinner/common/sunxi_prepare_dtb.c
+@@ -1,54 +1,75 @@
+ /*
+  * Copyright (c) 2021, ARM Limited. All rights reserved.
+- *
+  * SPDX-License-Identifier: BSD-3-Clause
+  */
+-
++#include <string.h>
+ #include <libfdt.h>
+-
++#include <baseos-bl31-handoff.h>
+ #include <common/debug.h>
+ #include <common/fdt_fixup.h>
+ #include <common/fdt_wrappers.h>
+-
+ #include <sunxi_private.h>
+ 
+-void sunxi_prepare_dtb(void *fdt)
++static void checked(int ret)
+ {
+-	int ret;
++	if (ret != 0) {
++		ERROR("BaseOS: devicetree error %d\n", ret);
++		panic();
++	}
++}
+ 
+-	if (fdt == NULL || fdt_check_header(fdt) != 0) {
+-		return;
++/* MMU on; descriptor bounds validated before any FDT access. */
++void sunxi_baseos_validate_dtb(const void *fdt, size_t capacity)
++{
++	int node = -1, len, ret;
++	const char *prop;
++
++	checked(fdt_check_header(fdt));
++	if (fdt_totalsize(fdt) > capacity) {
++		ERROR("BaseOS: devicetree exceeds capacity\n");
++		panic();
+ 	}
+-
+-	ret = fdt_open_into(fdt, fdt, 0x10000);
+-	if (ret < 0) {
+-		ERROR("Preparing devicetree at %p: error %d\n", fdt, ret);
+-		return;
++	checked(fdt_check_full(fdt, fdt_totalsize(fdt)));
++	int chosen = fdt_path_offset(fdt, "/chosen");
++	if (chosen < 0 ||
++	    fdt_getprop(fdt, chosen, "baseos,trial", &len) == NULL || len != 0) {
++		ERROR("BaseOS: missing trial marker\n");
++		panic();
+ 	}
+-
+-#ifdef SUNXI_BL31_IN_DRAM
+-	/* Reserve memory used by Trusted Firmware. */
+-	if (fdt_add_reserved_memory(fdt, "tf-a@40000000", BL31_BASE,
+-				    BL31_LIMIT - BL31_BASE)) {
+-		WARN("Failed to add reserved memory nodes to DT.\n");
+-	}
+-#endif
+-
+-	sunxi_soc_fdt_fixup(fdt);
+-
+-	if (sunxi_psci_is_scpi()) {
+-		ret = fdt_add_cpu_idle_states(fdt, sunxi_idle_states);
+-		if (ret < 0) {
+-			WARN("Failed to add idle states to DT: %d\n", ret);
++	/* Helper enforces trial/secmon/SMC. Defense in depth before PMIC code:
++	 * refuse any x-powers compatible under the SoC-WDT-only contract. */
++	while ((node = fdt_next_node(fdt, node, NULL)) >= 0) {
++		prop = fdt_getprop(fdt, node, "compatible", &len);
++		if (prop == NULL) {
++			checked(len == -FDT_ERR_NOTFOUND ? 0 : len);
++			continue;
++		}
++		for (int off = 0; off < len; off += ret + 1) {
++			const char *end = memchr(prop + off, 0, len - off);
++			if (end == NULL)
++				checked(-FDT_ERR_BADVALUE);
++			ret = end - (prop + off);
++			if (ret >= 9 && memcmp(prop + off, "x-powers,", 9) == 0) {
++				ERROR("BaseOS: PMIC forbidden in SoC-WDT trial\n");
++				panic();
++			}
+ 		}
+ 	}
++	checked(node == -FDT_ERR_NOTFOUND ? 0 : node);
++}
+ 
+-	ret = fdt_pack(fdt);
+-	if (ret < 0) {
+-		ERROR("Failed to pack devicetree at %p: error %d\n",
+-		      fdt, ret);
+-	}
+-
++void sunxi_prepare_dtb(void *fdt, size_t capacity)
++{
++	sunxi_baseos_validate_dtb(fdt, capacity);
++	checked(fdt_open_into(fdt, fdt, capacity));
++#ifdef SUNXI_BL31_IN_DRAM
++	checked(fdt_add_reserved_memory(fdt, "tf-a@40000000", BL31_BASE,
++				BL31_LIMIT - BL31_BASE));
++#endif
++	checked(sunxi_soc_fdt_fixup(fdt));
++	if (sunxi_psci_is_scpi())
++		checked(fdt_add_cpu_idle_states(fdt, sunxi_idle_states));
++	checked(fdt_pack(fdt));
++	checked(fdt_check_full(fdt, capacity));
+ 	clean_dcache_range((uintptr_t)fdt, fdt_blob_size(fdt));
+-	INFO("Changed devicetree.\n");
+ }
+--- a/plat/allwinner/sun50i_h616/platform.mk
++++ b/plat/allwinner/sun50i_h616/platform.mk
+@@ -23,3 +23,9 @@
+ 				drivers/allwinner/sunxi_rsb.c		\
+ 				drivers/mentor/i2c/mi2cv.c		\
+ 				${AW_PLAT}/${PLAT}/sunxi_h616_dtb.c
++
++# Consume the sole parent-owned ABI definition.
++ifndef BASEOS_INCLUDE
++$(error "BASEOS_INCLUDE must point to the parent-owned handoff header")
++endif
++PLAT_INCLUDES += -I${BASEOS_INCLUDE}
+--- a/plat/allwinner/sun50i_h616/sunxi_h616_dtb.c
++++ b/plat/allwinner/sun50i_h616/sunxi_h616_dtb.c
+@@ -35,7 +35,7 @@
+ 	return reg;
+ }
+ 
+-void sunxi_soc_fdt_fixup(void *dtb)
++int sunxi_soc_fdt_fixup(void *dtb)
+ {
+ 	int node = fdt_path_offset(dtb, "/cpus/cpu@0");
+ 	uint32_t phandle, ccsidr, cell;
+@@ -43,17 +43,17 @@
+ 	int ret;
+ 
+ 	if (node < 0) {
+-		return;
++		return node;
+ 	}
+ 
+ 	ret = fdt_read_uint32(dtb, node, "next-level-cache", &phandle);
+ 	if (ret != 0) {
+-		return;
++		return ret;
+ 	}
+ 
+ 	node = fdt_node_offset_by_phandle(dtb, phandle);
+ 	if (node < 0) {
+-		return;
++		return node;
+ 	}
+ 
+ 	ccsidr = armv8_get_ccsidr(CACHE_L2U);
+@@ -62,11 +62,15 @@
+ 	assoc = ((ccsidr >> CCSIDR_ASSOC_SHIFT) & CCSIDR_ASSOC_MASK) + 1;
+ 
+ 	cell = cpu_to_fdt32(sets);
+-	fdt_setprop(dtb, node, "cache-sets", &cell, sizeof(cell));
++	ret = fdt_setprop(dtb, node, "cache-sets", &cell, sizeof(cell));
++	if (ret != 0)
++		return ret;
+ 
+ 	cell = cpu_to_fdt32(line_size);
+-	fdt_setprop(dtb, node, "cache-line-size", &cell, sizeof(cell));
++	ret = fdt_setprop(dtb, node, "cache-line-size", &cell, sizeof(cell));
++	if (ret != 0)
++		return ret;
+ 
+ 	cell = cpu_to_fdt32(sets * assoc * line_size);
+-	fdt_setprop(dtb, node, "cache-size", &cell, sizeof(cell));
++	return fdt_setprop(dtb, node, "cache-size", &cell, sizeof(cell));
+ }

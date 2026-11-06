@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a pinned mainline SPL pre-DRAM SD control; it writes only scratch."""
 import argparse
+import re
 import hashlib
 import json
 import re
@@ -119,10 +120,12 @@ def native_dram(source, header):
 
 
 def main(output: Path, boot0: Path | None = None, dram: bool = False, package: Path | None = None, trace=False,
-         native_loader: Path | None = None, persistent: bool = False, raw_capsule: bool = False):
-    archive = PARENT / "u-boot-v2026.10.tar.gz"
+         native_loader: Path | None = None, persistent: bool = False, raw_capsule: bool = False,
+         archive_path: Path | None = None, output_root: Path | None = None, docker_image: str | None = None, docker_build_deps: bool = False, open_firmware: bool = False):
+    assert not open_firmware or raw_capsule, "open firmware requires raw capsule adoption"
+    archive = archive_path or PARENT / "u-boot-v2026.10.tar.gz"
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == PIN
-    assert output.parent.resolve() == PARENT and not output.exists(), "choose a fresh directory under mainline/"
+    assert output.parent.resolve() == (output_root or PARENT).resolve() and not output.exists(), "choose a fresh directory under mainline/"
     output.mkdir()
     with tarfile.open(archive) as tar: tar.extractall(output, filter="data")
     source = output / "u-boot-2026.10"
@@ -146,6 +149,11 @@ def main(output: Path, boot0: Path | None = None, dram: bool = False, package: P
     if native_loader:
         assert package and not trace
         native_manifest = json.loads((native_loader / "manifest.json").read_text())
+        assert (native_manifest.get("firmware_kind") == "baseos-open-tfa") == open_firmware
+        if open_firmware:
+            regions = native_manifest["firmware_regions"]
+            assert len(regions) == 2 and [r["destination"] for r in regions] == [0x40000000, 0x4a000000]
+            assert all(r["offset"] % 512 == 0 for r in regions)
         assert bool(native_manifest.get("persistent_boot")) == (persistent or raw_capsule), "native generation/persistent policy mismatch"
         if persistent: assert native_manifest["persistent_boot"]["version"] == 1, "raw generation requires --raw-capsule"
         native_header = (native_loader / "native-generated.h").read_bytes()
@@ -226,9 +234,14 @@ def main(output: Path, boot0: Path | None = None, dram: bool = False, package: P
     assert body.count("\tsunxi_board_init();") == 1
     body = body.replace("\tsunxi_board_init();", "\tbaseos_early_mmc();\n\tsunxi_board_init();")
     board.write_text(body)
-    mount = "/work/" + output.name + "/u-boot-2026.10"
+    mount = ("/build" if docker_image else "/work/" + output.name) + "/u-boot-2026.10"
+    def docker(command, **kwargs):
+        prefix = (["docker", "run", "--rm", *([] if docker_build_deps else ["--network=none"]), "-v", str(output) + ":/build", docker_image]
+                  if docker_image else ["docker", "exec", "baseos-h700-mainline"])
+        return subprocess.run(prefix + command, check=True, **kwargs)
     flags = f"-DBASEOS_BOOT0_FNV=0x{fnv(backup):08x}u" + (" -DBASEOS_DRAM_CONTROL=1" if dram else "")
     if package: flags += f" -DBASEOS_VENDOR_HANDOFF=1 -DBASEOS_TOC_FNV=0x{fnv(package.read_bytes()):08x}u"
+    if open_firmware: flags += " -DBASEOS_OPEN_FIRMWARE=1"
     if trace:
         assert package, "trace requires the monitor handoff"
         flags += " -DBASEOS_TRACE_HANDOFF=1"
@@ -250,17 +263,20 @@ cd {mount}
 scripts/config --set-val SPL_BSS_START_ADDR 0x30000 --set-val SPL_BSS_MAX_SIZE 0x4000 --enable SPL_MMC_WRITE
 scripts/config --disable AXP_DISABLE_BOOT_ON_POWERON
 make CROSS_COMPILE=aarch64-linux-gnu- olddefconfig >> ../configure.log 2>&1
-make HOSTCC=/usr/bin/gcc HOSTCXX=/usr/bin/g++ CROSS_COMPILE=aarch64-linux-gnu- KCFLAGS='{flags}' -j8 spl/u-boot-spl.bin > ../build.log 2>&1
+make NO_PYTHON=1 HOSTCC=/usr/bin/gcc HOSTCXX=/usr/bin/g++ CROSS_COMPILE=aarch64-linux-gnu- KCFLAGS='{flags}' -j8 spl/u-boot-spl.bin > ../build.log 2>&1
 '''
     if raw_capsule:
         command = command.replace("--enable SPL_MMC_WRITE", "--disable SPL_MMC_WRITE")
     (output / "build.sh").write_text(command)
-    subprocess.run(["docker", "exec", "baseos-h700-mainline", "/bin/sh", "-euc", command], check=True)
+    setup = "apt-get update -qq && apt-get install -y -qq flex bison bc libelf-dev libssl-dev libgnutls28-dev\n" if docker_build_deps else ""
+    docker(["/bin/sh", "-euc", setup + command])
     blob = (source / "spl/sunxi-spl.bin").read_bytes()
-    symbols = subprocess.run(["docker", "exec", "baseos-h700-mainline", "aarch64-linux-gnu-nm", "-n",
-                              mount + "/spl/u-boot-spl"], check=True, capture_output=True, text=True).stdout
+    symbols = docker(["aarch64-linux-gnu-nm", "-n", mount + "/spl/u-boot-spl"], capture_output=True, text=True).stdout
     (output / "symbols.txt").write_text(symbols)
     assert len(blob) <= 0xc000
+    if open_firmware:
+        end = int(re.search(r"^([0-9a-f]+) [A-Za-z] __image_copy_end$", symbols, re.M)[1], 16)
+        assert 0x2c000 - end >= 1024, "U2 requires 1 KiB SPL slack"
     (output / "spl.bin").write_bytes(blob)
     report = {"upstream_archive_sha256": PIN, "spl_sha256": hashlib.sha256(blob).hexdigest(),
               "spl_bytes": len(blob), "entry": "0x20060", "bss": "0x30000",
@@ -293,6 +309,10 @@ make HOSTCC=/usr/bin/gcc HOSTCXX=/usr/bin/g++ CROSS_COMPILE=aarch64-linux-gnu- K
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--archive", type=Path, help="read-only pinned archive, reused in place")
+    parser.add_argument("--output-root", type=Path, help="explicit fresh output parent")
+    parser.add_argument("--docker-build-deps", action="store_true", help="install build deps only inside disposable build container")
+    parser.add_argument("--docker-image", help="disposable container with only output mounted writable")
     parser.add_argument("--boot0", type=Path)
     parser.add_argument("--dram", action="store_true")
     parser.add_argument("--handoff-package", type=Path)
@@ -300,6 +320,7 @@ if __name__ == "__main__":
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--raw-capsule", action="store_true", help="adopt the exact outer-owned attempt; no journal/resume/media writes")
     mode.add_argument("--persistent", action="store_true", help="immutable journal, RTC attempt, failure-only recovery; acceptance required")
+    parser.add_argument("--open-firmware", action="store_true")
     parser.add_argument("--native-loader", type=Path)
     args = parser.parse_args()
-    main(args.output.resolve(), args.boot0, args.dram, args.handoff_package, args.trace_handoff, args.native_loader, persistent=args.persistent, raw_capsule=args.raw_capsule)
+    main(args.output.resolve(), args.boot0, args.dram, args.handoff_package, args.trace_handoff, args.native_loader, persistent=args.persistent, raw_capsule=args.raw_capsule, archive_path=args.archive, output_root=args.output_root, docker_image=args.docker_image, docker_build_deps=args.docker_build_deps, open_firmware=args.open_firmware)

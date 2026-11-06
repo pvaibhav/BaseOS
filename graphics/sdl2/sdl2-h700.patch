@@ -1,0 +1,232 @@
+diff --git a/src/core/linux/SDL_evdev_capabilities.c b/src/core/linux/SDL_evdev_capabilities.c
+index a1c4468b..0e56173b 100644
+--- a/src/core/linux/SDL_evdev_capabilities.c
++++ b/src/core/linux/SDL_evdev_capabilities.c
+@@ -104,6 +104,17 @@ SDL_EVDEV_GuessDeviceClass(const unsigned long bitmask_ev[NBITS(EV_MAX)],
+         //}
+     }
+ 
++    /* The Batocera patches above removed heuristic joystick detection (they
++       classify via udev instead), but this build has no libudev, so the
++       fallback enumeration in SDL_sysjoystick.c depends on this function.
++       Gamepad/joystick buttons are enough to classify the H700 built-in
++       controls, which expose no ABS_X/ABS_Y. */
++    if (test_bit(EV_KEY, bitmask_ev) &&
++        (test_bit(BTN_GAMEPAD, bitmask_key) ||
++         test_bit(BTN_JOYSTICK, bitmask_key))) {
++        devclass |= SDL_UDEV_DEVICE_JOYSTICK; /* ID_INPUT_JOYSTICK */
++    }
++
+     if (test_bit(EV_REL, bitmask_ev) &&
+         test_bit(REL_X, bitmask_rel) && test_bit(REL_Y, bitmask_rel) &&
+         test_bit(BTN_MOUSE, bitmask_key)) {
+diff --git a/src/joystick/SDL_gamecontroller.c b/src/joystick/SDL_gamecontroller.c
+index c6b57a87..a7373187 100644
+--- a/src/joystick/SDL_gamecontroller.c
++++ b/src/joystick/SDL_gamecontroller.c
+@@ -1879,6 +1879,14 @@ int SDL_GameControllerInitMappings(void)
+ 
+     SDL_AssertJoysticksLocked();
+ 
++    /* This fork does not load s_ControllerMappings. Add NextUI's mapping for the
++       H700 built-in pad (the GUID tagged by H700_IsBuiltinPad() in
++       linux/SDL_sysjoystick.c) at default priority, so file, hint and application
++       mappings still override. Positional, like SDL's own database: a is the
++       bottom face button, which is labelled B. */
++    SDL_PrivateGameControllerAddMapping("19000000010000000100000000016e01,ANBERNIC-keys,a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5,back:b6,start:b7,guide:b8,leftstick:b9,rightstick:b10,lefttrigger:a2,righttrigger:a5,leftx:a0,lefty:a1,rightx:a3,righty:a4,dpup:h0.1,dpright:h0.2,dpdown:h0.4,dpleft:h0.8,platform:Linux,",
++                                        SDL_CONTROLLER_MAPPING_PRIORITY_DEFAULT);
++
+     //pMappingString = s_ControllerMappings[i];
+     //while (pMappingString) {
+     //    SDL_PrivateGameControllerAddMapping(pMappingString, SDL_CONTROLLER_MAPPING_PRIORITY_DEFAULT);
+diff --git a/src/joystick/linux/SDL_sysjoystick.c b/src/joystick/linux/SDL_sysjoystick.c
+index c11fb9cd..cff258ea 100644
+--- a/src/joystick/linux/SDL_sysjoystick.c
++++ b/src/joystick/linux/SDL_sysjoystick.c
+@@ -229,11 +229,123 @@ static int GuessIsJoystick(int fd)
+     return 0;
+ }
+ 
++/* H700 (Anbernic RG XX) built-in pad. "ANBERNIC-keys" numbers its buttons
++   sequentially from 304 whatever their Linux meaning (314 is BTN_SELECT in
++   input.h but L2 here), and which codes exist depends on the model. Give it one
++   fixed layout on every model, matching TrimUI "Player1" and Xbox 360 raw
++   indices, under a tagged GUID so that mappings written for the old ascending
++   layout cannot match. SDL_JOYSTICK_H700_FIXED_LAYOUT=0 restores that layout. */
++#define H700_KEY_L2   314
++#define H700_KEY_R2   315
++#define H700_NBUTTONS 15 /* 11 and 12 are reserved and never fire */
++/* Tagged by IsJoystick(). Pads without vendor or product IDs get a name-only GUID,
++   where byte 14 is a letter of the name but byte 15 is always 0. */
++#define H700_IS_BUILTIN(joystick) \
++    ((joystick)->hwdata->guid.data[14] == 'n' && (joystick)->hwdata->guid.data[15] == 1)
++
++enum
++{
++    H700_AXIS_LX,
++    H700_AXIS_LY,
++    H700_AXIS_LT, /* synthesised from H700_KEY_L2 */
++    H700_AXIS_RX,
++    H700_AXIS_RY,
++    H700_AXIS_RT, /* synthesised from H700_KEY_R2 */
++    H700_NAXES
++};
++
++static const struct
++{
++    int code;
++    Uint8 index;
++} h700_buttons[] = {
++    { 305, 0 },  /* B (south) */
++    { 304, 1 },  /* A (east) */
++    { 306, 2 },  /* Y (west) */
++    { 307, 3 },  /* X (north) */
++    { 308, 4 },  /* L1 */
++    { 309, 5 },  /* R1 */
++    { 310, 6 },  /* SELECT */
++    { 311, 7 },  /* START */
++    { 312, 8 },  /* MENU */
++    { 313, 9 },  /* L3 */
++    { 316, 10 }, /* R3 */
++    { 114, 13 }, /* VOL- */
++    { 115, 14 }, /* VOL+ */
++}, h700_axes[] = {
++    { ABS_Z, H700_AXIS_LX },
++    { ABS_RX, H700_AXIS_LY },
++    { ABS_RY, H700_AXIS_RX },
++    { ABS_RZ, H700_AXIS_RY },
++};
++
++static SDL_bool H700_IsBuiltinPad(const struct input_id *inpid, const char *name)
++{
++    return (inpid->bustype == BUS_HOST && inpid->vendor == 1 && inpid->product == 1 &&
++            SDL_strcmp(name, "ANBERNIC-keys") == 0 &&
++            SDL_GetHintBoolean("SDL_JOYSTICK_H700_FIXED_LAYOUT", SDL_TRUE)) ? SDL_TRUE : SDL_FALSE;
++}
++
++/* Replaces the ascending key loop and the generic axis loop. Keys left out of
++   h700_buttons keep key_map 0xFF, which SDL ignores: KEY_ESC, the KEY_GOTO pulse
++   after a MENU tap, and L2/R2, which H700_Trigger reports as axes instead. */
++static void H700_ConfigJoystick(SDL_Joystick *joystick, int fd, const unsigned long *keybit,
++                                const unsigned long *absbit)
++{
++    size_t i;
++
++    for (i = 0; i < SDL_arraysize(h700_buttons); ++i) {
++        const int code = h700_buttons[i].code;
++        if (test_bit(code, keybit)) {
++            joystick->hwdata->key_map[code] = h700_buttons[i].index;
++            joystick->hwdata->has_key[code] = SDL_TRUE;
++        }
++    }
++    joystick->nbuttons = H700_NBUTTONS;
++
++    for (i = 0; i < SDL_arraysize(h700_axes); ++i) {
++        const int code = h700_axes[i].code;
++        struct axis_correct *correct = &joystick->hwdata->abs_correct[code];
++        struct input_absinfo absinfo;
++
++        if (!test_bit(code, absbit) || ioctl(fd, EVIOCGABS(code), &absinfo) < 0) {
++            continue;
++        }
++        joystick->hwdata->abs_map[code] = h700_axes[i].index;
++        joystick->hwdata->has_abs[code] = SDL_TRUE;
++
++        /* Trust absinfo only for a plausible centred stick range; otherwise use
++           the +/-4096 NextUI's platform.c assumes (this also covers the RG SP's
++           phantom -1..1 axes). */
++        if (absinfo.minimum < 0 && absinfo.maximum > 0 && absinfo.maximum - absinfo.minimum >= 512) {
++            correct->minimum = absinfo.minimum;
++            correct->maximum = absinfo.maximum;
++        } else {
++            correct->minimum = -4096;
++            correct->maximum = 4096;
++        }
++        correct->scale = (float)(SDL_JOYSTICK_AXIS_MAX - SDL_JOYSTICK_AXIS_MIN) /
++                         (float)(correct->maximum - correct->minimum);
++    }
++    joystick->naxes = H700_NAXES;
++}
++
++/* L2 and R2 are keys on this pad; report them as trigger axes. SDL drops
++   autorepeat (value 2) as a repeated axis value. */
++static void H700_Trigger(SDL_Joystick *joystick, int code, int pressed)
++{
++    if (code == H700_KEY_L2 || code == H700_KEY_R2) {
++        SDL_PrivateJoystickAxis(joystick, code == H700_KEY_L2 ? H700_AXIS_LT : H700_AXIS_RT,
++                                pressed ? SDL_JOYSTICK_AXIS_MAX : SDL_JOYSTICK_AXIS_MIN);
++    }
++}
++
+ static int IsJoystick(const char *path, int fd, char **name_return, SDL_JoystickGUID *guid)
+ {
+     struct input_id inpid;
+     char *name;
+     char product_string[128];
++    SDL_bool h700;
+ 
+     if (ioctl(fd, JSIOCGNAME(sizeof(product_string)), product_string) >= 0) {
+         SDL_zero(inpid);
+@@ -272,7 +384,9 @@ static int IsJoystick(const char *path, int fd, char **name_return, SDL_Joystick
+     SDL_Log("Joystick: %s, bustype = %d, vendor = 0x%.4x, product = 0x%.4x, version = %d\n", name, inpid.bustype, inpid.vendor, inpid.product, inpid.version);
+ #endif
+ 
+-    *guid = SDL_CreateJoystickGUID(inpid.bustype, inpid.vendor, inpid.product, inpid.version, name, 0, 0);
++    h700 = H700_IsBuiltinPad(&inpid, name);
++    *guid = SDL_CreateJoystickGUID(inpid.bustype, inpid.vendor, inpid.product, inpid.version, name,
++                                   h700 ? 'n' : 0, h700 ? 1 : 0);
+ 
+     if (SDL_ShouldIgnoreJoystick(name, *guid)) {
+         SDL_free(name);
+@@ -988,9 +1102,10 @@ static void ConfigJoystick(SDL_Joystick *joystick, int fd)
+     if ((ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keybit)), keybit) >= 0) &&
+         (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(absbit)), absbit) >= 0) &&
+         (ioctl(fd, EVIOCGBIT(EV_REL, sizeof(relbit)), relbit) >= 0)) {
++        const SDL_bool h700 = H700_IS_BUILTIN(joystick);
+ 
+         /* Get the number of buttons, axes, and other thingamajigs */
+-      for (i = 0; i < KEY_MAX; ++i) {
++      for (i = 0; i < KEY_MAX && !h700; ++i) {
+             if (test_bit(i, keybit)) {
+ #ifdef DEBUG_INPUT_EVENTS
+                 SDL_Log("Joystick has button: 0x%x\n", i);
+@@ -1038,7 +1153,7 @@ static void ConfigJoystick(SDL_Joystick *joystick, int fd)
+                 ++joystick->nhats;
+             }
+         }
+-        for (i = 0; i < ABS_MISC; ++i) {
++        for (i = 0; i < ABS_MISC && !h700; ++i) {
+             /* Skip digital hats */
+             if (i >= ABS_HAT0X && i <= ABS_HAT3Y && joystick->hwdata->has_hat[(i - ABS_HAT0X) / 2]) {
+                 continue;
+@@ -1082,6 +1197,9 @@ static void ConfigJoystick(SDL_Joystick *joystick, int fd)
+                 ++joystick->naxes;
+             }
+         }
++        if (h700) {
++            H700_ConfigJoystick(joystick, fd, keybit, absbit);
++        }
+         if (test_bit(REL_X, relbit) || test_bit(REL_Y, relbit)) {
+             ++joystick->nballs;
+         }
+@@ -1480,6 +1598,10 @@ static void PollAllValues(SDL_Joystick *joystick)
+                                           joystick->hwdata->key_map[i], value);
+             }
+         }
++        if (H700_IS_BUILTIN(joystick)) {
++            H700_Trigger(joystick, H700_KEY_L2, test_bit(H700_KEY_L2, keyinfo));
++            H700_Trigger(joystick, H700_KEY_R2, test_bit(H700_KEY_R2, keyinfo));
++        }
+     }
+ 
+     /* Joyballs are relative input, so there's no poll state. Events only! */
+@@ -1511,6 +1633,9 @@ static void HandleInputEvents(SDL_Joystick *joystick)
+ 
+             switch (events[i].type) {
+             case EV_KEY:
++                if (H700_IS_BUILTIN(joystick)) {
++                    H700_Trigger(joystick, code, events[i].value);
++                }
+                 SDL_PrivateJoystickButton(joystick,
+                                           joystick->hwdata->key_map[code],
+                                           events[i].value);

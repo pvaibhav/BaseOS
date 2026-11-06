@@ -1,0 +1,35 @@
+{
+  "container": "baseos-portmaster-builder@sha256:a54a4a1ac8a76ed05d30702214f99291452dd5a99830c5dc6178a8a7afa533c1",
+  "container_id": "sha256:a54a4a1ac8a76ed05d30702214f99291452dd5a99830c5dc6178a8a7afa533c1",
+  "sources": [
+    {
+      "name": "mesa-26.2.5",
+      "url": "https://archive.mesa3d.org/mesa-26.2.5.tar.xz",
+      "sha256": "794b3d1729075dae7ebd47c7283b7ca0cdb5dec668f7f11cc0a5d82f6138a0a5",
+      "checksum_source": "https://docs.mesa3d.org/relnotes/26.2.5.html",
+      "tree_sha256": "36f705f10740aa572c3361d355da42e51dd3ce0dec3b5c45794efa240f0f676c"
+    },
+    {
+      "name": "libdrm-2.4.125",
+      "url": "https://dri.freedesktop.org/libdrm/libdrm-2.4.125.tar.xz",
+      "sha256": "d4bae92797a50f81a93524762e0410a49cd84cfa0f997795bc0172ac8fb1d96a",
+      "checksum_source": "https://lists.x.org/archives/xorg-announce/2025-June/003606.html",
+      "tree_sha256": "f17d00522ebcbf95eaed614375f3e2ec6bc670f3f8feabd10df6d8b5fb3dad41"
+    },
+    {
+      "name": "SPIRV-Tools-2024.1",
+      "url": "https://codeload.github.com/KhronosGroup/SPIRV-Tools/tar.gz/refs/tags/v2024.1",
+      "sha256": "137780e2a8b5c722888f9ec0fb553e6e92f38a0a5c7fcdad9b715152448b9d82",
+      "scope": "build-only",
+      "tree_sha256": "16d3268d27c90a21d2cdff047667ba64f973e81f38b24cee54be0bd36a80ff0c"
+    },
+    {
+      "name": "SPIRV-Headers-8b246ff75c6615ba4532fe4fde20f1be090c3764",
+      "url": "https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/8b246ff75c6615ba4532fe4fde20f1be090c3764",
+      "sha256": "cfeed5f9a97d12a9761a26e7f5bd10fedb1a8ce92033075151ae3bc7206fc229",
+      "scope": "build-only",
+      "revision_source": "https://raw.githubusercontent.com/KhronosGroup/SPIRV-Tools/v2024.1/DEPS",
+      "tree_sha256": "fd5bf10dfe645217bfb6ec6e29e67f0f84eea00c93f0b3622645d5ad7301e7b4"
+    }
+  ]
+}

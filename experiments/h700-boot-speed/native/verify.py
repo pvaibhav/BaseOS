@@ -61,10 +61,10 @@ def logo_pixels(bmp, width, height):
     return bytes(pixels)
 
 
-def verify_logo(machine, sym, manifest, tree, directory):
+def verify_logo(machine, sym, manifest, tree, directory, prepared_work=None):
     assert "baseos_prepare_logo" in sym, "missing noinline linked logo producer"
     root = Path(__file__).resolve().parents[3]
-    fixture_path = root / "work" / manifest["target"] / "bootlogo.bmp"
+    fixture_path = (prepared_work or root / "work") / manifest["target"] / "bootlogo.bmp"
     bmp = fixture_path.read_bytes()
     width, height = manifest["boot_logo"]["width"], manifest["boot_logo"]["height"]
     assert bmp[:2] == b"BM" and struct.unpack_from("<I", bmp, 2)[0] == len(bmp)
@@ -215,7 +215,7 @@ def verify_logo(machine, sym, manifest, tree, directory):
         machine.mem_write(descriptor_address, bytes(16))
         machine.mem_write(0x4a300300, bytes(80))
     return dict(passed=True, linked_symbol="baseos_prepare_logo", linked_symbol_address=hex(sym["baseos_prepare_logo"]),
-                fixture_path=str(fixture_path.relative_to(root)), fixture_sha256=hashlib.sha256(bmp).hexdigest(), fixture_bytes=len(bmp),
+                fixture_path=str(fixture_path), fixture_sha256=hashlib.sha256(bmp).hexdigest(), fixture_bytes=len(bmp),
                 width=width, height=height, pixel_address=hex(pixel_address), pixel_bytes=len(expected_pixels),
                 descriptor_address=hex(descriptor_address), bmp_address=hex(bmp_address), capacity_bytes=capacity,
                 descriptor_sha256=hashlib.sha256(actual_descriptor).hexdigest(),
@@ -226,12 +226,12 @@ def verify_logo(machine, sym, manifest, tree, directory):
                 hardware_boot=False, kernel_decode_repeated=False)
 
 
-def verify_display(machine, sym, manifest, tree, directory, record, ticks):
+def verify_display(machine, sym, manifest, tree, directory, record, ticks, prepared_work=None):
     """Exercise the linked ready-state boundary, cached panel, and warm FDT producer."""
     assert "baseos_native_display_state" in sym and "make_command_line" in sym
     root = Path(__file__).resolve().parents[3]
     width, height = manifest["boot_logo"]["width"], manifest["boot_logo"]["height"]
-    fixture_path = root / "work" / manifest["target"] / "bootlogo.bmp"
+    fixture_path = (prepared_work or root / "work") / manifest["target"] / "bootlogo.bmp"
     bmp = fixture_path.read_bytes()
     pixels = logo_pixels(bmp, width, height)
     display_address, descriptor_address = 0x4a300300, 0x4a300200
@@ -386,7 +386,7 @@ def verify_display(machine, sym, manifest, tree, directory, record, ticks):
                 hardware_boot=False)
 
 
-def verify(directory, inventory, spl=None, prepared_source=False):
+def verify(directory, inventory, spl=None, prepared_source=False, prepared_work=None):
     manifest = json.loads((directory / "manifest.json").read_text())
     inventory_manifest = json.loads((inventory / "inventory.json").read_text())
     serial = "1c00103dc2840671ed3" if prepared_source else inventory_manifest["serial"]
@@ -783,9 +783,9 @@ def verify(directory, inventory, spl=None, prepared_source=False):
         m.mem_write(0x4a300000, bytes(record))
     verified_tree = bytes(m.mem_read(0x44000000, 0x100000))
     (directory / "verified-kernel.dtb").write_bytes(verified_tree)
-    logo = verify_logo(m, sym, manifest, verified_tree, directory)
+    logo = verify_logo(m, sym, manifest, verified_tree, directory, prepared_work)
     logo["missing_logo_main_call_verified"] = True
-    early_display = verify_display(m, sym, manifest, verified_tree, directory, record, ticks)
+    early_display = verify_display(m, sym, manifest, verified_tree, directory, record, ticks, prepared_work)
     logo["prepared_fdt_sha256"] = hashlib.sha256((directory / "verified-logo-kernel.dtb").read_bytes()).hexdigest()
     report = {"passed": True, "loader_sha256": manifest["loader_sha256"],
               "image_sha256": manifest["image_sha256"], "kernel_sha256": hashlib.sha256(expected_kernel).hexdigest(),
@@ -831,5 +831,7 @@ if __name__ == "__main__":
     parser.add_argument("--spl", type=Path)
     parser.add_argument("--prepared-source", action="store_true",
                         help="use the prepared source FDT only; do not claim a live-device comparison")
+    parser.add_argument("--prepared-work", type=Path,
+                        help="read existing logo fixtures here without copying them into this checkout")
     args = parser.parse_args()
-    verify(args.directory, args.inventory, args.spl, args.prepared_source)
+    verify(args.directory, args.inventory, args.spl, args.prepared_source, args.prepared_work)

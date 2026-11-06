@@ -9,7 +9,11 @@
 #include "native-display.h"
 #include "native-panel.h"
 #include "lz4-stream.h"
+#include "native-checks.h"
 #include "boot-logo-pixels.h"
+#ifdef BASEOS_MAINLINE
+#include "mainline-fdt.h"
+#endif
 #ifdef BASEOS_NATIVE_DIAGNOSTIC
 #include "native-trace-constants.h"
 #endif
@@ -49,19 +53,6 @@ static void checkpoint(unsigned stage)
 #endif
 }
 
-static uint32_t little32(const unsigned char *p)
-{
-    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
-}
-
-static uint32_t record_hash(const struct baseos_native_record *record)
-{
-    const unsigned char *p = (const void *)record;
-    uint32_t hash = 2166136261u;
-    for (unsigned i = 0; i < sizeof(*record); i++)
-        hash = (hash ^ (i >= 196 && i < 200 ? 0 : p[i])) * 16777619u;
-    return hash;
-}
 
 #ifdef BASEOS_NATIVE_DIAGNOSTIC
 static uint32_t byte_hash(const unsigned char *bytes, unsigned count)
@@ -72,15 +63,6 @@ static uint32_t byte_hash(const unsigned char *bytes, unsigned count)
 }
 #endif
 
-static int checked_extent(uint32_t *offset, uint32_t bytes, uint32_t limit, uint32_t *begin)
-{
-    if (bytes > limit || bytes > limit - *offset || bytes > 0xfffff800u) return -1;
-    uint32_t rounded = (bytes + 2047u) & ~2047u;
-    if (rounded > limit - *offset) return -1;
-    *begin = *offset;
-    *offset += rounded;
-    return 0;
-}
 
 static void hex_digits(char *out, uint32_t word, unsigned digits)
 {
@@ -243,22 +225,36 @@ int baseos_prepare_kernel(void)
     const unsigned char *image = (void *)BASEOS_NATIVE_IMAGE_ADDRESS;
     if (record->magic != BASEOS_NATIVE_MAGIC || record->version != BASEOS_NATIVE_RECORD_VERSION ||
         record->bytes != sizeof(*record) || record->model != BASEOS_MODEL_ID ||
+#ifndef BASEOS_MAINLINE
         record->image_bytes != BASEOS_IMAGE_BYTES || record->image_fnv != BASEOS_IMAGE_FNV ||
+#endif
         memcmp(record->generation, baseos_generation, 32) || record_hash(record) != record->record_fnv ||
         !BASEOS_NATIVE_LOGO_PIXEL_ADDRESS || record->ram_bytes != (uint64_t)(record->dram_words[7] >> 16) << 20 ||
         record->dram_type != record->dram_words[1] ||
         !baseos_boot_reason_valid(record->boot_reason, record->boot_reason_source)) return 1;
+    unsigned int container_bytes = record->image_bytes;
+#ifdef BASEOS_MAINLINE
+    const struct baseos_mainline_header *payload = (const void *)image;
+    if (!baseos_payload_header(payload, baseos_generation) || payload->total != record->image_bytes ||
+        baseos_payload_hash(image, payload->total) != record->image_fnv ||
+        baseos_payload_hash(image + 512, payload->total - 512) != payload->body_fnv) return 2;
+    image += payload->android_offset;
+    container_bytes = payload->android_bytes;
+    const unsigned int initrd_limit = BASEOS_MAINLINE_INITRD_LIMIT;
+#else
+    const unsigned int initrd_limit = 0x100000;
+#endif
     if (record->image_bytes < 2048 || record->image_bytes > BASEOS_NATIVE_IMAGE_CAPACITY ||
         memcmp(image, "ANDROID!", 8) || little32(image + 36) != 2048 ||
         little32(image + 40) != 2 || little32(image + 1644) != 1660 ||
         little32(image + 24) || little32(image + 1632)) return 2;
     uint32_t kernel_bytes = little32(image + 8), initrd_bytes = little32(image + 16);
     uint32_t dtb_bytes = little32(image + 1648), offset = 2048, kernel, initrd, dtb;
-    if (!kernel_bytes || !dtb_bytes || initrd_bytes > 0x100000 || dtb_bytes > BASEOS_NATIVE_FDT_CAPACITY ||
-        checked_extent(&offset, kernel_bytes, record->image_bytes, &kernel) ||
-        checked_extent(&offset, initrd_bytes, record->image_bytes, &initrd) ||
-        checked_extent(&offset, dtb_bytes, record->image_bytes, &dtb) ||
-        offset != record->image_bytes) return 3;
+    if (!kernel_bytes || !dtb_bytes || initrd_bytes > initrd_limit || dtb_bytes > BASEOS_NATIVE_FDT_CAPACITY ||
+        checked_extent(&offset, kernel_bytes, container_bytes, &kernel) ||
+        checked_extent(&offset, initrd_bytes, container_bytes, &initrd) ||
+        checked_extent(&offset, dtb_bytes, container_bytes, &dtb) ||
+        offset != container_bytes) return 3;
     /* Draw where vendor U-Boot did: after BL31, from DRAM, with SRAM C unused. */
     const struct baseos_native_logo *logo = (void *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS;
     int panel = baseos_early_display_start(logo);
@@ -269,8 +265,13 @@ int baseos_prepare_kernel(void)
     times[3] = native_ticks();
     checkpoint(44);
     /* Decode in slices; the panel and TCON waits run out in between. */
+#ifdef BASEOS_MAINLINE
+    const unsigned int kernel_address = 0x40200000, kernel_capacity = 0x01e00000;
+#else
+    const unsigned int kernel_address = 0x40080000, kernel_capacity = 0x01f80000;
+#endif
     struct baseos_lz4 lz4;
-    if (baseos_lz4_begin(&lz4, (void *)0x40080000, 0x01f80000, image + kernel, kernel_bytes)) return 4;
+    if (baseos_lz4_begin(&lz4, (void *)kernel_address, kernel_capacity, image + kernel, kernel_bytes)) return 4;
     int step;
     do {
         step = baseos_lz4_step(&lz4);
@@ -284,7 +285,14 @@ int baseos_prepare_kernel(void)
 #endif
     times[4] = native_ticks();
     checkpoint(45);
-    if (output_bytes < 64 || little32((const void *)0x40080038) != 0x644d5241) return 5;
+    if (output_bytes < 64 || little32((const void *)(kernel_address + 56)) != 0x644d5241) return 5;
+#ifdef BASEOS_MAINLINE
+    const uint32_t *kh = (const void *)kernel_address;
+    /* This U1 placement supports only zero-offset, little-endian Images that
+     * advertise arbitrary 2 MiB physical placement and a bounded memory size. */
+    if (kh[2] || kh[3] || !kh[4] || kh[5] || kh[4] < output_bytes ||
+        kh[4] > kernel_capacity || kh[6] & ~0xeu || !(kh[6] & 8) || kh[7]) return 5;
+#endif
     memcpy((void *)0x42000000, image + initrd, initrd_bytes);
     void *tree = (void *)BASEOS_NATIVE_FDT_ADDRESS;
     uint32_t capacity = (fdt_totalsize(image + dtb) + 4096u + 31u) & ~31u;
@@ -323,6 +331,14 @@ int baseos_prepare_kernel(void)
     volatile uint32_t *proof = (void *)0x4a300100;
     proof[0] = fdt_totalsize(tree);
     proof[1] = byte_hash(tree, proof[0]);
+#endif
+#ifdef BASEOS_MAINLINE
+    if (baseos_mainline_fdt((void *)BASEOS_MAINLINE_FDT_ADDRESS,
+        (const unsigned char *)payload + payload->dtb_offset, payload->dtb_bytes,
+        record->ram_bytes, initrd_bytes, tree, record->dram_words) ||
+        fdt_add_mem_rsv((void *)BASEOS_MAINLINE_FDT_ADDRESS,
+                        BASEOS_NATIVE_LOGO_PIXEL_ADDRESS, 0x400000) ||
+        fdt_pack((void *)BASEOS_MAINLINE_FDT_ADDRESS)) return 15;
 #endif
     checkpoint(46);
     return 0;

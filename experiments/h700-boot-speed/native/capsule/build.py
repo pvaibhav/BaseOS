@@ -43,7 +43,15 @@ def build(inner, stock_path, native_manifest_path, output, diagnostic=False, pur
     assert native["persistent_boot"]["version"] == 2
     assert not native["native_diagnostic"]
     assert native["kernel_sha256"] == native["source_kernel_sha256"]
-    assert native["monitor_sha256"] == native["source_monitor_sha256"]
+    if native.get("firmware_kind") == "baseos-open-tfa":
+        assert native["architecture"] == "aarch64-el3-helper-tfa-linux-el2h"
+        assert native["bl31_sha256"] == native["source_bl31_sha256"]
+        fw = (native_manifest_path.parent / "firmware.bin").read_bytes()
+        region = native["firmware_regions"][0]
+        assert region["name"] == "bl31" and region["destination"] == 0x40000000
+        assert sha(fw[region["offset"]:region["offset"] + region["bytes"]]) == native["bl31_sha256"]
+    else:
+        assert native["monitor_sha256"] == native["source_monitor_sha256"]
     for relative, digest in native["persistent_source_hashes"].items():
         source = (ROOT / relative).resolve()
         assert source.is_relative_to(ROOT)

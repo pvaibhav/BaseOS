@@ -109,7 +109,7 @@ native_kernel_enter:
 #endif
     movw r0, #0xff04
     movt r0, #0x8000
-#ifdef BASEOS_NATIVE_DIAGNOSTIC
+#if defined(BASEOS_NATIVE_DIAGNOSTIC) || defined(BASEOS_MAINLINE)
     ldr r1, =native_kernel_trampoline
 #else
     ldr r1, =0x40080000
@@ -119,7 +119,7 @@ native_kernel_enter:
     smc #0
 6:  wfi
     b 6b
-#ifdef BASEOS_NATIVE_DIAGNOSTIC
+#if defined(BASEOS_NATIVE_DIAGNOSTIC) || defined(BASEOS_MAINLINE)
     .balign 8
 .global native_kernel_trampoline
 .type native_kernel_trampoline, %object

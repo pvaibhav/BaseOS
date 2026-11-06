@@ -48,4 +48,40 @@ _Static_assert(__builtin_offsetof(struct baseos_native_record, boot_reason) == 2
                "native boot reason ABI");
 _Static_assert(__builtin_offsetof(struct baseos_native_record, boot_reason_source) == 236,
                "native boot reason source ABI");
+/* BOS3 v1: one Android-v2 image and one independent mainline FDT. LE ARM ABI.
+ * Integrity detects damaged media; this is not an authentication format. */
+struct baseos_mainline_header {
+    unsigned int magic, version, total, body_fnv;
+    unsigned int android_offset, android_bytes, dtb_offset, dtb_bytes;
+    unsigned char generation[32];
+    unsigned int header_fnv;
+    unsigned char reserved[444];
+};
+_Static_assert(sizeof(struct baseos_mainline_header) == 512, "BOS3 sector ABI");
+static inline unsigned int baseos_payload_hash(const void *data, unsigned int bytes)
+{
+    const unsigned char *p = data;
+    unsigned int h = 2166136261u;
+    while (bytes--) h = (h ^ *p++) * 16777619u;
+    return h;
+}
+static inline int baseos_payload_header(const struct baseos_mainline_header *h,
+                                        const unsigned char *generation)
+{
+    unsigned int hash = 2166136261u;
+    const unsigned char *p = (const void *)h;
+    for (unsigned int i = 0; i < 512; i++)
+        hash = (hash ^ (i >= 64 && i < 68 ? 0 : p[i])) * 16777619u;
+    if (h->magic != 0x33534f42u || h->version != 1 || hash != h->header_fnv ||
+        h->total < 1024 || h->total > BASEOS_NATIVE_IMAGE_CAPACITY || h->total % 512 ||
+        h->android_offset != 512 || h->android_bytes < 2048 || h->android_bytes % 512 ||
+        h->android_bytes > h->total - 512 ||
+        h->dtb_offset != 512 + h->android_bytes || !h->dtb_bytes ||
+        h->dtb_bytes > BASEOS_NATIVE_FDT_CAPACITY - 4096 ||
+        h->dtb_offset > h->total || h->dtb_bytes > h->total - h->dtb_offset ||
+        h->total - h->dtb_offset - h->dtb_bytes >= 512) return 0;
+    for (unsigned int i = 0; i < 32; i++) if (h->generation[i] != generation[i]) return 0;
+    for (unsigned int i = 0; i < sizeof(h->reserved); i++) if (h->reserved[i]) return 0;
+    return 1;
+}
 #endif

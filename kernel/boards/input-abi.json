@@ -1,0 +1,755 @@
+{
+  "schema": 1,
+  "joined_trial": false,
+  "hardware_qualified": false,
+  "boot_authorized": false,
+  "durable_install_eligible": false,
+  "sources": {
+    "native-policy": {
+      "path": "experiments/h700-boot-speed/native/build.py",
+      "sha256": "97a0d4a1ad3ccdb08c8573d32aa1e7d46a3c5a8a92c2dd9d6eb486d5d9c27018"
+    },
+    "native-targets": {
+      "path": "experiments/h700-boot-speed/evidence/compatibility.json",
+      "sha256": "617e95c1bd9dfbbffb78ec5bbb07c61e8693a0f7b5e2fe6d3792b887e5fcd099"
+    },
+    "upstream-digital": {
+      "path": "work/mainline/kernel/linux-7.3.1/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xx-2024.dts",
+      "sha256": "8d858b23b00a4636c8b68dea420a0e620402787207d240b223945a00fc487203"
+    },
+    "upstream-sticks": {
+      "path": "work/mainline/kernel/linux-7.3.1/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xx-h.dts",
+      "sha256": "fd52238373c28681759668bef8e5eb014875e662bcbd388d6dfaa8e7e323b8c3"
+    },
+    "upstream-lid": {
+      "path": "work/mainline/kernel/linux-7.3.1/arch/arm64/boot/dts/allwinner/sun50i-h700-anbernic-rg35xx-sp.dts",
+      "sha256": "7fa589d6d1ceb5cdc99865089184e2523cd879dab15dd88d433366c54a1d9863"
+    },
+    "soc": {
+      "path": "work/mainline/kernel/linux-7.3.1/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi",
+      "sha256": "fd45ab694eb68bac027ea2c131b58599d8b68e423aa53c4be02fee7696cc6ff9"
+    },
+    "vendor-census": {
+      "path": "work/mainline/models/gap-matrix.json",
+      "sha256": "92101d297634ac2329b154d95cf2513c474a215bc73635d21482cb928b700566"
+    },
+    "nextui": {
+      "path": "/Users/pvaibhav/Code/Me/NextUI/workspace/h700/platform/platform.c",
+      "sha256": "a97207bbf9784b44d3b00941d1f8a740efe6ee8245d7d489c7dbe8c5b0dcf7b0"
+    },
+    "rock-base": {
+      "path": "/private/tmp/baseos-arch-r1/rocknix/projects/ROCKNIX/devices/H700/patches/linux/0140-rg35xx-2024-use-rocknix-joypad-driver.patch",
+      "sha256": "8c65d9aa15b36d64146fe9af35983bfac2b020635fc491619acee92b48a2df33"
+    },
+    "rock-rg34xxsp": {
+      "path": "/private/tmp/baseos-arch-r1/rocknix/projects/ROCKNIX/devices/H700/linux/dts/allwinner/sun50i-h700-anbernic-rg34xx-sp.dts",
+      "sha256": "cb1a7564e30fd808ddd6bb381f61958b86d0c5d43a83ac397fac9f01facb0e6b"
+    },
+    "rock-rg35xxpro": {
+      "path": "/private/tmp/baseos-arch-r1/rocknix/projects/ROCKNIX/devices/H700/linux/dts/allwinner/sun50i-h700-anbernic-rg35xx-pro.dts",
+      "sha256": "4060457e8f056eeb22a4540b91c229a30d8c6febf8390e4107e52907ba429d49"
+    },
+    "rock-rg40xxh": {
+      "path": "/private/tmp/baseos-arch-r1/rocknix/projects/ROCKNIX/devices/H700/linux/dts/allwinner/sun50i-h700-anbernic-rg40xx-h.dts",
+      "sha256": "c1093db220645923b0c90ea425c91e56837e711ee7b2d8420a6b73df411e537d"
+    },
+    "rock-rg40xxv": {
+      "path": "/private/tmp/baseos-arch-r1/rocknix/projects/ROCKNIX/devices/H700/linux/dts/allwinner/sun50i-h700-anbernic-rg40xx-v.dts",
+      "sha256": "adb2b1b66578cefe8274b1dcf5c2aa58d63768f988204d3ab85fa20bfca99bb8"
+    },
+    "rock-rgcubexx": {
+      "path": "/private/tmp/baseos-arch-r1/rocknix/projects/ROCKNIX/devices/H700/linux/dts/allwinner/sun50i-h700-anbernic-rgcubexx.dts",
+      "sha256": "e83752a0b4dc0a2705114000a50053c27d3d0e4dbc53259c12ad2b6c934c3516"
+    },
+    "drivers/input/keyboard/gpio_keys.c": {
+      "path": "work/mainline/kernel/linux-7.3.1/drivers/input/keyboard/gpio_keys.c",
+      "sha256": "96dce3984dafa200b5aa23064de263d810c98aca21b828134dc0bcdd8d7473b9"
+    },
+    "drivers/input/joystick/adc-joystick.c": {
+      "path": "work/mainline/kernel/linux-7.3.1/drivers/input/joystick/adc-joystick.c",
+      "sha256": "3607d84cc55a7a7345533e87fdc9982b17ea6f8fcf0ffbdc047056f8240e61b0"
+    },
+    "drivers/iio/multiplexer/iio-mux.c": {
+      "path": "work/mainline/kernel/linux-7.3.1/drivers/iio/multiplexer/iio-mux.c",
+      "sha256": "84ccc9d265766fccb4fbd2166028fa7fd48ccf38f92c02ef4537609c61015bc0"
+    },
+    "drivers/mux/gpio.c": {
+      "path": "work/mainline/kernel/linux-7.3.1/drivers/mux/gpio.c",
+      "sha256": "41d2ecd81ad8020b2cc9955c8c04954302cc4b557aaf306af6233e8db5a4f980"
+    },
+    "drivers/iio/adc/sun20i-gpadc-iio.c": {
+      "path": "work/mainline/kernel/linux-7.3.1/drivers/iio/adc/sun20i-gpadc-iio.c",
+      "sha256": "d2bf1da7b9bcdb842e222dcdbb2ea373546e41ebd913c3fee4bacac16955c230"
+    },
+    "drivers/pinctrl/sunxi/pinctrl-sun50i-h616.c": {
+      "path": "work/mainline/kernel/linux-7.3.1/drivers/pinctrl/sunxi/pinctrl-sun50i-h616.c",
+      "sha256": "00a893cc822057151271675c59b5d3963cc3253c6eef8ff198a82926fca40288"
+    },
+    "drivers/pinctrl/sunxi/pinctrl-sunxi.c": {
+      "path": "work/mainline/kernel/linux-7.3.1/drivers/pinctrl/sunxi/pinctrl-sunxi.c",
+      "sha256": "d6a2e7a36aa3ecb0c951a043b5a4233fd94ef6eb606ec8243447261dbc645e55"
+    },
+    "rock-driver": {
+      "path": "/private/tmp/h700-rocknix-singleadc-joypad.c",
+      "sha256": "3b4ab1024cc6d07c43958f70ca9ad6674b45ebf19e588fa0dbf164e63efab49b",
+      "commit": "005033d1ddd8746c771f2c81f1174f2d892541c9",
+      "git_blob": "c2e6c1643a9d5e77feccf41ccca11aa38e5505ec",
+      "url": "https://raw.githubusercontent.com/hackbar/rocknix-joypad/005033d1ddd8746c771f2c81f1174f2d892541c9/rocknix-singleadc-joypad.c"
+    },
+    "rock-tree": {
+      "path": "/private/tmp/h700-joypad-tree.json",
+      "sha256": "dacee33e6fcfbbc96079ac557fd2b626e9bdee939550c10d60be77b220df9344"
+    }
+  },
+  "roles": {
+    "h700-gamepad": [
+      {
+        "gpio": [
+          "pio",
+          0,
+          0
+        ],
+        "code": "BTN_EAST",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          1
+        ],
+        "code": "BTN_SOUTH",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          3
+        ],
+        "code": "BTN_NORTH",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          2
+        ],
+        "code": "BTN_WEST",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          10
+        ],
+        "code": "BTN_TL",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          11
+        ],
+        "code": "BTN_TL2",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          12
+        ],
+        "code": "BTN_TR",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          7
+        ],
+        "code": "BTN_TR2",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          5
+        ],
+        "code": "BTN_SELECT",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          4
+        ],
+        "code": "BTN_START",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          4,
+          3
+        ],
+        "code": "BTN_MODE",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          6
+        ],
+        "code": "BTN_DPAD_UP",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          4,
+          0
+        ],
+        "code": "BTN_DPAD_DOWN",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          8
+        ],
+        "code": "BTN_DPAD_LEFT",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          0,
+          9
+        ],
+        "code": "BTN_DPAD_RIGHT",
+        "type": "EV_KEY",
+        "active_low": true
+      }
+    ],
+    "h700-volume": [
+      {
+        "gpio": [
+          "pio",
+          4,
+          1
+        ],
+        "code": "KEY_VOLUMEUP",
+        "type": "EV_KEY",
+        "active_low": true
+      },
+      {
+        "gpio": [
+          "pio",
+          4,
+          2
+        ],
+        "code": "KEY_VOLUMEDOWN",
+        "type": "EV_KEY",
+        "active_low": true
+      }
+    ]
+  },
+  "lid": {
+    "gpio": [
+      "pio",
+      4,
+      7
+    ],
+    "code": "SW_LID",
+    "type": "EV_SW",
+    "active_low": true
+  },
+  "mux": {
+    "gpios": [
+      [
+        "pio",
+        8,
+        1
+      ],
+      [
+        "pio",
+        8,
+        2
+      ]
+    ],
+    "active_low": true,
+    "settle_us": 100,
+    "channels": [
+      "left_x",
+      "left_y",
+      "right_x",
+      "right_y"
+    ],
+    "poll_ms": 16,
+    "poll_status": "candidate-unmeasured",
+    "source": [
+      "upstream-sticks",
+      "rock-driver",
+      "rock-base"
+    ]
+  },
+  "calibration": {
+    "range": [
+      0,
+      4096
+    ],
+    "flat": 32,
+    "fuzz": 32,
+    "status": "upstream-default-not-measured",
+    "source": "upstream-sticks"
+  },
+  "unresolved": [
+    "PA2/PA3 face labels conflict: upstream semantic plan provisional",
+    "all GPIO polarity/pull/IRQ physical qualification pending; RG28 prior polled D-pad/menu only",
+    "PE7 lid polarity unknown: upstream active-low provisional",
+    "PE11 ADC enable and PI0 purpose unknown; both untouched",
+    "per-model inversion conflicts remain physical-unknown",
+    "16ms stick polling CPU cost unmeasured; no digital polling",
+    "40V population/click and raw axis travel require physical census"
+  ],
+  "models": {
+    "rg28xx": {
+      "model_id": 1,
+      "compatible": "anbernic,rg28xx",
+      "axes": [],
+      "clicks": [],
+      "lid": false,
+      "source": [
+        "upstream-digital",
+        "vendor-census"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "no-axes"
+    },
+    "rg34xx": {
+      "model_id": 2,
+      "compatible": "anbernic,rg34xx",
+      "axes": [],
+      "clicks": [],
+      "lid": false,
+      "source": [
+        "upstream-digital",
+        "vendor-census"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "no-axes"
+    },
+    "rg34xxsp": {
+      "model_id": 3,
+      "compatible": "anbernic,rg34xxsp",
+      "axes": [
+        {
+          "code": "ABS_X",
+          "mux_channel": 0,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_Y",
+          "mux_channel": 1,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RX",
+          "mux_channel": 2,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RY",
+          "mux_channel": 3,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        }
+      ],
+      "clicks": [
+        {
+          "gpio": [
+            "pio",
+            4,
+            8
+          ],
+          "code": "BTN_THUMBL",
+          "type": "EV_KEY",
+          "active_low": true
+        },
+        {
+          "gpio": [
+            "pio",
+            4,
+            9
+          ],
+          "code": "BTN_THUMBR",
+          "type": "EV_KEY",
+          "active_low": true
+        }
+      ],
+      "lid": true,
+      "source": [
+        "upstream-digital",
+        "vendor-census",
+        "rock-rg34xxsp",
+        "rock-base",
+        "rock-driver"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "rock-model-plan-unqualified"
+    },
+    "rg35xxh": {
+      "model_id": 4,
+      "compatible": "anbernic,rg35xxh",
+      "axes": [
+        {
+          "code": "ABS_X",
+          "mux_channel": 0,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_Y",
+          "mux_channel": 1,
+          "inverted": false,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RX",
+          "mux_channel": 2,
+          "inverted": false,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RY",
+          "mux_channel": 3,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        }
+      ],
+      "clicks": [
+        {
+          "gpio": [
+            "pio",
+            4,
+            8
+          ],
+          "code": "BTN_THUMBL",
+          "type": "EV_KEY",
+          "active_low": true
+        },
+        {
+          "gpio": [
+            "pio",
+            4,
+            9
+          ],
+          "code": "BTN_THUMBR",
+          "type": "EV_KEY",
+          "active_low": true
+        }
+      ],
+      "lid": false,
+      "source": [
+        "upstream-digital",
+        "vendor-census",
+        "upstream-sticks",
+        "rock-base",
+        "rock-driver"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "upstream-H-plan-conflicts-rock-X-Y"
+    },
+    "rg35xxplus": {
+      "model_id": 5,
+      "compatible": "anbernic,rg35xxplus",
+      "axes": [],
+      "clicks": [],
+      "lid": false,
+      "source": [
+        "upstream-digital",
+        "vendor-census"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "no-axes"
+    },
+    "rg35xxpro": {
+      "model_id": 6,
+      "compatible": "anbernic,rg35xxpro",
+      "axes": [
+        {
+          "code": "ABS_X",
+          "mux_channel": 0,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_Y",
+          "mux_channel": 1,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RX",
+          "mux_channel": 2,
+          "inverted": false,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RY",
+          "mux_channel": 3,
+          "inverted": false,
+          "status": "provisional-source-physical-unknown"
+        }
+      ],
+      "clicks": [
+        {
+          "gpio": [
+            "pio",
+            4,
+            8
+          ],
+          "code": "BTN_THUMBL",
+          "type": "EV_KEY",
+          "active_low": true
+        },
+        {
+          "gpio": [
+            "pio",
+            4,
+            9
+          ],
+          "code": "BTN_THUMBR",
+          "type": "EV_KEY",
+          "active_low": true
+        }
+      ],
+      "lid": false,
+      "source": [
+        "upstream-digital",
+        "vendor-census",
+        "rock-rg35xxpro",
+        "rock-base",
+        "rock-driver"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "rock-model-plan-unqualified"
+    },
+    "rg35xxsp": {
+      "model_id": 7,
+      "compatible": "anbernic,rg35xxsp",
+      "axes": [],
+      "clicks": [],
+      "lid": true,
+      "source": [
+        "upstream-digital",
+        "vendor-census"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "no-axes"
+    },
+    "rg40xxh": {
+      "model_id": 8,
+      "compatible": "anbernic,rg40xxh",
+      "axes": [
+        {
+          "code": "ABS_X",
+          "mux_channel": 0,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_Y",
+          "mux_channel": 1,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RX",
+          "mux_channel": 2,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RY",
+          "mux_channel": 3,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        }
+      ],
+      "clicks": [
+        {
+          "gpio": [
+            "pio",
+            4,
+            8
+          ],
+          "code": "BTN_THUMBL",
+          "type": "EV_KEY",
+          "active_low": true
+        },
+        {
+          "gpio": [
+            "pio",
+            4,
+            9
+          ],
+          "code": "BTN_THUMBR",
+          "type": "EV_KEY",
+          "active_low": true
+        }
+      ],
+      "lid": false,
+      "source": [
+        "upstream-digital",
+        "vendor-census",
+        "rock-rg40xxh",
+        "rock-base",
+        "rock-driver"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "rock-model-plan-unqualified"
+    },
+    "rg40xxv": {
+      "model_id": 9,
+      "compatible": "anbernic,rg40xxv",
+      "axes": [
+        {
+          "code": "ABS_X",
+          "mux_channel": 0,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_Y",
+          "mux_channel": 1,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        }
+      ],
+      "clicks": [
+        {
+          "gpio": [
+            "pio",
+            4,
+            8
+          ],
+          "code": "BTN_THUMBL",
+          "type": "EV_KEY",
+          "active_low": true
+        }
+      ],
+      "lid": false,
+      "source": [
+        "upstream-digital",
+        "vendor-census",
+        "rock-rg40xxv",
+        "rock-base",
+        "rock-driver"
+      ],
+      "population_status": "provisional-nextui-single-stick-no-right-click",
+      "inversion_status": "rock-model-plan-unqualified"
+    },
+    "rgcubexx": {
+      "model_id": 10,
+      "compatible": "anbernic,rgcubexx",
+      "axes": [
+        {
+          "code": "ABS_X",
+          "mux_channel": 0,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_Y",
+          "mux_channel": 1,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RX",
+          "mux_channel": 2,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        },
+        {
+          "code": "ABS_RY",
+          "mux_channel": 3,
+          "inverted": true,
+          "status": "provisional-source-physical-unknown"
+        }
+      ],
+      "clicks": [
+        {
+          "gpio": [
+            "pio",
+            4,
+            8
+          ],
+          "code": "BTN_THUMBL",
+          "type": "EV_KEY",
+          "active_low": true
+        },
+        {
+          "gpio": [
+            "pio",
+            4,
+            9
+          ],
+          "code": "BTN_THUMBR",
+          "type": "EV_KEY",
+          "active_low": true
+        }
+      ],
+      "lid": false,
+      "source": [
+        "upstream-digital",
+        "vendor-census",
+        "rock-rgcubexx",
+        "rock-base",
+        "rock-driver"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "rock-model-plan-unqualified"
+    },
+    "rgsp": {
+      "model_id": 11,
+      "compatible": "anbernic,rgsp",
+      "axes": [],
+      "clicks": [],
+      "lid": true,
+      "source": [
+        "upstream-digital",
+        "vendor-census"
+      ],
+      "population_status": "source-only",
+      "inversion_status": "no-axes"
+    }
+  }
+}

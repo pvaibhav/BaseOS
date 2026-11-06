@@ -17,6 +17,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 SPL = HERE.parent / "spl"
+INPUT_WORK = ROOT / "work"
 PIN = "f943a88389c8fd70a6b0d061a88267465e143c7ca6ea2b75837ab20f5b60c739"
 
 
@@ -52,7 +53,7 @@ def vendor_version_message(code):
 def model_policy(target, inventory):
     compatibility = json.loads((HERE.parent / "evidence/compatibility.json").read_text())["targets"]
     contract = compatibility[target]
-    package = (ROOT / "work" / target / "boot-gzip/boot-package.bin").read_bytes()
+    package = (INPUT_WORK / target / "boot-gzip/boot-package.bin").read_bytes()
     assert sha(package) == contract["package_sha256"]
     env = dict(item.split(b"=", 1) for item in (inventory / "env.bin").read_bytes()[4:].split(b"\0") if b"=" in item)
     prefix = (inventory / "prefix.bin").read_bytes()
@@ -85,7 +86,7 @@ def model_policy(target, inventory):
     assert handoff["version"] == 1 and handoff["ram_bytes"] == [0x40000000, 0x80000000]
     assert allocation["package_sha256"] == sha(package)
     assert allocation["environment_sha256"] == sha((inventory / "env.bin").read_bytes())
-    source_prefix = (ROOT / "work" / target / "boot-prefix.img").read_bytes()
+    source_prefix = (INPUT_WORK / target / "boot-prefix.img").read_bytes()
     assert allocation["prefix_sha256"] == sha(source_prefix)
     assert prefix == source_prefix[:len(prefix)], "inventory GPT differs from the proven release input"
     logo["framebuffer_from_ram_end"] = allocation["framebuffer_from_ram_end"]
@@ -156,12 +157,18 @@ def model_policy(target, inventory):
     return policy
 
 
-def build(target, inventory, output, single_cpu=False, kernel_probes=False, persistent=False, raw_capsule=False):
+def build(target, inventory, output, single_cpu=False, kernel_probes=False, persistent=False, raw_capsule=False, mainline=None):
     assert not (persistent and raw_capsule), "choose one attempt mode"
     assert not output.exists(), "use a fresh immutable output directory"
     assert not single_cpu or kernel_probes, "single-CPU diagnosis requires kernel probes"
     assert not (persistent or raw_capsule) or not kernel_probes, "persistent builds require unmodified kernel/monitor"
     policy = model_policy(target, inventory)
+    if mainline:
+        assert raw_capsule and not kernel_probes, "mainline requires raw-capsule latch mode"
+        sys.path.insert(0, str(ROOT / "tools"))
+        import mainline_payload
+        policy["mainline_trial"] = {"version": 1, "kernel_address": 0x40200000,
+                                    "mainline_fdt": 0x44100000, "initrd_limit": 0xe00000}
     if persistent:
         policy["persistent_boot"] = {"version": 1, "pending_magic": 0x42535031,
             "lab_request": 0x42534c31, "lab_running": 0x42534c32,
@@ -177,12 +184,12 @@ def build(target, inventory, output, single_cpu=False, kernel_probes=False, pers
     policy["diagnostic_maxcpus"] = 1 if single_cpu else None
     policy["kernel_probes"] = kernel_probes
     if single_cpu: policy["bootargs_template"] += " maxcpus=1"
-    archive = ROOT / "work/h700-loader/mainline/u-boot-v2026.10.tar.gz"
+    archive = INPUT_WORK / "h700-loader/mainline/u-boot-v2026.10.tar.gz"
     assert sha(archive.read_bytes()) == PIN
     spec = importlib.util.spec_from_file_location("baseos_fast_builder", HERE.parent / "fastboot/build.py")
     fast = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fast)
-    source_image = ROOT / "work" / target / "boot-gzip/boot.img"
+    source_image = INPUT_WORK / target / "boot-gzip/boot.img"
     original = source_image.read_bytes()
     source_manifest = json.loads(source_image.with_name("manifest.json").read_text())
     assert sha(original) == source_manifest["boot_image_sha256"]
@@ -228,8 +235,14 @@ def build(target, inventory, output, single_cpu=False, kernel_probes=False, pers
         kernel[stub_offset:stub_offset + len(initcall)] = initcall
         struct.pack_into("<I", kernel, hook_offset, 0x14000000 | ((0x4098d680 - 0x40083954) >> 2))
         kernel = bytes(kernel)
+    if mainline:
+        kernel = mainline[0].read_bytes()
+        mainline_payload.kernel_check(kernel)
+        source_kernel_sha256 = sha(kernel)
+        parts[1] = mainline[1].read_bytes()
+        assert 0 < len(parts[1]) <= mainline_payload.INITRD_LIMIT
     parts[0] = fast.compress(kernel)
-    package = (ROOT / "work" / target / "boot-gzip/boot-package.bin").read_bytes()
+    package = (INPUT_WORK / target / "boot-gzip/boot-package.bin").read_bytes()
     assert sha(package) == policy["package_sha256"]
     toc = toc_items(package)
     source_monitor_sha256 = sha(toc["monitor"])
@@ -289,7 +302,7 @@ char *strrchr(const char *, int);
     binding_spec = importlib.util.spec_from_file_location("baseos_fdt_contract", HERE.parent / "variant-survey/fdt-contract.py")
     binding = importlib.util.module_from_spec(binding_spec)
     binding_spec.loader.exec_module(binding)
-    inputs = [HERE / name for name in ("entry32.S", "loader.c", "runtime.c")]
+    inputs = [HERE / name for name in ("entry32.S", "loader.c", "runtime.c", "native-checks.h")]
     inputs += [HERE / "lz4-stream.c", SPL / "native-handoff.h", Path(__file__), HERE / "lz4-stream.h",
                SPL / "native-panel.h",
                HERE / "panel-probe.h", HERE / "panel-contract.json",
@@ -312,12 +325,19 @@ char *strrchr(const char *, int);
         # Derived payload FNV/cookie headers and final binaries are excluded to avoid a generation cycle.
         inputs += [HERE / "capsule" / name for name in
                    ("contract.json", "build.py", "entry.S", "capsule.c", "payloads.S", "include/string.h")]
+    if mainline:
+        inputs += [ROOT / "experiments/h700-mainline" / name for name in
+                   ("mainline-fdt.c", "mainline-fdt.h", "entry-trampoline.S")]
+        inputs.append(ROOT / "tools/mainline_payload.py")
     source_boot0 = (inventory / "boot0.bin").read_bytes()
-    generation = hashlib.sha256(json.dumps(policy, sort_keys=True).encode() + bytes.fromhex(sha(image)) +
+    generation = hashlib.sha256(json.dumps(policy, sort_keys=True).encode() + (b"BOS3-loader-v1" if mainline else bytes.fromhex(sha(image))) +
                                 bytes.fromhex(PIN) + source_boot0 +
                                 b"".join(path.read_bytes() for path in inputs)).digest()
     if persistent or raw_capsule:
         assert fnv(generation), "zero-cookie generation cannot be installed"
+    if mainline:
+        image = mainline_payload.pack(image, mainline[2].read_bytes(), generation)
+        (output / "image.bin").write_bytes(image)
     header = (f"#define BASEOS_MODEL_ID {policy['model_id']}u\n"
               f"#define BASEOS_PANEL_RULE {policy['panel_rule']}\n"
               f"#define BASEOS_PANEL_PULL_UP {int(policy['panel_pull_up'])}\n"
@@ -337,6 +357,11 @@ char *strrchr(const char *, int);
                         for ram in policy["boot_logo"]["proven_ram_bytes"]) + "};\n" +
               "static const char *const baseos_dram_properties[24] = {" +
               ",".join(json.dumps(name) for name in binding.DRAM_PROPERTIES) + "};\n")
+    if mainline:
+        header = "#define BASEOS_MAINLINE 1\n" + header
+        # Payload size/hash are runtime data and must not bind SPL to a kernel.
+        header = re.sub(r"#define BASEOS_IMAGE_BYTES .*", "#define BASEOS_IMAGE_BYTES 0u", header)
+        header = re.sub(r"#define BASEOS_IMAGE_FNV .*", "#define BASEOS_IMAGE_FNV 0u", header)
     (output / "native-generated.h").write_text(header)
     shutil.copyfile(SPL / "native-handoff.h", output / "native-handoff.h")
     shutil.copyfile(SPL / "native-logo.h", output / "native-logo.h")
@@ -363,8 +388,21 @@ char *strrchr(const char *, int);
         trampoline = (output / "trampoline.bin").read_bytes()
         assert 0 < len(trampoline) <= 1024 and len(trampoline) % 4 == 0
         (output / "native-trampoline.inc").write_text(".word " + ",".join(hex(value) for value in struct.unpack(f"<{len(trampoline)//4}I", trampoline)) + "\n")
-    sources = inputs[:4] + [HERE / "early-display.c"] + [lib / name for name in ("fdt.c", "fdt_ro.c", "fdt_rw.c", "fdt_wip.c", "fdt_check.c")]
+    if mainline:
+        source = ROOT / "experiments/h700-mainline"
+        subprocess.run([clang, "--target=aarch64-none-elf", "-c", str(source / "entry-trampoline.S"),
+                        "-o", str(output / "trampoline.o")], check=True)
+        (output / "trace.ld").write_text("SECTIONS { .text 0 : { *(.text.entry) } }\n")
+        subprocess.run([str(lld), "-T", str(output / "trace.ld"), "--oformat=binary",
+                        str(output / "trampoline.o"), "-o", str(output / "trampoline.bin")], check=True, env=linker_env)
+        trampoline = (output / "trampoline.bin").read_bytes()
+        (output / "native-trampoline.inc").write_text(".word " + ",".join(hex(v) for v in struct.unpack(f"<{len(trampoline)//4}I", trampoline)) + "\n")
+        shutil.copyfile(source / "mainline-fdt.h", output / "mainline-fdt.h")
+    sources = [HERE / name for name in ("entry32.S", "loader.c", "runtime.c", "lz4-stream.c", "early-display.c")]
+    sources += [lib / name for name in ("fdt.c", "fdt_ro.c", "fdt_rw.c", "fdt_wip.c", "fdt_check.c")]
+    if mainline: sources.append(ROOT / "experiments/h700-mainline/mainline-fdt.c")
     diagnostic_flags = ["-DBASEOS_NATIVE_DIAGNOSTIC=1"] if kernel_probes else []
+    if mainline: diagnostic_flags.append("-DBASEOS_MAINLINE=1")
     objects = []
     for source in sources:
         obj = output / (source.name + ".o")
@@ -392,7 +430,7 @@ SECTIONS {
     blob = bytearray((output / "loader.bin").read_bytes())
     match = re.search(r"^\s*([0-9a-f]+)\s+[0-9a-f]+\s+[0-9a-f]+\s+\d+\s+native_kernel_trampoline\s*$",
                       (output / "loader.map").read_text(), re.M)
-    assert bool(match) == kernel_probes
+    assert bool(match) == bool(kernel_probes or mainline)
     # Header data is retained for BL31 readers; the only entry instruction is ours.
     blob[4:0x640] = package[0x804:0xe40]
     blob += bytes(-len(blob) % 512)
@@ -434,6 +472,10 @@ SECTIONS {
         report["native_generated_header_sha256"] = sha((output / "native-generated.h").read_bytes())
         report["persistent_source_hashes"] = {
             str(path.relative_to(ROOT)): sha(path.read_bytes()) for path in inputs}
+    if mainline:
+        report.update(mainline_trial=True, kernel_smc_entry=int(match[1], 16),
+                      kernel_entry=0x40200000, mainline_fdt_address=0x44100000,
+                      payload_update_requires_capsule=False, kernel_header=mainline_payload.kernel_check(kernel))
     if kernel_probes:
         report.update(kernel_smc_entry=int(match[1], 16), kernel_fault_vectors=0x4098d800, initcall_trace_gp=14)
     (output / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")

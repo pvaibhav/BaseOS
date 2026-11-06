@@ -1,0 +1,252 @@
+--- a/src/video/kmsdrm/SDL_kmsdrmopengles.c
++++ b/src/video/kmsdrm/SDL_kmsdrmopengles.c
+@@ -67,7 +67,11 @@
+        so we manually unload the library whenever we want. */
+ }
+ 
+-SDL_EGL_CreateContext_impl(KMSDRM)
++SDL_GLContext KMSDRM_GLES_CreateContext(_THIS, SDL_Window *window)
++{
++    SDL_WindowData *w=window->driverdata;
++    return SDL_EGL_CreateContext(_this,w->rotation?w->app_surface:w->egl_surface);
++}
+ 
+     int KMSDRM_GLES_SetSwapInterval(_THIS, int interval)
+ {
+@@ -84,6 +88,8 @@
+ 
+     return 0;
+ }
++
++#include "SDL_kmsdrmrotation.inc"
+ 
+ int KMSDRM_GLES_SwapWindow(_THIS, SDL_Window *window)
+ {
+@@ -92,15 +98,15 @@
+     SDL_VideoData *viddata = ((SDL_VideoData *)_this->driverdata);
+     KMSDRM_FBInfo *fb_info;
+     int ret = 0;
++    struct timespec entry_time = {0};
+ 
+     /* Always wait for the previous issued flip before issuing a new one,
+        even if you do async flips. */
+     uint32_t flip_flags = DRM_MODE_PAGE_FLIP_EVENT;
++    if (SDL_getenv("BASEOS_PRESENT_TRACE")) clock_gettime(CLOCK_MONOTONIC_RAW,&entry_time);
+ 
+     /* Recreate the GBM / EGL surfaces if the display mode has changed */
+-    if (windata->egl_surface_dirty) {
+-        KMSDRM_CreateSurfaces(_this, window);
+-    }
++    if (windata->egl_surface_dirty && KMSDRM_CreateSurfaces(_this, window) < 0) return -1;
+ 
+     /* Wait for confirmation that the next front buffer has been flipped, at which
+        point the previous front buffer can be released */
+@@ -117,12 +123,17 @@
+ 
+     windata->bo = windata->next_bo;
+ 
++    if (windata->rotation && KMSDRM_RotationPresent(_this, windata) < 0) { return KMSDRM_AbandonNext(windata); }
++
++    windata->trace_entry=(unsigned long long)entry_time.tv_sec*1000000000ULL+entry_time.tv_nsec;
++    KMSDRM_Trace(windata,"entry",0,0,0);
++
+     /* Mark a buffer to becume the next front buffer.
+        This won't happen until pagelip completes. */
+-    if (!(_this->egl_data->eglSwapBuffers(_this->egl_data->egl_display,
++    if (!windata->rotation && !(_this->egl_data->eglSwapBuffers(_this->egl_data->egl_display,
+                                           windata->egl_surface))) {
+         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "eglSwapBuffers failed");
+-        return 0;
++        return KMSDRM_AbandonNext(windata);
+     }
+ 
+     /* From the GBM surface, get the next BO to become the next front buffer,
+@@ -131,14 +142,14 @@
+     windata->next_bo = KMSDRM_gbm_surface_lock_front_buffer(windata->gs);
+     if (!windata->next_bo) {
+         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Could not lock front buffer on GBM surface");
+-        return 0;
++        return KMSDRM_AbandonNext(windata);
+     }
+ 
+     /* Get an actual usable fb for the next front buffer. */
+     fb_info = KMSDRM_FBFromBO(_this, windata->next_bo);
+     if (fb_info == NULL) {
+         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Could not get a framebuffer");
+-        return 0;
++        return KMSDRM_AbandonNext(windata);
+     }
+ 
+     if (!windata->bo) {
+@@ -149,9 +160,10 @@
+                                     dispdata->crtc->crtc_id, fb_info->fb_id, 0, 0,
+                                     &dispdata->connector->connector_id, 1, &dispdata->mode);
+ 
++        if (!ret) KMSDRM_Trace(windata,"modeset-return",0,0,0);
+         if (ret) {
+             SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Could not set videomode on CRTC.");
+-            return 0;
++            return KMSDRM_AbandonNext(windata);
+         }
+     } else {
+         /* On subsequent swaps, queue the new front buffer to be flipped during
+@@ -171,12 +183,13 @@
+         }
+ 
+         ret = KMSDRM_drmModePageFlip(viddata->drm_fd, dispdata->crtc->crtc_id,
+-                                     fb_info->fb_id, flip_flags, &windata->waiting_for_flip);
++                                     fb_info->fb_id, flip_flags, windata);
+ 
+         if (ret == 0) {
+             windata->waiting_for_flip = SDL_TRUE;
+         } else {
+             SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Could not queue pageflip: %d", ret);
++            return KMSDRM_AbandonNext(windata);
+         }
+ 
+         /* Wait immediately for vsync (as if we only had two buffers).
+@@ -191,7 +204,7 @@
+         if (windata->double_buffer) {
+             if (!KMSDRM_WaitPageflip(_this, windata)) {
+                 SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Immediate wait for previous pageflip failed");
+-                return 0;
++                return -1;
+             }
+         }
+     }
+@@ -199,7 +212,11 @@
+     return 1;
+ }
+ 
+-SDL_EGL_MakeCurrent_impl(KMSDRM)
++int KMSDRM_GLES_MakeCurrent(_THIS, SDL_Window *window, SDL_GLContext context)
++{
++    SDL_WindowData *w = window ? window->driverdata : NULL;
++    return SDL_EGL_MakeCurrent(_this, w ? (w->rotation ? w->app_surface : w->egl_surface) : EGL_NO_SURFACE, context);
++}
+ 
+ #endif /* SDL_VIDEO_DRIVER_KMSDRM */
+ 
+--- a/src/video/kmsdrm/SDL_kmsdrmvideo.c
++++ b/src/video/kmsdrm/SDL_kmsdrmvideo.c
+@@ -40,6 +40,7 @@
+ 
+ /* KMS/DRM declarations */
+ #include "SDL_kmsdrmvideo.h"
++#include "SDL_kmsdrmrotation.h"
+ #include "SDL_kmsdrmevents.h"
+ #include "SDL_kmsdrmopengles.h"
+ #include "SDL_kmsdrmmouse.h"
+@@ -394,7 +395,9 @@
+ 
+ static void KMSDRM_FlipHandler(int fd, unsigned int frame, unsigned int sec, unsigned int usec, void *data)
+ {
+-    *((SDL_bool *)data) = SDL_FALSE;
++    SDL_WindowData *w = data;
++    w->waiting_for_flip = SDL_FALSE;
++    KMSDRM_Trace(w,"flip",frame,sec,usec);
+ }
+ 
+ SDL_bool KMSDRM_WaitPageflip(_THIS, SDL_WindowData *windata)
+@@ -884,6 +887,9 @@
+     display.driverdata = dispdata;
+     display.desktop_mode.w = dispdata->mode.hdisplay;
+     display.desktop_mode.h = dispdata->mode.vdisplay;
++    if (KMSDRM_Rotation(dispdata->mode.hdisplay, dispdata->mode.vdisplay) & 1) {
++        int t = display.desktop_mode.w; display.desktop_mode.w = display.desktop_mode.h; display.desktop_mode.h = t;
++    }
+     display.desktop_mode.refresh_rate = dispdata->mode.vrefresh;
+     display.desktop_mode.format = SDL_PIXELFORMAT_ARGB8888;
+     display.desktop_mode.driverdata = modedata;
+@@ -1084,7 +1090,10 @@
+     /**********************************************/
+     /* Wait for last issued pageflip to complete. */
+     /**********************************************/
+-    /*KMSDRM_WaitPageflip(_this, windata);*/
++    if (!KMSDRM_WaitPageflip(_this, windata)) {
++        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Fatal pending flip drain failure");
++        _exit(1);
++    }
+ 
+     /***********************************************************************/
+     /* Restore the original CRTC configuration: configue the crtc with the */
+@@ -1110,6 +1119,7 @@
+     /* Destroy the EGL surface */
+     /***************************/
+ 
++    KMSDRM_RotationDestroy(_this, windata);
+     SDL_EGL_MakeCurrent(_this, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+ 
+     if (windata->egl_surface != EGL_NO_SURFACE) {
+@@ -1196,6 +1206,7 @@
+ 
+     /* If the current window already has surfaces, destroy them before creating other. */
+     if (windata->gs) {
++        if (!KMSDRM_WaitPageflip(_this,windata)) return SDL_SetError("Pending flip prevents surface recreation");
+         KMSDRM_DestroySurfaces(_this, window);
+     }
+ 
+@@ -1242,6 +1253,20 @@
+     SDL_SendWindowEvent(window, SDL_WINDOWEVENT_RESIZED,
+                         dispdata->mode.hdisplay, dispdata->mode.vdisplay);
+ 
++    windata->rotation = KMSDRM_Rotation(dispdata->mode.hdisplay, dispdata->mode.vdisplay);
++    if (windata->rotation) {
++        int odd = windata->rotation & 1;
++        windata->app_gs = KMSDRM_gbm_surface_create(viddata->gbm_dev,
++            odd ? dispdata->mode.vdisplay : dispdata->mode.hdisplay,
++            odd ? dispdata->mode.hdisplay : dispdata->mode.vdisplay,
++            surface_fmt, GBM_BO_USE_RENDERING);
++        if (!windata->app_gs) return SDL_SetError("Rotation app GBM surface failed");
++        windata->app_surface = SDL_EGL_CreateSurface(_this, (NativeWindowType)windata->app_gs);
++        if (windata->app_surface == EGL_NO_SURFACE) return SDL_SetError("Rotation app EGL surface failed");
++        SDL_EGL_MakeCurrent(_this, windata->app_surface, egl_context);
++        if (odd) { int t = display->current_mode.w; display->current_mode.w = display->current_mode.h; display->current_mode.h = t; }
++        SDL_SendWindowEvent(window, SDL_WINDOWEVENT_RESIZED, display->current_mode.w, display->current_mode.h);
++    }
+     windata->egl_surface_dirty = SDL_FALSE;
+ 
+ cleanup:
+@@ -1344,6 +1369,7 @@
+ 
+         mode.w = conn->modes[i].hdisplay;
+         mode.h = conn->modes[i].vdisplay;
++        if (KMSDRM_Rotation(mode.w, mode.h) & 1) { int t = mode.w; mode.w = mode.h; mode.h = t; }
+         mode.refresh_rate = conn->modes[i].vrefresh;
+         mode.format = SDL_PIXELFORMAT_ARGB8888;
+         mode.driverdata = modedata;
+@@ -1397,6 +1423,10 @@
+         return;
+     }
+ 
++    if (windata->waiting_for_flip && !KMSDRM_WaitPageflip(_this,windata)) {
++        SDL_LogError(SDL_LOG_CATEGORY_VIDEO,"Fatal window flip drain failure");
++        _exit(1);
++    }
+     /* restore vrr state */
+     KMSDRM_CrtcSetVrr(windata->viddata->drm_fd, dispdata->crtc->crtc_id, dispdata->saved_vrr);
+ 
+--- a/src/video/kmsdrm/SDL_kmsdrmvideo.h
++++ b/src/video/kmsdrm/SDL_kmsdrmvideo.h
+@@ -93,6 +93,12 @@
+     struct gbm_bo *bo;
+     struct gbm_bo *next_bo;
+ 
++    struct gbm_surface *app_gs;
++    EGLSurface app_surface;
++    void *rotation_state;
++    int rotation;
++    unsigned trace_seq;
++    unsigned long long trace_entry;
+     SDL_bool waiting_for_flip;
+     SDL_bool double_buffer;
+ 
+@@ -106,6 +112,8 @@
+     uint32_t fb_id; /* DRM framebuffer ID */
+ } KMSDRM_FBInfo;
+ 
++void KMSDRM_Trace(SDL_WindowData *w, const char *event, unsigned frame, unsigned sec, unsigned usec);
++void KMSDRM_RotationDestroy(_THIS, SDL_WindowData *w);
+ /* Helper functions */
+ int KMSDRM_CreateSurfaces(_THIS, SDL_Window *window);
+ KMSDRM_FBInfo *KMSDRM_FBFromBO(_THIS, struct gbm_bo *bo);

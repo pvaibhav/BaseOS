@@ -1,0 +1,6 @@
+Mako==1.3.10
+MarkupSafe==3.0.4
+meson==1.9.1
+packaging==25.0
+Pygments==2.11.2
+PyYAML==6.0.3
