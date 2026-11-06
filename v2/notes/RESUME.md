@@ -52,9 +52,14 @@ Source lives in Docker volume `v2-kernel` (`/k/linux`, build output `/k/build`),
 used by container `v2-kbuild`:
 
     docker run -d --name v2-kbuild -v v2-kernel:/k -v <checkout>:/repo \
-      baseos-alpha1-squashfs:local sleep infinity
+      baseos-v2-kbuild:local sleep infinity
 
-(the image is the h700 toolchain image with squashfs-tools added). The tree is
+`baseos-v2-kbuild:local` is the container as it was, saved with `docker
+commit`: the h700 toolchain image plus squashfs-tools, flex, bison, bc,
+libelf-dev, libssl-dev, device-tree-compiler and kmod. The old container also
+mounted `work/mainline/kernel/linux-7.3.1` at `/pristine`, which nothing uses
+and which no longer exists, so recreate it with the command above if it
+refuses to start. The tree is
 Linux 7.3.1 imported as one commit plus the 43 commits exported in
 `v2/kernel/patches/` (tip `d286f8b9d`, config `v2/kernel/config`). Without the
 volume: unpack linux-7.3.1 from kernel.org, commit it, `git am
