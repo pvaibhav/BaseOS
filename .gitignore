@@ -11,3 +11,6 @@ __pycache__/
 # Artifacts
 work/
 *.o
+
+# Files kept on purpose (stock bundle, frozen inputs, lab notes); never committed
+keep/
