@@ -4,31 +4,33 @@
 
 | Branch | What it holds | Send pull requests here for |
 |---|---|---|
-| `main` | Development: the 1.5.x line and everything new | New features and most fixes |
+| `main` | Development: the 1.5.x line and all new work | New features and most fixes |
 | `stable` | The 1.4.x release line | Fixes for people on 1.4.x |
 | `feature/mainline-kernel` | BaseOS 2 on mainline Linux, experimental | BaseOS 2 work only |
 
-Start your branch from the branch you are sending it to. Otherwise the pull
-request also shows commits that are not yours. If a fix applies to both 1.5.x
-and 1.4.x, send it to `main` and say in the description that 1.4.x needs it too.
-It is then copied to `stable` after merging.
+Start your branch from the branch you will send it to. A branch started from
+another one carries commits that are not yours into the pull request.
 
-The release marked Latest on the Releases page is built from `stable`. Pre-releases
-are built from `main`.
+If a fix is needed in both 1.5.x and 1.4.x, send it to `main` and say in the
+description that 1.4.x needs it too. A maintainer copies it to `stable` after
+merging.
 
-## Development environment
+The release marked Latest on the Releases page is built from `stable`.
+Pre-releases are built from `main`.
 
-Builds run on macOS using unprivileged Alpine containers (Docker or OrbStack), so
-the host does not need sudo or loop mounts. Steps that build or execute AArch64
-device binaries pin `linux/arm64` (native on Apple Silicon and emulated on Intel).
-Preparation, image composition, bootlogo generation, and QEMU userspace smoke
-tests pin the host architecture (`linux/amd64` on Intel and `linux/arm64` on Apple
-Silicon) so those steps stay native.
+## What you need
 
-Building does **not** need the vendor firmware images. `./fetch-prepared.sh`
-restores the prepared per-target inputs from one published bundle instead of a
-~12 GB image per target. Firmware is only needed to add a device or to move a
-target onto a new vendor release; both are covered below.
+- A Mac with Docker or OrbStack. Every build step runs in an unprivileged
+  Alpine container, so the Mac needs no sudo and no loop mounts.
+- No vendor firmware. `./fetch-prepared.sh` downloads the prepared inputs for
+  every model as one bundle, instead of a 12 GB vendor image per model. You
+  need a vendor image only to add a model or to move a model to a new vendor
+  release.
+
+Steps that build or run device programs use `linux/arm64` containers, which run
+natively on Apple Silicon and under emulation on Intel Macs. Preparation, image
+assembly, boot logo generation and the QEMU smoke tests use the Mac's own
+architecture, so they are never emulated.
 
 ## Building
 
@@ -37,14 +39,14 @@ target onto a new vendor release; both are covered below.
 ./build-all.sh
 ```
 
-That produces, for every model, the two files a release publishes:
+For every model, this produces the two files a release publishes:
 
 ```
 work/<target>/baseos-<target>-<version>.img.zip   flash once
 work/<target>/baseos-<target>-<version>.bosupd    every update after that
 ```
 
-Both scripts take an optional target list, which is what you want while iterating:
+Both scripts accept a list of targets. To work on one model:
 
 ```sh
 ./fetch-prepared.sh rg40xxv
@@ -52,11 +54,13 @@ Both scripts take an optional target list, which is what you want while iteratin
 ./flash-card.sh rg40xxv diskN
 ```
 
-`build-all.sh` is the existing per-target chain — rootfs, QEMU userspace smoke
-test, image, update payload — plus packaging, and it rebuilds the shared tools
-when required binaries are missing or the source stamp changes. The stamp
-covers C/header files in `src/` and `tools/`, plus adb patches. Rerun
-`build-tools.sh` explicitly after changing build recipes or pinned dependencies. Those steps remain individually runnable:
+`build-all.sh` builds the root filesystem, runs a QEMU smoke test of it, builds
+the card image and the update file, and packages them. It rebuilds the shared
+tools when a required binary is missing, or when a C or header file in `src/`
+or `tools/` or an adb patch changes. It does not notice changes to build recipes
+or pinned dependencies, so run `./build-tools.sh` yourself after those.
+
+Each step also runs on its own:
 
 ```sh
 ./build-tools.sh
@@ -66,10 +70,11 @@ covers C/header files in `src/` and `tools/`, plus adb patches. Rerun
 ./build-update.sh rg40xxv
 ```
 
-The release version lives in the repo-root `VERSION` file; `build-rootfs.sh` bakes
-it and `git describe` into `/etc/baseos-release` and `/etc/os-release`.
+The version number comes from the `VERSION` file at the top of the repository.
+`build-rootfs.sh` writes it, with the output of `git describe`, into
+`/etc/baseos-release` and `/etc/os-release` on the device.
 
-Target IDs are:
+### Targets
 
 | Device | Target ID |
 |---|---|
@@ -85,153 +90,27 @@ Target IDs are:
 | Anbernic RG CubeXX | `rgcubexx` |
 | Anbernic RG SP | `rgsp` |
 
-Each target's profile lives in `devices.json`. `panel_rotation_ccw` is the angle the
-splash is turned through to land upright on a panel that is mounted turned — `90` on the
-RG28XX, whose 480×640 panel is held in landscape, and `0` everywhere else. See
-[docs/04-boot-splash.md](docs/04-boot-splash.md) §2.1 before changing it: the direction
-is fixed by the vendor bootlogo, not by taste.
-
-## The prepared-artifact cache
-
-`prepare-stock.sh` derives exactly three things per target from a vendor image:
-`boot-prefix.img`, `stock-harvest.tar` and `source.json`. The cache ships the first
-two pre-made; the third is committed:
-
-```
-manifest/prepared/<target>.json   each target's source.json — the trust anchor
-manifest/prepared/bundle.sha256   hash of the published bundle
-manifest/prepared/bundle.url      where that bundle lives
-```
-
-Integrity is checked twice and both anchors are in git. `bundle.sha256` covers the
-download; the size and SHA-256 of each artifact, recorded in the committed
-`source.json`, cover the contents — and that second check is the one
-`build-rootfs.sh` and `build-image.sh` already run on every build. A bad restore
-therefore fails exactly where a bad preparation would.
-
-The cache is an optimisation, never a source of truth: `prepare-stock.sh`
-regenerates the same artifacts from the vendor image and must produce the same
-hashes. `./fetch-prepared.sh --from <bundle>` uses a local bundle instead of
-downloading, and refuses to overwrite a target you prepared locally from different
-firmware unless you pass `--force`.
-
-## Stock and StockMod firmware
-
-`prepare-stock.sh` accepts either an Anbernic **stock** image or a **StockMod**
-one, and produces the same output from both — one build path, one image format.
-Which it is comes from the partition table, never from the filename:
-
-| | partition 1 | p2–p7 |
-|---|---|---|
-| StockMod | `special`, 64 MiB empty ext4 | start at 204800 |
-| stock | `Roms`, 2 GiB user-visible FAT32 | start ~1.94 GiB higher |
-
-StockMod BASE images may omit the final `primary` partition, either in a trimmed
-image or a full-disk image with a valid backup GPT, as in StockMod v4.
-
-A stock table is recast into the StockMod one before anything else runs: `Roms`
-is dropped and rebuilt as an empty 64 MiB `special`, and everything after it
-moves down by the difference — which lands p2–p5 on exactly the StockMod
-offsets. `boot0`, U-Boot, `env` and `boot` are carried over untouched.
-
-This is safe because **StockMod performs the same re-partition and boots.** With
-an RG34XXSP stock and StockMod image side by side, `env` and `boot` are
-byte-identical across the move and U-Boot is unmodified, because it resolves
-`partitions=` from GPT names and `root=` by partition number rather than by
-address ([boot contract](docs/07-partition-layout-and-updates.md#1-boot-contract)). StockMod's only other boot-chain change is one nibble of
-`dram_para[28]` plus its checksum — a DRAM trim, not something the move needs,
-so a stock-derived card keeps its own timings.
-
-`source.json` records `source_layout` (`stock` or `stockmod`), keeps the
-original vendor table under `source.partitions`, and reports the normalised
-table as `layout`. Preparing from stock needs the whole card, because the rootfs
-harvest is read from partition 5; a truncated stock image is refused with that
-reason.
-
-## Adding a device model
-
-The only workflow that still needs a vendor `.img` — once, for one person.
-
-```sh
-# add the devices.json entry first: id, model, stockmod_prefix, model_string,
-# bootlogo_width/height, panel_rotation_ccw
-./prepare-stock.sh rgsp /path/to/RGSP-....img
-./verify-target.sh rgsp
-./cache-pack.sh
-./build-all.sh rgsp && ./validate-on-device.sh rgsp DEVICE_IP ROOT_PASSWORD
-```
-
-Set the optional `filename_alias` only if the image arrives hand-named rather
-than as a `<MODEL>-...` vendor release; `stockmod_prefix` covers the usual case.
-
-`cache-pack.sh` runs `verify-target.sh` over every target before packing, writes
-the bundle to `work/prepared/`, and prints the `gh release create` and `git add`
-commands to finish with. Artifact releases are tagged by date, `prepared-YYYYMMDD`.
-
-## Audio module builds
-
-`build-rootfs.sh` runs `build-audio-module.sh <target>` and packages the resulting
-speaker/headphone repair module. The build uses a pinned kernel source archive
-and compiler, the target's embedded kernel configuration, and recovered vendor
-symbol versions. Its cache is separate from `work/tools` and invalidates when
-module sources, build inputs or the reviewed profile change.
-
-The exact kernel hashes and private-symbol offsets live in
-`src/h700-speaker-amp/profiles.json`. A firmware refresh must verify the codec,
-GPIO and ASoC layouts before updating that profile; a matching release string
-or exported-symbol CRC alone is insufficient. See
-[audio behavior and validation](docs/05-runtime-power-network.md#speaker-and-headphone-pop-repair).
-
-## Tracking a new vendor firmware
-
-Each target pins a specific vendor firmware through its committed `source.json`, so
-a new Anbernic release changes nothing until you choose to take it — per target.
-
-```sh
-./prepare-stock.sh rg40xxv /path/to/RG40XXV-<new>.img
-git diff manifest/prepared/rg40xxv.json    # exactly what moved
-./verify-target.sh rg40xxv
-./cache-pack.sh
-./build-all.sh rg40xxv && ./validate-on-device.sh rg40xxv DEVICE_IP ROOT_PASSWORD
-```
-
-The diff is the review: partition geometry, artifact hashes and the vendor image's
-own provenance all change visibly in one small file.
-
-`verify-target.sh` gates the assumptions a refreshed firmware could silently
-invalidate — the recorded partition layout, that p1 `special` is an empty ext4,
-that p3 `env` still boots `/dev/mmcblk0p5` and still leaves `partitions=` for
-U-Boot to synthesise from GPT names, and that the p4 kernel still exports every
-symbol the harvested modules import with matching modversions CRCs. That last one
-matters most: a refreshed kernel whose exports have moved ships modules that fail
-to `insmod`, leaving a device with a dead GPU or no Wi-Fi and no other symptom.
-`tools/kernel_abi.py` recovers the export table straight out of the vendor `Image`
-(see its module docstring for how, given there is no `vmlinux` or `Module.symvers`)
-and can also check one target's modules against another's kernel:
-
-```sh
-python3 tools/kernel_abi.py check rg34xxsp --modules-from rg40xxv
-```
-
-To prepare and build from firmware in one command, without the cache:
-
-```sh
-./build-stockmod.sh /path/to/firmware rg40xxv
-```
+Each target's settings are in `devices.json`. `panel_rotation_ccw` is how far
+the boot logo is turned so that it shows upright on a panel mounted sideways.
+It is `90` on the RG28XX, whose 480×640 panel is held in landscape, and `0` on
+every other model. The vendor's own boot logo decides the value, so read
+section 2.1 of [docs/04-boot-splash.md](docs/04-boot-splash.md) before changing
+it.
 
 ## Testing
 
-Run checks relevant to the files changed. The main test entry points are:
+Run the tests that cover the files you changed. These run on the Mac:
 
 ```sh
 ./test-prepare-stock.sh
+./test-expand-storage.sh
 python3 tests/test-verify-harvest.py
 python3 tests/test-prepared-cache.py
-./test-expand-storage.sh
-./tests/test-baseos-config.sh
-./tests/test-h700-speaker-amp-load.sh
 python3 tests/test-audio-gating.py
 python3 tests/test-audio-module.py
+python3 tests/test-strip-gpu-module.py
+./tests/test-baseos-config.sh
+./tests/test-h700-speaker-amp-load.sh
 ./tests/test-baseos-mdns.sh
 ./tests/test-boot-splash-policy.sh
 ./tests/test-frontend-session.sh
@@ -239,16 +118,10 @@ python3 tests/test-audio-module.py
 ./tests/test-root-mount.sh
 ./tests/test-usr-lib-image.sh
 ./tests/test-input-dir-time.sh
-python3 tests/test-kernel-gzip.py  # requires all prepared firmware inputs
-python3 tests/test-late-usb.py     # requires all prepared firmware inputs
-python3 tests/test-lib-image.py    # requires all prepared firmware inputs
 ./tests/test-wifi-init.sh
 ./tests/test-systemctl-wifi.sh
 ./tests/test-poweroff-policy.sh
 ./tests/test-axp-off.sh
-./tests/test-baseos-config.sh
-./tests/test-baseos-mdns.sh
-python3 tests/test-strip-gpu-module.py
 ./tests/test-splash-rotation.sh
 ./tests/test-baseos-ntp.sh
 ./tests/test-timedatectl.sh
@@ -258,37 +131,195 @@ python3 tests/test-strip-gpu-module.py
 ./tests/test-boot-menu-held.sh
 ./tests/test-usb-gadget-adb.sh
 ./tests/test-usb-storage-mode.sh
-./tests/test-axp-off.sh
 ./tests/test-power-intent.sh
-./tests/test-poweroff-policy.sh
-./test-boot-qemu.sh rg40xxv
-./test-update-roundtrip.sh rg40xxv   # needs build-image.sh + build-update.sh first
-./validate-on-device.sh rg40xxv DEVICE_IP ROOT_PASSWORD
 ```
 
-## Boot-performance changes
+These need the prepared inputs for every model, so run `./fetch-prepared.sh`
+with no targets first:
 
-The README distinguishes BaseOS handoff timing from frontend startup time.
-Update timing figures only after repeated measurements show a meaningful change;
-label kernel-relative timings separately from power-on measurements. Developer
-docs should describe current behavior, interfaces and validation requirements;
-keep experiment logs, old/new results and debugging history out of them.
+```sh
+python3 tests/test-kernel-gzip.py
+python3 tests/test-late-usb.py
+python3 tests/test-lib-image.py
+```
 
-The kernel-to-frontend handoff ceiling is 2.50 seconds for all devices, enforced by
-`validate-on-device.sh`. See [boot performance](docs/09-boot-profiling.md) for
-measurement scope, comparison procedure and GPU module optimization.
+These need a build of the target:
 
-## Technical documentation
+```sh
+./test-boot-qemu.sh rg40xxv          # after build-rootfs.sh
+./test-update-roundtrip.sh rg40xxv   # after build-image.sh and build-update.sh
+```
 
-The [boot files](docs/12-kernel-gzip.md) cover every supported target and reach
-existing cards through a one-time migration inside a normal `.bosupd`. They
-shorten both the time before Linux and the kernel-to-frontend time. The
-[boot-speed experiments](experiments/h700-boot-speed/README.md) hold the
-measurements behind each change and the tools that took them. The original
-[RG SP gzip experiment](experiments/rgsp-kernel-gzip/README.md) retains its investigation evidence.
-The [RG SP boot-timing follow-up](experiments/rgsp-boot-timing/README.md) records
-counter-based stages and the repeated gzip/original-kernel comparison separately
-from LED-on and frontend rendering measurements.
+To check a flashed device:
+
+```sh
+./validate-on-device.sh rg40xxv DEVICE_IP [ROOT_PASSWORD]
+```
+
+`validate-on-device.sh` logs in to the device over SSH, so turn on Wi-Fi in
+NextUI's settings first. The root password defaults to `root`. It checks the
+system identity, partition layout and update slots, boot speed, hardware,
+NextUI, the developer services and resource use, then prints how many checks
+passed and failed.
+
+## Boot timing
+
+The README's startup times include loading the kernel but not loading the
+frontend, and it reports frontend load times separately. Change those figures
+only after repeated measurements show a real difference. Label times measured
+from kernel start separately from times measured from power-on.
+
+`validate-on-device.sh` fails on any model whose kernel-to-frontend handoff
+takes longer than 2.50 seconds. [Boot performance](docs/09-boot-profiling.md)
+explains what to measure, how to compare two builds, and the GPU module
+optimization.
+
+## Prepared inputs
+
+`prepare-stock.sh` makes three files per target from a vendor image:
+`boot-prefix.img`, `stock-harvest.tar` and `source.json`. The published bundle
+holds the first two. Git holds each target's `source.json`, which records the
+size and SHA-256 of the other two:
+
+```
+manifest/prepared/<target>.json   each target's source.json
+manifest/prepared/bundle.sha256   SHA-256 of the published bundle
+manifest/prepared/bundle.url      where the bundle is published
+```
+
+`fetch-prepared.sh` checks the download against `bundle.sha256`.
+`build-rootfs.sh` and `build-image.sh` check each file against its `source.json`
+on every build, so a damaged download fails at the same point as a bad
+preparation.
+
+The bundle only saves you the vendor downloads. `prepare-stock.sh` makes the same
+files from the vendor image, with the same hashes. To use a bundle already on
+disk instead of downloading one, run `./fetch-prepared.sh --from <bundle>`. It
+refuses to overwrite a target you prepared yourself from different firmware
+unless you pass `--force`.
+
+## Stock and StockMod images
+
+`prepare-stock.sh` accepts an Anbernic stock image or a StockMod image and makes
+the same output from either, so there is one build path and one card layout. It
+tells the two apart by the partition table, not by the file name:
+
+| | partition 1 | p2 to p7 |
+|---|---|---|
+| StockMod | `special`, 64 MiB empty ext4 | start at 204800 |
+| stock | `Roms`, 2 GiB user-visible FAT32 | start ~1.94 GiB higher |
+
+Some StockMod BASE images have no final `primary` partition. This happens in
+trimmed images and in full-disk images with a valid backup GPT, such as StockMod
+v4. `prepare-stock.sh` accepts both.
+
+Before anything else, `prepare-stock.sh` converts a stock partition table into
+the StockMod one. It removes `Roms`, puts an empty 64 MiB `special` partition in
+its place, and moves every later partition down by the difference in size. That
+puts p2 to p5 at exactly the StockMod offsets. It copies `boot0`, U-Boot, `env`
+and `boot` unchanged.
+
+This is safe because StockMod makes the same change and its cards boot. In an
+RG34XX SP stock image and StockMod image compared side by side, `env` and `boot`
+are byte-identical after the move, and U-Boot is unmodified. U-Boot finds
+partitions by their GPT names for `partitions=` and the root by partition number
+for `root=`, never by address. The
+[boot contract](docs/07-partition-layout-and-updates.md#1-boot-contract) has the
+details. The only other change StockMod makes to the boot chain is one nibble of
+`dram_para[28]` and its checksum. That is a DRAM timing trim the move does not
+need, so a card made from stock keeps the stock timings.
+
+`source.json` records the image kind in `source_layout` (`stock` or `stockmod`),
+keeps the vendor's original partition table in `source.partitions`, and records
+the converted table in `layout`. Preparing from a stock image needs the whole
+card image, because the root filesystem files come from partition 5.
+`prepare-stock.sh` refuses a truncated stock image and says why.
+
+## Adding a device model
+
+Adding a model and taking a new vendor firmware are the only tasks that need a
+vendor `.img`, and only the person doing them needs it, once.
+
+```sh
+# First add the model to devices.json: id, model, stockmod_prefix,
+# model_string, bootlogo_width, bootlogo_height, panel_rotation_ccw.
+./prepare-stock.sh rgsp /path/to/RGSP-....img
+./verify-target.sh rgsp
+./cache-pack.sh
+./build-all.sh rgsp && ./validate-on-device.sh rgsp DEVICE_IP
+```
+
+`stockmod_prefix` matches vendor files named `<MODEL>-...`. Set the optional
+`filename_alias` only for an image someone renamed by hand.
+
+`cache-pack.sh` runs `verify-target.sh` on every target, writes the new bundle
+to `work/prepared/`, and prints the `gh release create` and `git add` commands
+that publish it. Bundle releases are tagged by date, as `prepared-YYYYMMDD`.
+
+## Taking a new vendor firmware
+
+Each target's committed `source.json` pins one vendor firmware. A new Anbernic
+release changes nothing until you take it for that target:
+
+```sh
+./prepare-stock.sh rg40xxv /path/to/RG40XXV-<new>.img
+git diff manifest/prepared/rg40xxv.json    # exactly what changed
+./verify-target.sh rg40xxv
+./cache-pack.sh
+./build-all.sh rg40xxv && ./validate-on-device.sh rg40xxv DEVICE_IP
+```
+
+Review that diff. It shows every change to the partition geometry, the file
+hashes and the vendor image's own details in one small file.
+
+`verify-target.sh` checks the things a new firmware could break without any
+visible error:
+
+- The partition layout matches the recorded one.
+- p1 `special` is an empty ext4 filesystem.
+- p3 `env` still boots `/dev/mmcblk0p5`, and still leaves `partitions=` for
+  U-Boot to fill in from the GPT names.
+- The p4 kernel still exports every symbol the harvested modules use, with
+  matching modversions CRCs.
+
+The last check matters most. If a new kernel's exports have changed, the
+harvested modules fail to load, and the device ends up with no GPU or no Wi-Fi
+and nothing else to show why. `tools/kernel_abi.py` reads the export table
+straight from the vendor `Image`, which comes without a `vmlinux` or
+`Module.symvers`. Its docstring explains how. It can also check one target's
+modules against another target's kernel:
+
+```sh
+python3 tools/kernel_abi.py check rg34xxsp --modules-from rg40xxv
+```
+
+To prepare and build from a firmware image in one step, without the bundle:
+
+```sh
+./build-stockmod.sh /path/to/firmware rg40xxv
+```
+
+## The audio module
+
+`build-rootfs.sh` runs `build-audio-module.sh <target>`, which builds the kernel
+module that stops speaker and headphone pops, and packages it. The build uses a
+pinned kernel source archive and compiler, the target's own kernel
+configuration, and symbol versions recovered from the vendor kernel. It keeps
+its own cache, apart from `work/tools`, and rebuilds when the module sources,
+build inputs or reviewed profile change.
+
+`src/h700-speaker-amp/profiles.json` holds the exact kernel hashes and private
+symbol offsets for each target. Before updating it for a new firmware, check the
+codec, GPIO and ASoC layouts. A matching release string or exported-symbol CRC
+is not enough on its own. See
+[audio behavior and validation](docs/05-runtime-power-network.md#speaker-and-headphone-pop-repair).
+
+## Documentation
+
+The docs in `docs/` describe how BaseOS works now: its behavior, interfaces and
+how to validate them. Keep experiment logs, before-and-after results and
+debugging history out of them. Those belong with the experiment in
+`experiments/`.
 
 - [Boot chain and partitions](docs/00-boot-chain-and-partitions.md)
 - [Root filesystem and init](docs/01-rootfs-and-init.md)
@@ -302,3 +333,16 @@ from LED-on and frontend rendering measurements.
 - [Boot performance](docs/09-boot-profiling.md)
 - [Boot SD-card I/O](docs/10-boot-io-audit.md)
 - [Charger-only boot](docs/11-charger-only-boot.md)
+- [Boot files](docs/12-kernel-gzip.md): the faster boot files every model uses,
+  and the one-time migration inside a normal `.bosupd` that brings them to
+  existing cards
+
+The experiments hold the measurements behind the boot changes:
+
+- [Boot-speed experiments](experiments/h700-boot-speed/README.md): the
+  measurements behind each change, and the tools that took them
+- [RG SP gzip experiment](experiments/rgsp-kernel-gzip/README.md): the original
+  investigation
+- [RG SP boot timing](experiments/rgsp-boot-timing/README.md): stage times from
+  the hardware counter, and repeated comparisons of the gzip and original
+  kernels, kept apart from LED-on and frontend measurements
