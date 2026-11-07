@@ -116,6 +116,25 @@ static int volatile_fs(const char *type)
 	return 0;
 }
 
+/* musl's hasmntopt() also matches substrings: "ro" matches the FAT option
+ * "errors=remount-ro" and "sync" matches "dirsync". Only whole comma-separated
+ * options describe the VFS mount flags that we must preserve or verify. */
+static int mount_option(const struct mntent *m, const char *option)
+{
+	const char *p = m->mnt_opts;
+	size_t len = strlen(option);
+
+	while (*p) {
+		size_t n = strcspn(p, ",");
+		if (n == len && !strncmp(p, option, len))
+			return 1;
+		p += n;
+		if (*p)
+			p++;
+	}
+	return 0;
+}
+
 /* Preserve VFS options when making a mount read-only. Filesystem-specific
  * options remain unchanged with a NULL remount data argument. */
 static unsigned long readonly_flags(struct mntent *m)
@@ -128,7 +147,7 @@ static unsigned long readonly_flags(struct mntent *m)
 		{ "relatime", MS_RELATIME }, { "mand", MS_MANDLOCK }
 	};
 	for (size_t i = 0; i < sizeof options / sizeof options[0]; i++)
-		if (hasmntopt(m, options[i].name))
+		if (mount_option(m, options[i].name))
 			flags |= options[i].flag;
 	return flags;
 }
@@ -144,7 +163,7 @@ static int readonly_mounts(const char *path, int prepare)
 	while ((m = getmntent(f))) {
 		if (!strcmp(m->mnt_dir, "/"))
 			root_seen = 1;
-		if (volatile_fs(m->mnt_type) || hasmntopt(m, "ro"))
+		if (volatile_fs(m->mnt_type) || mount_option(m, "ro"))
 			continue;
 		if (!prepare || mount(NULL, m->mnt_dir, NULL, readonly_flags(m), NULL)) {
 			fprintf(stderr, "axp-off: %s is not safely read-only; refusing power cut\n",

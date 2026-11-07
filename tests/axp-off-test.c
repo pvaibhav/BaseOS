@@ -108,8 +108,9 @@ static FILE *mount_table(const char *path, const char *mode)
 	assert(f);
 	if (!empty_table) {
 		for (int i = 0; i < 3; i++)
-			fprintf(f, "/dev/mmcblk0p%d %s %s %s,noatime,nosuid,nodev 0 0\n",
-				i + 5, points[i], i == 2 ? "vfat" : "ext4", rw[i] ? "rw" : "ro");
+			fprintf(f, "/dev/mmcblk0p%d %s %s %s,noatime,nosuid,nodev%s 0 0\n",
+				i + 5, points[i], i == 2 ? "vfat" : "ext4", rw[i] ? "rw" : "ro",
+				i == 2 ? ",errors=remount-ro" : "");
 		fputs("tmpfs /run tmpfs rw 0 0\nproc /proc proc rw 0 0\n"
 		      "adb /dev/usb-ffs/adb functionfs rw 0 0\n", f);
 	}
@@ -183,9 +184,38 @@ static int run(int armed)
 
 int main(void)
 {
+	struct mntent options = { .mnt_opts = "rw,dirsync,errors=remount-ro" };
+	assert(!mount_option(&options, "ro"));
+	assert(mount_option(&options, "rw"));
+	assert(!mount_option(&options, "sync"));
+	assert(readonly_flags(&options) == (MS_REMOUNT | MS_RDONLY | MS_DIRSYNC));
+	options.mnt_opts = "ro,noatime,nosuid,nodev,sync";
+	assert(mount_option(&options, "ro"));
+	assert(readonly_flags(&options) == (MS_REMOUNT | MS_RDONLY | MS_NOATIME |
+		MS_NOSUID | MS_NODEV | MS_SYNCHRONOUS));
+	options.mnt_opts = "xro,rofoo,errors=remount-ro,async,nosuidfoo,xnodev";
+	assert(!mount_option(&options, "ro"));
+	assert(!mount_option(&options, "sync"));
+	assert(readonly_flags(&options) == (MS_REMOUNT | MS_RDONLY));
+	options.mnt_opts = "";
+	assert(!mount_option(&options, "ro"));
+	options.mnt_opts = ",,rw,,ro,";
+	assert(mount_option(&options, "ro"));
+
 	assert(setenv("BASEOS_SYS_ROOT", "/tmp/axp-fixture", 1) == 0);
 	reset();
 	assert(run(0) == 0 && reads == 1 && writes == 0 && remounts == 0 && syncs == 0);
+	/* An exact ro option needs no remount. An rw FAT mount whose error policy
+	 * contains "ro" must still be remounted, and must fail the verification
+	 * pass if a reported successful remount did not actually change it. */
+	reset();
+	for (int i = 0; i < 3; i++) rw[i] = 0;
+	assert(run(1) == 1 && writes == 1 && remounts == 0);
+	reset();
+	rw[0] = rw[1] = 0;
+	assert(readonly_mounts("/proc/mounts", 0) == -1 && remounts == 0);
+	assert(readonly_mounts("/proc/mounts", 1) == 0 && remounts == 1 && !rw[2]);
+	assert(readonly_mounts("/proc/mounts", 0) == 0);
 	for (unsigned value = 0; value < 16; value++) {
 		reset(); reg_value = value;
 		assert(run(1) == 1); /* The emulated PMIC leaves the process alive. */
