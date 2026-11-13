@@ -1,0 +1,16 @@
+# Ubuntu packages for libraries ports need that the stock image lacks. The
+# stock userland is jammy (22.04); focal (20.04) only supplies the old
+# OpenSSL 1.1 and libffi 7 sonames that some runtimes still link.
+# build-debs.sh installs only each package's shared libraries and copyright.
+# <path under http://ports.ubuntu.com/ubuntu-ports/> <sha256>
+pool/universe/libm/libmodplug/libmodplug1_0.8.9.0-3_arm64.deb a354c5aa85a6b6fa35623588afd845f960b23485b69c16a3fd1b8ba1b0c0b38c
+pool/universe/libs/libsdl2-gfx/libsdl2-gfx-1.0-0_1.0.4+dfsg-4_arm64.deb a31a5dfbb99cec5109f286aa996618eaa3e2dfc0cb0412adc6755198f81c6716
+pool/universe/o/opusfile/libopusfile0_0.9+20170913-1.1build1_arm64.deb 00147abc42e8a2847d3ad094b3220be0c5aea33b0bb1a4f8941e5cf91403affd
+pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_arm64.deb dded4572af8b0a9e0310909f211a519cc6409fda31ea81132a77e268b0ec0f2f
+pool/main/libf/libffi/libffi7_3.3-4_arm64.deb a3e7abc48b5b4614fd5f6d1d95019d52be092e40e9b8a05f670905c6abf6eac4
+pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_armhf.deb e224db5480148446a5f53fd400d83e3780ee8e6f2be14cc1fb3595c1893df62c
+pool/universe/libm/libmodplug/libmodplug1_0.8.9.0-3_armhf.deb 78502e5b95d7645f3ceda9e9d5a5c111367cc43d3d13ce25fda429bc006c0de1
+pool/universe/libs/libsdl2-gfx/libsdl2-gfx-1.0-0_1.0.4+dfsg-4_armhf.deb a58ee16a159aad188b3dcd3a77a82846d647127790669b06246b269eb4398c6d
+pool/universe/libs/libsdl2-image/libsdl2-image-2.0-0_2.0.5+dfsg1-3build1_armhf.deb 75c0192cc96e89eebd0b3bc7f95774d45e96e1f7a2d06d2f5c9fd7174b5f7a91
+pool/universe/libs/libsdl2-mixer/libsdl2-mixer-2.0-0_2.0.4+dfsg1-4build1_armhf.deb 841c294f4c514a91383d262b5fb644f0ef4ea5f661e9b91390f2341952116bd1
+pool/universe/libs/libsdl2-ttf/libsdl2-ttf-2.0-0_2.0.18+dfsg-2_armhf.deb fbf83ca05ee70d60393b52dd519731f2d86193ed9a3fc273c632a5f728b9d61d

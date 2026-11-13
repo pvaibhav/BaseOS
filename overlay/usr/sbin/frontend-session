@@ -192,6 +192,8 @@ if [ "$CARD_MISSING" -eq 0 ] && [ -f "$LAUNCH" ]; then
 				"$boot_uptime" "$boot_pre" "$boot_post" "$boot_total" >> "$LOG" 2>/dev/null || :
 		fi
 	fi
+	# Ports expect GNU tools; BaseOS's own scripts keep BusyBox.
+	export PATH="/usr/lib/baseos-gnu/bin:${PATH:-/usr/sbin:/usr/bin:/sbin:/bin}"
 	if [ "$LAUNCH_TYPE" = binary ]; then
 		# Binaries use the glibc AArch64 runtime. Use the system
 		# loader so a copied binary needs no executable bit or chmod on the

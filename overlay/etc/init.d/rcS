@@ -97,6 +97,12 @@ fi
 /bin/mkdir -p /var/lib /var/log /var/tmp /var/lib/alsa /var/lib/bluealsa /var/empty
 /bin/ln -s /run /var/run
 
+# udev, with input rules only. SDL learns device types from its database (the
+# 32-bit SDL2 finds no gamepad without it) and hears about devices that appear
+# later, such as the virtual keyboard gptokeyb creates as a port starts.
+/usr/lib/systemd/systemd-udevd --daemon --resolve-names=never >/dev/null 2>&1
+/usr/bin/udevadm trigger --subsystem-match=input --action=add >/dev/null 2>&1 &
+
 # GPU: the build strips debug data from the vendor module. Load it in the
 # background to overlap startup; frontend-session waits for /dev/mali0.
 /sbin/insmod /lib/modules/mali_kbase.ko 2>/dev/null &
