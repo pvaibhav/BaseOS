@@ -40,11 +40,15 @@ python3 "$HERE/tools/kernel_gzip.py" prepare "$TARGET" "$WORK/boot-prefix.img" "
 
 # Every released rootfs must contain the module built for this exact vendor kernel.
 "$HERE/build-audio-module.sh" "$TARGET"
+"$HERE/build-vulkan.sh"
+[ -f "$HERE/work/vulkan/root/usr/lib/aarch64-linux-gnu/libvulkan_panfrost.so" ] \
+  || { echo "missing Vulkan driver in $HERE/work/vulkan" >&2; exit 1; }
 
 docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   -v "$WORK":/work -v "$TOOLS":/tools:ro \
   -v "$HERE/tools/strip_gpu_module.py":/build/strip_gpu_module.py:ro \
   -v "$HERE/overlay":/overlay:ro -v "$HERE/assets":/assets:ro \
+  -v "$HERE/work/vulkan/root":/vulkan:ro \
   -e BASEOS_TARGET="$PROFILE_TARGET" \
   -e BASEOS_DEVICE="$PROFILE_BASEOS_DEVICE" \
   -e BASEOS_MODEL="$PROFILE_MODEL" \
@@ -104,6 +108,8 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   # dev-name GLES symlinks (launch.sh probes libEGL.so before libEGL.so.1)
   ln -sf libEGL.so.1 "$R/usr/lib/libEGL.so"
   ln -sf libGLESv2.so.2 "$R/usr/lib/libGLESv2.so"
+  # Vulkan: loader, PanVK driver and its ICD file (build-vulkan.sh)
+  cp -a /vulkan/. "$R/"
 
   ## 4. Our overlay wins over everything
   # `busybox --install` symlinked /usr/sbin/poweroff and /usr/sbin/reboot at the
@@ -280,6 +286,11 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
         "${f#"$R"}" 2>/dev/null | grep "not found" \
         | sed "s|^|MISSING for ${f#"$R"}: |" || true
   done > /tmp/closure-report.txt 2>&1 || true
+  for so in libvulkan.so.1 libvulkan_panfrost.so; do
+    chroot "$R" /usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 --list \
+        "/usr/lib/aarch64-linux-gnu/$so" 2>/dev/null | grep "not found" \
+        | sed "s|^|MISSING for $so: |" || true
+  done >> /tmp/closure-report.txt 2>&1
   cp /tmp/closure-report.txt /work/closure-report.txt
   if grep -Eq "MISSING|UNRESOLVABLE" /work/closure-report.txt; then
     echo "=== closure problems ==="; cat /work/closure-report.txt

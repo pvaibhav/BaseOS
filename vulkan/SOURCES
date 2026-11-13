@@ -1,0 +1,3 @@
+PANVK_REPO=https://github.com/OursCodeur/mali-panvk.git
+PANVK_COMMIT=436f09104872d06b3d68775c4284e1ffae9af5b4
+VULKAN_TAG=v1.4.358
