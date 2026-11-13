@@ -131,6 +131,9 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   ln -sf libmali.so.0 "$R/usr/lib32/libmali.so"
   # the soname alias stock has; the PortMaster Weston runtime links it
   ln -sf libmali.so.0 "$R/usr/lib/libmali.so.1"
+  # udevd is udevadm started under this name (rcS)
+  mkdir -p "$R/usr/lib/systemd"
+  ln -sf ../../bin/udevadm "$R/usr/lib/systemd/systemd-udevd"
   # Ubuntu 22.04 libraries the stock image lacks (build-debs.sh)
   cp -a /debs/. "$R/"
 

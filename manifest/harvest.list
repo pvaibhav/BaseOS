@@ -187,6 +187,7 @@
 /usr/bin/timeout
 /usr/bin/touch
 /usr/bin/tr
+/usr/bin/udevadm
 /usr/bin/uname
 /usr/bin/unzip
 /usr/bin/wc
@@ -226,6 +227,7 @@
 /usr/lib/aarch64-linux-gnu/libjpeg.so.8
 /usr/lib/aarch64-linux-gnu/libk5crypto.so.3
 /usr/lib/aarch64-linux-gnu/libkeyutils.so.1
+/usr/lib/aarch64-linux-gnu/libkmod.so.2
 /usr/lib/aarch64-linux-gnu/libkrb5.so.3
 /usr/lib/aarch64-linux-gnu/libkrb5support.so.0
 /usr/lib/aarch64-linux-gnu/liblber-2.5.so.0
@@ -296,6 +298,10 @@
 /usr/lib/aarch64-linux-gnu/libXtst.so.6
 /usr/lib/aarch64-linux-gnu/libXxf86vm.so.1
 /usr/lib/aarch64-linux-gnu/pulseaudio/libpulsecommon-15.99.so
+# udev with input rules only (rcS)
+/usr/lib/udev/rules.d/50-udev-default.rules
+/usr/lib/udev/rules.d/60-input-id.rules
+/usr/lib/udev/rules.d/60-persistent-input.rules
 # 32-bit ports: every sampled armhf-only port needs SDL2, bz2, freetype,
 # openal and zlib beyond glibc; these complete that set, plus what the
 # Ubuntu armhf packages in debs/packages.list need.

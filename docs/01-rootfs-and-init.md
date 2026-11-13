@@ -25,7 +25,7 @@ requires preparing the affected targets again and refreshing the cache;
 
 The rootfs build checks the AArch64 dependency closure and the ARMHF loader/libc
 required by `rtk_hciattach`. Other ARMHF applications still need their own
-compatibility validation. Shipping `libudev` does not provide a udev daemon.
+compatibility validation.
 GPU module debug data is stripped with ABI checks; ARMHF libraries are retained
 as harvested. See [boot performance](09-boot-profiling.md).
 
@@ -129,8 +129,11 @@ regular executable `/init` script, which executes BusyBox init. `/etc/inittab` r
    access and update application.
 8. Start SSH/SFTP and USB adb through `/etc/init.d/dev` in the background.
 
-Services requiring a network do not block frontend startup. There is no udev
-or mdev; devtmpfs provides device nodes. Bluetooth starts D-Bus on demand.
+Services requiring a network do not block frontend startup. devtmpfs provides
+device nodes. udevd runs with input rules only: it labels input devices for SDL
+(the 32-bit SDL2 finds no gamepad without that) and announces devices that
+appear later, such as gptokeyb's virtual keyboard. It loads no drivers and has
+no hardware database. Bluetooth starts D-Bus on demand.
 
 ## 4. Frontend session
 
