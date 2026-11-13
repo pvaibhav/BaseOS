@@ -183,6 +183,7 @@
 /usr/bin/stat
 /usr/bin/tail
 /usr/bin/tar
+/usr/bin/taskset
 /usr/bin/timeout
 /usr/bin/touch
 /usr/bin/tr
@@ -191,6 +192,7 @@
 /usr/bin/wc
 /usr/bin/xargs
 /usr/bin/xz
+/usr/bin/zstd
 /etc/fonts
 /usr/lib/file/magic.mgc
 /usr/lib/python3.10
@@ -204,8 +206,10 @@
 /usr/lib/aarch64-linux-gnu/libevdev.so.2
 /usr/lib/aarch64-linux-gnu/libFLAC.so.8
 /usr/lib/aarch64-linux-gnu/libfontconfig.so.1
+/usr/lib/aarch64-linux-gnu/libgme.so.0
 /usr/lib/aarch64-linux-gnu/libgmp.so.10
 /usr/lib/aarch64-linux-gnu/libgnutls.so.30
+/usr/lib/aarch64-linux-gnu/libgomp.so.1
 /usr/lib/aarch64-linux-gnu/libgraphite2.so.3
 /usr/lib/aarch64-linux-gnu/libgssapi_krb5.so.2
 /usr/lib/aarch64-linux-gnu/libharfbuzz.so.0
@@ -220,6 +224,8 @@
 /usr/lib/aarch64-linux-gnu/libkrb5support.so.0
 /usr/lib/aarch64-linux-gnu/liblber-2.5.so.0
 /usr/lib/aarch64-linux-gnu/libldap-2.5.so.0
+/usr/lib/aarch64-linux-gnu/liblua5.2.so.0
+/usr/lib/aarch64-linux-gnu/liblua5.3.so.0
 /usr/lib/aarch64-linux-gnu/libmagic.so.1
 /usr/lib/aarch64-linux-gnu/libmd.so.0
 /usr/lib/aarch64-linux-gnu/libmpfr.so.6
@@ -231,9 +237,11 @@
 /usr/lib/aarch64-linux-gnu/libopenal.so.1
 /usr/lib/aarch64-linux-gnu/libopus.so.0
 /usr/lib/aarch64-linux-gnu/libp11-kit.so.0
+/usr/lib/aarch64-linux-gnu/libpixman-1.so.0
 /usr/lib/aarch64-linux-gnu/libprocps.so.8
 /usr/lib/aarch64-linux-gnu/libpsl.so.5
 /usr/lib/aarch64-linux-gnu/librtmp.so.1
+/usr/lib/aarch64-linux-gnu/libsamplerate.so.0
 /usr/lib/aarch64-linux-gnu/libsasl2.so.2
 /usr/lib/aarch64-linux-gnu/libSDL2-2.0.so.0
 /usr/lib/aarch64-linux-gnu/libSDL2_image-2.0.so.0
@@ -241,6 +249,7 @@
 /usr/lib/aarch64-linux-gnu/libSDL2_net-2.0.so.0
 /usr/lib/aarch64-linux-gnu/libSDL2_ttf-2.0.so.0
 /usr/lib/aarch64-linux-gnu/libsigsegv.so.2
+/usr/lib/aarch64-linux-gnu/libsndfile.so.1
 /usr/lib/aarch64-linux-gnu/libsndio.so.7
 /usr/lib/aarch64-linux-gnu/libssh.so.4
 /usr/lib/aarch64-linux-gnu/libtasn1.so.6
@@ -250,4 +259,9 @@
 /usr/lib/aarch64-linux-gnu/libvorbisenc.so.2
 /usr/lib/aarch64-linux-gnu/libvorbisfile.so.3
 /usr/lib/aarch64-linux-gnu/libvorbis.so.0
+/usr/lib/aarch64-linux-gnu/libwayland-client.so.0
+/usr/lib/aarch64-linux-gnu/libwayland-cursor.so.0
+/usr/lib/aarch64-linux-gnu/libwayland-egl.so.1
+/usr/lib/aarch64-linux-gnu/libwayland-server.so.0
 /usr/lib/aarch64-linux-gnu/libwebp.so.7
+/usr/lib/aarch64-linux-gnu/libxkbcommon.so.0
