@@ -91,7 +91,8 @@ piece it checks that only the intended bytes changed.
 
 - In the boot package it changes the selector instruction, the U-Boot and
   package checksums, and 24 device-tree bytes: the `debug_mode` value and the
-  five status values.
+  five status values. On targets with a `panel_timing` profile it also changes
+  `lcd_ht` and `lcd_vt` (see [60 Hz panel timing](#60-hz-panel-timing)).
 - In the boot image it changes the header sizes, the command line and the
   image ID, and it replaces the kernel and the ramdisk. It keeps the load
   addresses and the appended device tree.
@@ -109,6 +110,33 @@ migration needs those hashes to recognise cards that carry that pair.
 deliver the migration to existing cards. These files add about 8 MiB to the
 rootfs.
 
+### 60 Hz panel timing
+
+The vendor panel timings refresh below 60 Hz. U-Boot and the kernel both take
+the timing from the package's device tree, at boot and again on every wake.
+For targets whose 24 MHz pixel clock is exact, `manifest/kernel-gzip.json`
+gives new totals that shorten only the front porches. The porches, sync widths
+and clock stay as the vendor set them, and the tool refuses a total that would
+leave no front porch.
+
+| Target | Stock HT×VT | Stock rate | 60 Hz HT×VT | Rate |
+| --- | --- | --- | --- | --- |
+| RG28XX | 606×686 | 57.732 Hz | 584×685 | 59.994 Hz |
+| RG35XX H, RG35XX Pro | 770×528 | 59.032 Hz | 759×527 | 60.001 Hz |
+| RG35XX Plus | 770×526 | 59.256 Hz | 759×527 | 60.001 Hz |
+| RG35XX SP | 720×560 | 59.524 Hz | 713×561 | 60.001 Hz |
+| RG40XX H, RG40XX V | 770×522 | 59.710 Hz | 759×527 | 60.001 Hz |
+
+NextUI's measured rates for the RG28XX (57.7317 Hz) and RG40XX V (59.7104 Hz)
+match the stock arithmetic exactly. The RG34XX, RG34XX SP and RG SP (26 MHz)
+measure 59.569 Hz against 59.155 Hz from their device tree, so their real
+pixel clock is not the nominal one. They, and the RG CubeXX (41 MHz), keep the
+vendor timing until a measurement gives their clock.
+
+The native loader programs the display itself from `display-engine.json` and
+does not read this device tree before Linux. Native releases still need their
+TCON values and package pins updated to match.
+
 ## Migration of existing cards
 
 Copy the target's normal `.bosupd` onto the frontend card and restart. The
@@ -119,12 +147,13 @@ boot state, so the device does not restart again. The next ordinary boot uses
 the new files.
 
 `baseos-boot-migrate` identifies the installed boot package and boot image by
-hash. It knows three states and refuses any other.
+hash. It knows four states and refuses any other.
 
 | Installed | Meaning | What the migration does |
 | --- | --- | --- |
 | original | The vendor files, with an uncompressed kernel. | It writes both files and then verifies them. The card cannot boot between the two writes. |
 | gzip | The pair that release 1.3.0 installed. | It writes and verifies the boot image, then writes and verifies the boot package. The card can boot after every step. |
+| fast_v1 | The fast pair before 60 Hz panel timing. Same image, older package. | It writes and verifies the boot package only. |
 | fast | The current files. | It writes nothing. |
 
 The migration hashes exactly the bytes that the image header describes.
@@ -169,7 +198,9 @@ the original pair, power lost at any point after the first write leaves the
 card unbootable. To repair such a card, write the saved files back from
 another computer or reflash it.
 
-`/data/boot-pair-v2/migration.log` records each run. `complete` holds
+`/data/boot-pair-v2/migration.log` records each run. Every finished run also
+leaves `complete-60hz`, which is the marker startup tests, so a card that
+finished before 60 Hz panel timing runs the migration once more. `complete` holds
 `installed`, `already-installed`, `rolled-back` or `skipped:` with a reason,
 and a note if the migration left boot0 unchanged. Later boots test only that
 `complete` exists, with a shell builtin, and start no helper.

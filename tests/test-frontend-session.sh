@@ -582,13 +582,22 @@ run_session
 [ "$status" -eq 0 ]
 [ "$(cat /tmp/migration.log)" = called ]
 [ "$(cat /data/boot-gzip-v1/complete)" = installed ]
-# Any completion text ends it, including a result that carries a note.
+# A card whose pair step finished before 60 Hz panel timing runs it once more.
+reset
+nextui_card
+mkdir -p /data/boot-pair-v2
+echo installed > /data/boot-pair-v2/complete
+run_session
+[ "$status" -eq 0 ]
+[ "$(cat /tmp/migration.log)" = called ]
+# The 60 Hz marker ends it, whatever completion text sits beside it.
 for result in installed already-installed rolled-back 'skipped: target mismatch' \
 	'installed; boot0 left unchanged: unexpected magic'; do
 	reset
 	nextui_card
 	mkdir -p /data/boot-pair-v2
 	echo "$result" > /data/boot-pair-v2/complete
+	: > /data/boot-pair-v2/complete-60hz
 	run_session
 	[ "$status" -eq 0 ] && [ ! -e /tmp/migration.log ]
 	[ "$(cat /tmp/frontend.log)" = "$(printf 'nextui\nroot=unset\n')" ]

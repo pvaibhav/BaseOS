@@ -74,6 +74,8 @@ class Migration(unittest.TestCase):
         rng = random.Random(20261013)
         self.packages = {name: rng.randbytes(PACKAGE_SIZE) for name in IMAGE_SIZE}
         self.images = {name: rng.randbytes(size) for name, size in IMAGE_SIZE.items()}
+        # The fast package before 60 Hz panel timing; it shares the fast image.
+        self.packages["fast_v1"] = random.Random(20261105).randbytes(PACKAGE_SIZE)
         self.partition_base = rng.randbytes(PARTITION_SIZE)
         self.header = rng.randbytes(BODY_OFFSET)
         self.body = rng.randbytes(BOOT0_SIZE - BODY_OFFSET)
@@ -111,6 +113,7 @@ class Migration(unittest.TestCase):
             ORIGINAL_BOOT_IMAGE_SHA256=sha(self.images["original"]),
             GZIP_PACKAGE_SHA256=sha(self.packages["gzip"]), GZIP_BOOT_IMAGE_SIZE=IMAGE_SIZE["gzip"],
             GZIP_BOOT_IMAGE_SHA256=sha(self.images["gzip"]),
+            FAST_V1_PACKAGE_SHA256=sha(self.packages["fast_v1"]),
             BOOT0_OFFSET=BOOT0_OFFSET, BOOT0_SIZE=BOOT0_SIZE, BOOT0_DEBUG_OFFSET=DEBUG_OFFSET,
             BOOT0_BODY_OFFSET=BODY_OFFSET, BOOT0_BODY_SHA256=sha(self.body),
             BOOT0_ORIGINAL_SHA256=sha(self.make_boot0()))
@@ -187,7 +190,7 @@ class Migration(unittest.TestCase):
 
     def backups(self):
         return sorted(path.name for path in self.state.iterdir()
-                      if path.name not in ("complete", "migration.log"))
+                      if path.name not in ("complete", "complete-60hz", "migration.log"))
 
     def inject(self, body):
         wrapper = self.root / "bin/dd"
@@ -410,6 +413,29 @@ class Migration(unittest.TestCase):
             self.assertEqual(self.backups(), [])
             self.assertEqual(self.splashes(), [])
             self.assert_work_removed()
+
+    def test_fast_v1_package_is_replaced_and_the_image_kept(self):
+        self.flash("fast_v1", "fast", boot0=self.make_boot0(debug=0))
+        self.run_migration()
+        self.assertEqual(self.marker(), "installed")
+        self.assert_fast_pair()
+        self.assertEqual(self.boot0(), self.make_boot0(debug=0))
+        self.assertEqual(self.boot.read_bytes(), self.before_boot)
+        self.assertEqual(self.ops(), FIRST_READS + ["write package", "read image", "read package"])
+        self.assertEqual(self.backups(), ["boot-image-fast.bin", "package-fast_v1.bin"])
+        self.assertEqual((self.state / "package-fast_v1.bin").read_bytes(), self.packages["fast_v1"])
+        self.assertTrue((self.state / "complete-60hz").exists())
+        self.assertEqual(self.splashes(), [SPLASH])
+        self.assert_work_removed()
+
+    def test_every_finished_run_leaves_the_60hz_marker(self):
+        self.flash("fast", "fast", boot0=self.make_boot0(debug=0))
+        self.state.mkdir(parents=True)
+        (self.state / "complete").write_text("installed\n")
+        self.run_migration()
+        self.assertEqual(self.marker(), "already-installed")
+        self.assertTrue((self.state / "complete-60hz").exists())
+        self.assert_untouched()
 
     def test_quiet_boot0_is_left_alone_while_the_pair_migrates(self):
         self.flash("gzip", "original", "gzip", boot0=self.make_boot0(debug=0))
