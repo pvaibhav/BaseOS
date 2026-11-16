@@ -107,6 +107,7 @@ Run the tests that cover the files you changed. These run on the Mac:
 python3 tests/test-verify-harvest.py
 python3 tests/test-prepared-cache.py
 python3 tests/test-audio-gating.py
+python3 tests/test-rumble-pwm.py
 python3 tests/test-audio-module.py
 python3 tests/test-strip-gpu-module.py
 ./tests/test-baseos-config.sh

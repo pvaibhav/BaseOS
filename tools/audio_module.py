@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Prepare and verify the out-of-tree H700 modules against pinned vendor kernels.
 
-Two modules are built in one kernel-build run: the speaker-amplifier fix and
-the one that starts the USB host controllers the boot files hold back.
+Three modules are built in one kernel-build run: the speaker-amplifier fix,
+the late USB host controller starter, and the rumble PWM wrapper.
 
 An import CRC check alone cannot validate private ASoC layouts. profiles.json
 is a reviewed allowlist of exact Images; refreshing firmware requires auditing
@@ -23,8 +23,9 @@ import kernel_abi
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / 'src/h700-speaker-amp'
 LATE_USB = ROOT / 'src/h700-late-usb'
+RUMBLE_PWM = ROOT / 'src/h700-rumble-pwm'
 # The first name is the audio module; every name is built, checked and shipped.
-MODULES = ('h700_speaker_amp', 'h700_late_usb')
+MODULES = ('h700_speaker_amp', 'h700_late_usb', 'h700_rumble_pwm')
 
 
 def digest(blob):
@@ -49,6 +50,7 @@ def stamp(target):
     kernel, _, config, _ = inputs(target)
     h = hashlib.sha256(kernel + config)
     for path in (sorted(SOURCE.rglob('*')) + sorted(LATE_USB.rglob('*'))
+                 + sorted(RUMBLE_PWM.rglob('*'))
                  + [Path(__file__), ROOT / 'build-audio-module.sh', ROOT / 'tools/kernel_abi.py']):
         if path.is_file():
             h.update(path.name.encode() + b'\0' + path.read_bytes())
@@ -79,10 +81,12 @@ def prepare(target, output):
     module_dir.mkdir(exist_ok=True)
     for name in ['Makefile', 'h700_speaker_amp.c']:
         shutil.copyfile(SOURCE / name, module_dir / name)
-    # One kbuild directory and one prepared kernel tree serve both modules.
+    # One kbuild directory and one prepared kernel tree serve all modules.
     shutil.copyfile(LATE_USB / 'h700_late_usb.c', module_dir / 'h700_late_usb.c')
+    shutil.copyfile(RUMBLE_PWM / 'h700_rumble_pwm.c', module_dir / 'h700_rumble_pwm.c')
     with (module_dir / 'Makefile').open('a') as makefile:
         makefile.write((LATE_USB / 'Makefile').read_text())
+        makefile.write((RUMBLE_PWM / 'Makefile').read_text())
     start = kernel.index(b'Linux version ')
     banner = kernel[start:kernel.index(b'\0', start)].decode()
     names = {'linux_banner': 'LINUX_BANNER', 'sunxi_spk_event': 'SPK_EVENT',
