@@ -59,6 +59,14 @@ class AudioModuleTests(unittest.TestCase):
         root = Path(self.tmp.name)
         self.source = root / 'source'
         self.source.mkdir()
+        self.late_usb = root / 'late_usb'
+        self.late_usb.mkdir()
+        (self.late_usb / 'h700_late_usb.c').write_text('/* usb */\n')
+        (self.late_usb / 'Makefile').write_text('obj-m += h700_late_usb.o\n')
+        self.rumble_pwm = root / 'rumble_pwm'
+        self.rumble_pwm.mkdir()
+        (self.rumble_pwm / 'h700_rumble_pwm.c').write_text('/* rumble */\n')
+        (self.rumble_pwm / 'Makefile').write_text('obj-m += h700_rumble_pwm.o\n')
         self.output = root / 'out'
         (self.output / 'module').mkdir(parents=True)
         self.config = b'CONFIG_ARM64=y\n'
@@ -71,6 +79,8 @@ class AudioModuleTests(unittest.TestCase):
                   '__versions': versions({'printk': 123, 'module_layout': 456})}
         for context in [patch.object(audio, 'ROOT', root),
                         patch.object(audio, 'SOURCE', self.source),
+                        patch.object(audio, 'LATE_USB', self.late_usb),
+                        patch.object(audio, 'RUMBLE_PWM', self.rumble_pwm),
                         patch.object(audio.kernel_abi, 'load_inputs',
                                      return_value=(self.kernel, {'vendor.ko': vendor})),
                         patch.object(audio.kernel_abi, 'exported_crcs',
@@ -133,14 +143,15 @@ class AudioModuleTests(unittest.TestCase):
             self.assertFalse(audio.current('test', self.output))
 
     def test_every_module_is_checked_and_published(self):
-        (self.output / 'module/h700_late_usb.ko').write_bytes(module_blob(crc=999))
-        with self.assertRaisesRegex(ValueError, 'symbol versions differ'):
-            audio.verify('test', self.output)
-        self.assertFalse((self.output / '.artifact.json').exists())
-        (self.output / 'module/h700_late_usb.ko').unlink()
-        with self.assertRaises(OSError):
-            audio.verify('test', self.output)
-        (self.output / 'module/h700_late_usb.ko').write_bytes(self.blob)
+        for extra in audio.MODULES[1:]:
+            (self.output / f'module/{extra}.ko').write_bytes(module_blob(crc=999))
+            with self.assertRaisesRegex(ValueError, 'symbol versions differ'):
+                audio.verify('test', self.output)
+            self.assertFalse((self.output / '.artifact.json').exists())
+            (self.output / f'module/{extra}.ko').unlink()
+            with self.assertRaises(OSError):
+                audio.verify('test', self.output)
+            (self.output / f'module/{extra}.ko').write_bytes(self.blob)
         audio.verify('test', self.output)
         record = json.loads((self.output / '.artifact.json').read_text())
         self.assertEqual(set(record['modules']), set(audio.MODULES))
@@ -179,9 +190,11 @@ class AudioModuleTests(unittest.TestCase):
         self.assertFalse(audio.current('test', self.output))
 
     def test_changed_sources_are_a_cache_miss(self):
-        audio.verify('test', self.output)
-        (self.source / 'new.c').write_text('changed implementation')
-        self.assertFalse(audio.current('test', self.output))
+        for folder in (self.source, self.late_usb, self.rumble_pwm):
+            (self.output / 'expected.json').write_text(json.dumps({'stamp': audio.stamp('test')}))
+            audio.verify('test', self.output)
+            (folder / 'changed.c').write_text('changed implementation')
+            self.assertFalse(audio.current('test', self.output))
 
 
 if __name__ == '__main__':

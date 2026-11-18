@@ -33,6 +33,6 @@ docker run --rm --platform linux/arm64 \
   make HOSTCFLAGS="-O2 -fcommon" olddefconfig modules_prepare >/out/prepare.log 2>&1
   cp /out/Module.symvers Module.symvers
   make HOSTCFLAGS="-O2 -fcommon" M=/out/module modules >/out/build.log 2>&1
-  aarch64-nextui-linux-gnu-strip --strip-debug /out/module/h700_speaker_amp.ko /out/module/h700_late_usb.ko
+  aarch64-nextui-linux-gnu-strip --strip-debug /out/module/h700_speaker_amp.ko /out/module/h700_late_usb.ko /out/module/h700_rumble_pwm.ko
   '
 python3 "$HERE/tools/audio_module.py" verify "$TARGET"
