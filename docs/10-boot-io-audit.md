@@ -3,8 +3,8 @@
 `/run`, `/tmp`, `/var` and `/dev` are RAM-backed; `/proc` and `/sys` are kernel
 interfaces. The root filesystem, `/data` and frontend card are persistent.
 The vendor initramfs mounts the root filesystem read-write on a card that still
-has one, and `rcS` does so otherwise. `/usr/lib` is a read-only squashfs
-image stored in the root filesystem.
+has one; otherwise the kernel mounts `/` read-only and `rcS` keeps it read-only.
+`/usr/lib` is a read-only squashfs image stored in the root filesystem.
 
 ## Runtime policy
 
@@ -13,8 +13,8 @@ image stored in the root filesystem.
   Each boot starts a new heading that names the BaseOS version and model.
   Past 256 KiB, `baseos-diag --boot` drops the oldest whole boots, down to about
   192 KiB, and keeps the file name.
-- After the first handoff, `baseos-diag --boot` runs once in the background
-  (`nice`, `ionice -c 3`). It adds one `Loader:` line: fast, or stock and why
+- After the first handoff, `baseos-diag --boot` waits 3 s and runs once in the
+  background (`nice`, `ionice -c 3`). It adds one `Loader:` line: fast, or stock and why
   (from `/run/baseos-native-result`, the install step's files and the RTC
   latch). It adds a read-only `--- Diagnostics ---` block on the first boot of a
   build, when the install step ran, after a fast start failed its health check,

@@ -24,6 +24,7 @@ QEMU smoke test does not prove hardware support on every target.
 | Boot files without the initramfs, and their migration | RG SP: update from 1.3.0, migration on first boot, warm restarts, a cold power-on, an empty TF2 slot, sleep and wake. RG40XX V: update from 1.3.0, migration on first boot, warm restarts with Slot on TF2, sleep and wake. RG34XX SP: the same | The other eight targets |
 | USB host controllers started by `h700_late_usb.ko` | RG SP: six root hubs present, adb over USB, sleep and wake, a USB audio adapter on the OTG port. RG40XX V and RG34XX SP: six root hubs present, adb over USB, sleep and wake | A device on one of the five controllers the module starts; the other eight targets |
 | Fast native loader (1.5.x) | Users report the 1.5.1 fast start on RG SP, RG40XX V, RG28XX, RG34XX SP, RG34XX and RG35XX Plus. RG28XX (1 GiB LPDDR4): 1.5.2 zero-tuned LPDDR4 fix; 1.5.4 OTA migration, fast boot, repeated `mem` sleep/wake cycles, and mismatched-stock wake overlay on silicon. All 11 models' wake handover verified in emulation | Hardware sleep/wake reports on the other ten models with 1.5.4 (especially LPDDR4 CubeXX/RG40XX/RG34XX SP and 1-rank LPDDR3 RG40XX V); DDR3 wake on silicon |
+| v1.6.0-pre boot optimizations (RO root, late `sdc1`, SPL SPI9 overlap) | RG SP: OTA migration, `2.65 s` median (`5.45 s` to Slot first frame), RO `/` with 0 EROFS, `[noop]` scheduler, 3/3 Wi-Fi DHCP, `mem` sleep/wake + Wi-Fi recovery. RG28XX: OTA migration, `2.56 s` median, RO `/` with 0 EROFS, zero `sdc1` RTO / `8821cs` load. All 11 models built (`1,120–1,384 B` SPL headroom) and verified offline (`324/324` display cases) | Hardware checks on the other nine models before final 1.6.0 release |
 | `/usr/lib` served from a squashfs image | RG SP: update from the previous build through the updater, warm restarts, sleep and wake, all on-device checks. RG40XX V and RG34XX SP: update from 1.3.0, warm restarts, sleep and wake | The other eight targets; a normal power-off and power-on; a 32-bit program |
 
 ## 2. Boot and build constraints
@@ -57,7 +58,6 @@ the relevant subsystem document for its acceptance criteria.
 
 ## 4. Open work
 
-- Make the rootfs read-only after initialization to reduce damage from power loss.
 - On an RG40XX V connected to a computer over USB, a plain restart (`reboot`,
   which the updater also uses) leaves the screen blank until reset. Release
   1.3.0 does the same. Holding POWER does not help, but reset does. Which

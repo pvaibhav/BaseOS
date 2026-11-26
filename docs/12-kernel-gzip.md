@@ -28,17 +28,13 @@ every kernel message.
 
 The vendor initramfs ran `e2fsck -y` on the root partition, mounted it with
 `rw,noatime,nodiratime,noauto_da_alloc,barrier=0,data=ordered` and switched to
-it. Without the initramfs the kernel replays the journal and mounts the
-partition read-only with default options. `rcS` then does two things.
-
-1. It runs the bundled static `e2fsck -y` if the filesystem has recorded
-   errors. The count is in `/sys/fs/ext4/mmcblk0p5/errors_count`.
-2. It remounts the root with `rw,noatime,nodiratime,nobarrier,noauto_da_alloc`.
-   If `e2fsck` changed anything, `rcS` leaves the root read-only until the
-   next restart, because the kernel may still hold the old contents in memory.
+it. Without the initramfs the kernel replays the journal and mounts the partition
+read-only. `rcS` runs the bundled static `e2fsck -y` only when
+`/sys/fs/ext4/mmcblk0p5/errors_count` is non-zero, logs the exit status, and
+leaves `/` read-only. Writable runtime state lives on tmpfs and `/data`.
 
 A card that still boots through the initramfs hands `rcS` a writable root, and
-`rcS` skips both steps. One rootfs therefore works with all three boot states
+`rcS` leaves it alone. One rootfs therefore works with all three boot states
 described below.
 
 ### The USB host controllers
@@ -69,6 +65,13 @@ the five controllers off. That matters only in the case described under
 The module calls only exported kernel functions. The build compiles it for
 each target's kernel and checks every imported symbol version against that
 kernel, as it does for the speaker module.
+
+In the native loader (`v1.6.0-pre`), the Linux DTB inside `image.bin` also sets
+`sdmmc@04021000` (`sdc1`, the Wi-Fi SDIO host) to `late` and appends
+`initcall_blacklist=deeplay_encrypt_init,vin_init,brd_init rootfstype=ext4 elevator=noop`.
+`h700_late_sdc1.ko` starts `sdc1` in the background on Wi-Fi models right before
+`8821cs.ko` loads; non-Wi-Fi targets never load it. Stock recovery files stay
+unchanged.
 
 ### A side effect on `/dev/input`
 

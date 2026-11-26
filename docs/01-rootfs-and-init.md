@@ -44,13 +44,14 @@ keeps ARMHF libraries as harvested. See
 | `/run`, `/tmp`, `/var`, `/dev/shm` | tmpfs runtime state |
 | `/mnt/vendor` | Compatibility files shipped in the rootfs; no vendor partition mounted here |
 
-The root filesystem is mounted read-write. On a card that still boots through
-the vendor initramfs, the initramfs mounts it that way. Otherwise the kernel
-mounts it read-only and `rcS` remounts it writable with the same options. See
-[boot files](12-kernel-gzip.md). Normal initialization does not remount it
-read-only. If mounting p6 fails, `rcS` uses tmpfs for `/data`, and state from
-that boot does not persist. Shutdown flushes persistent mounts; see
-[power handling](05-runtime-power-network.md).
+The root filesystem stays mounted read-only on non-initramfs boots; writable
+runtime state lives on tmpfs and `/data`. If `/sys/fs/ext4/mmcblk0p5/errors_count`
+is non-zero, `rcS` runs `e2fsck -y` once and logs the result while leaving `/`
+read-only. On a card that still boots through the vendor initramfs, the
+initramfs mounts `/` writable and `rcS` leaves it alone. See
+[boot files](12-kernel-gzip.md). If mounting p6 fails, `rcS` uses tmpfs for
+`/data`, and state from that boot does not persist. Shutdown flushes persistent
+mounts; see [power handling](05-runtime-power-network.md).
 
 ### The `/usr/lib` image
 
@@ -63,7 +64,7 @@ test boots, has no image file and keeps its libraries in the directory.
 
 The image exists because the card is slow. It reads about 20 MB/s, and a
 frontend loads most of the 19 MB GPU library before it can draw. The image
-uses LZ4 HC with 128 KiB blocks. That halves the bytes, and the processor
+uses LZ4 HC with 256 KiB blocks (128 KiB before 1.6.0). That halves the bytes, and the processor
 unpacks LZ4 faster than the card delivers. On the RG SP, NextUI drew its first
 frame about 0.7 s earlier, and the time to the handoff did not change. On an
 RG40XX V, Slot read 18 MiB from the root partition before its first frame,
@@ -77,7 +78,7 @@ The image has these consequences.
 - `/usr/lib` is read-only, including the kernel modules and firmware under
   it. To try a changed library or module on a device, load it from another
   path or build a new image.
-- The root stays ext4 and writable, and an update payload is still one slot
+- The root stays ext4 (read-only at runtime), and an update payload is still one slot
   image. A card on an older release takes the update as before.
 - The kernel caches the compressed blocks as well as the unpacked pages. Both
   are page cache, which the kernel gives up when a program needs the memory.
@@ -104,33 +105,38 @@ getty. It invokes `rcK` on shutdown.
 1. Mount kernel interfaces. Give `/dev/input` the modification time 1, which
    SDL's gamepad scan needs when there is no udev; see
    [boot files](12-kernel-gzip.md#a-side-effect-on-devinput). If the kernel
-   mounted the root filesystem read-only, run `e2fsck` when the filesystem has
-   recorded errors, then remount it writable. Mount the `/usr/lib` image.
-   Mount the tmpfs filesystems. Apply SP Super Standby where supported. Mount
-   `debugfs` for the HDMI display-control and MENU GPIO interfaces.
+   mounted `/` read-only and recorded ext4 errors exist, run `e2fsck -y` and
+   leave `/` read-only. Mount the `/usr/lib` image. Mount the tmpfs filesystems.
+   Apply SP Super Standby where supported. Mount `debugfs` for the HDMI
+   display-control and MENU GPIO interfaces.
 2. Handle charger-origin startup before ordinary initialization; see
    [charger-only boot](11-charger-only-boot.md).
-3. Start Mali in the background. Also load `h700_late_usb.ko` in the
-   background. It starts the USB host controllers that the
-   [boot files](12-kernel-gzip.md) hold back. Mount `/data`, and check the
-   system-update trial.
-4. Restore time preferences and entropy, and read the RTC as UTC with
-   `hwclock -u -s`. Start radio initialization in the background. It loads the
-   Bluetooth wake-handshake module first and the Wi-Fi module after it. Radios
-   that reset slowly get a remembered power-off retry. See
+3. Start Mali in the background. Mount `/data`, accept the native boot
+   (`native-health --accept`), then load `h700_late_usb.ko` in the background to
+   start the USB host controllers held back by the
+   [boot files](12-kernel-gzip.md). Check the system-update trial only when
+   `/data/update/state` exists.
+4. Restore `/run/localtime` inline from `/data/timezone` (deferring `baseos-ntp`
+   by 2 s when enabled), restore entropy, and read the RTC as UTC with
+   `hwclock -u -s`. On targets with Wi-Fi or Bluetooth, start radio
+   initialization in the background: load `rtl_btlpm.ko` first, wait until 3.8 s
+   uptime, then load `h700_late_sdc1.ko` (when present) and `8821cs.ko`. Targets
+   with neither radio skip this subshell. See
    [runtime notes](05-runtime-power-network.md).
-5. Restore or generate the machine ID, then run first-boot storage expansion.
+5. Restore or generate the machine ID, then run first-boot storage expansion
+   only when sysfs geometry shows unallocated space past p7.
 6. If the kernel is still identifying a TF2 card, wait for it, but no longer
    than the end of the handoff budget. An empty slot costs one file read.
    Sample MENU through the GPIO check in `boot-menu-held`, or use the marker
    that charger handling kept. Select USB-storage mode before mounting
    frontend storage.
 7. For normal startup, mount usable TF2 p1 or fall back to TF1 p7. Apply
-   `baseos.conf` from TF1, then scan for system updates. When TF1 was mounted
-   only for its settings, unmount it in the background, because the unmount
-   takes about 60 ms. Storage mode uses configuration defaults and skips card
-   access and update application.
-8. Start SSH/SFTP and USB adb through `/etc/init.d/dev` in the background.
+   `baseos.conf` from TF1, then run `baseos-update apply` only if a `*.bosupd`
+   file is present. When TF1 was mounted only for its settings, unmount it in
+   the background, because the unmount takes about 60 ms. Storage mode uses
+   configuration defaults and skips card access and update application.
+8. Start SSH/SFTP and USB adb through `/etc/init.d/dev` in the background after
+   a 2 s delay so they do not contend with the frontend's first frame.
 
 Services that need a network do not block frontend startup. There is no udev
 or mdev; devtmpfs provides device nodes. Bluetooth starts D-Bus on demand.

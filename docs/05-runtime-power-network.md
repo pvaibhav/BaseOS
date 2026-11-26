@@ -31,14 +31,16 @@ different unit updates the header on its next boot.
 
 ## 3. Wi-Fi
 
-BaseOS owns interface startup. Like stock, `rcS` loads `rtl_btlpm.ko` during
-early boot. A background task in `rcS` then asks the vendor WLAN controller to
-discard any SDIO card it enumerated before the kernel's unused-regulator cleanup
-turned off that card's supply. The task waits up to one second for the stale
-card to disappear, then loads `8821cs.ko`. Without this ordering, the driver
-probe on H700 devices can fail with `-123` and never create `wlan0`. Only
-delaying module insertion does not prevent the failed probe. Radios that are
-already powered, and kernels without these controls, skip this step.
+BaseOS owns interface startup. On targets without Wi-Fi or Bluetooth (such as
+RG28XX), `rcS` skips the radio subshell completely. Otherwise, like stock, `rcS`
+loads `rtl_btlpm.ko` during early boot. After 3.8 s uptime, the background task
+loads `h700_late_sdc1.ko` (starting the `sdc1` SDIO controller held back by the
+native boot DTB), asks the vendor WLAN controller to discard any stale SDIO
+card, waits up to one second for it to disappear, and then loads `8821cs.ko`.
+Without this ordering, the driver probe on H700 devices can fail with `-123` and
+never create `wlan0`. Only delaying module insertion does not prevent the failed
+probe. Radios that are already powered, and kernels without these controls, skip
+this step.
 
 Some radios only reset properly after a long power-off. The kernel disables
 the WLAN supply (`axp2202-cldo4`) at about 1.85 s, and the driver powers it

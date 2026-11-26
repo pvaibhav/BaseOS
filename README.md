@@ -9,12 +9,13 @@ handles the hardware and starts your choice of frontend:
 
 ## Startup time
 
-![Total BaseOS startup time across releases, from about 6.7 seconds to 3.16 seconds](assets/boot-times.svg)
+![Total BaseOS startup time across releases, from about 6.7 seconds to 2.65 seconds in v1.6.0-pre](assets/boot-times.svg)
 
-These times include kernel loading but not frontend loading.
+These times include kernel loading but not frontend loading. The dotted point is
+the current v1.6.0 pre-release (`2.65 s` on RG SP, `2.56 s` on RG28XX).
 
 v1.4.0 also loads NextUI about 0.7 seconds faster and Slot about 0.3 seconds
-faster.
+faster; v1.6.0-pre brings RG SP power-on to Slot's first frame down to 5.45 s.
 
 ## Features
 
