@@ -1,0 +1,211 @@
+{
+  "scope": "Build and instruction-level tests; DRAM training and geometry are modeled.",
+  "targets": {
+    "rg28xx": {
+      "probe_sha256": "a5df94b67f89aa5a9a20a9870442a3a7b1830b39b89547ddee7c76e45da1a2e0",
+      "probe_bytes": 13612,
+      "candidate_types": [
+        8,
+        3
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rg34xx": {
+      "probe_sha256": "5158c6d3c653e35f4a357298809dba6b9ad8846bd78866fb9050240c38a283ff",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        8,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rg34xxsp": {
+      "probe_sha256": "6c0fdaf07ba94deb45d6843b5471567f3bbe188b6ca889be355c68909e55b708",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        7,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rg35xxh": {
+      "probe_sha256": "0573410bb2f99bfc0af0cf8f9bb0961f9c3cad6b7e12afa405f5ebdfc9d696e9",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        7,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rg35xxplus": {
+      "probe_sha256": "1760b5e85d193ff0a98666d6099429f2f5ab8bf50b38a9425aa53057812aa932",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        8,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rg35xxpro": {
+      "probe_sha256": "34718c1f5bb0af0581b09c2d8fee192ae43794da189c24c1a2f5b96ae5a88942",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        7,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rg35xxsp": {
+      "probe_sha256": "db6fc5adaca1f168d084f2caf48034289b4e81b28b2082312497424be461bc72",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        8,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rg40xxh": {
+      "probe_sha256": "03c3374d53ccca16d8e21798006d8ce2fac2f13282f2d9d0fdc652e932e45a0c",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        7,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rg40xxv": {
+      "probe_sha256": "c440157b8f8d16ab98836bca7919c5aa0d8c6007c006ce15de3fc558992ab804",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        7,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rgcubexx": {
+      "probe_sha256": "9c5f5d1320eb9687d95cbe6d7524aa11654853028e2fa894e76dfc84786a11ad",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        7,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    },
+    "rgsp": {
+      "probe_sha256": "59487f87e5a5e055590267f87d9bbd9ca0e64c45660a96b2ad5611aa25374d29",
+      "probe_bytes": 13660,
+      "candidate_types": [
+        7,
+        7,
+        8
+      ],
+      "retry_cases": 6,
+      "timing_cases": 6,
+      "protocol_cases": 4
+    }
+  },
+  "sram_control": {
+    "boot_id": "ca57220c-9492-46a9-a45d-ce58f1a494d9",
+    "operation": 0,
+    "stage": 2,
+    "passed": true,
+    "normal_environment_exact": true,
+    "health": [
+      "GPU_OK",
+      "WIFI_OK",
+      "FB_OK",
+      "6",
+      "3",
+      "6",
+      "100",
+      "1"
+    ],
+    "dram_bytes": 0,
+    "dram_ticks": 0,
+    "dram_attempts": 0,
+    "selected_dram_type": 0,
+    "source_artifact": "work/h700-loader/sram-auto-control-v1/run-ca57220c-9492-46a9-a45d-ce58f1a494d9.json"
+  },
+  "warm_dram": {
+    "boot_id": "b111875a-5839-4b8e-a81b-4ac72ca4f509",
+    "operation": 1,
+    "stage": 2,
+    "passed": true,
+    "normal_environment_exact": true,
+    "health": [
+      "GPU_OK",
+      "WIFI_OK",
+      "FB_OK",
+      "6",
+      "3",
+      "6",
+      "100",
+      "1"
+    ],
+    "dram_bytes": 2147483648,
+    "dram_ticks": 652191,
+    "dram_attempts": 1,
+    "selected_dram_type": 8,
+    "source_artifact": "work/h700-loader/sram-auto-dram-v1/run-b111875a-5839-4b8e-a81b-4ac72ca4f509.json"
+  },
+  "native_sd_control": {
+    "boot_id": "91e4aa6a-db8e-4f67-a4c5-5a8a3b9559fe",
+    "operation": 2,
+    "stage": 2,
+    "passed": true,
+    "normal_environment_exact": true,
+    "health": [
+      "GPU_OK",
+      "WIFI_OK",
+      "FB_OK",
+      "6",
+      "3",
+      "6",
+      "100",
+      "1"
+    ],
+    "dram_bytes": 0,
+    "current_el": 1,
+    "card_clock_hz": 50000000,
+    "bus_width": 4,
+    "mirror_bytes": 65536,
+    "early_mmc_ticks": 881153,
+    "source_artifact": "work/h700-loader/spl-mmc-control-v2/run-91e4aa6a-db8e-4f67-a4c5-5a8a3b9559fe.json"
+  },
+  "limitations": [
+    "Training and geometry are modeled in the eleven-model instruction tests.",
+    "Only the RG34XX SP LPDDR4 selector has passed warm hardware training.",
+    "No cold boot0 replacement, standalone loader boot, or RG40XX V DRAM trial has run.",
+    "End-to-end benchmark remains the retained-boot0 comparison.",
+    "Existing FAT dirty-volume warning is present in both benchmark paths and warm fallback logs; lab syncs and pauses frontend but does not close its FAT handles."
+  ]
+}

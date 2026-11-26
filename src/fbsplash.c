@@ -333,6 +333,111 @@ static void bmp_text(uint8_t *fb, struct fb_var_screeninfo *v, struct fb_fix_scr
 	}
 }
 
+// --- what lies under the pill ------------------------------------------------
+//
+// Every message is its own fbsplash process, and each pill composites over
+// whatever is on screen. A narrower pill drawn after a wider one would leave
+// the wider one's ends showing ("INSTAL… ADD FRONTEND TO SD CARD …ER ON"). So
+// each pill leaves behind, in RAM only, the pixels it covered and the pixels
+// it drew; the next one puts the old background back before drawing its own.
+//
+// The record lives on tmpfs (main() only enables it when /run is one), never on
+// the card or /data: it describes this power-on's screen and nothing else. It
+// is written in the same logical, upright coordinates the pill is drawn in, so
+// rotated panels need nothing special. The background is only put back if the
+// screen still shows exactly the pill that was drawn there; if anything else has
+// drawn over it since (the frontend, the charger), the record is stale and is
+// ignored. NULL disables the whole mechanism.
+static const char *under_path;
+
+#define UNDER_MAGIC "BOSPILL1"
+
+typedef struct {
+	char magic[8];
+	uint32_t xres, yres, bpp;
+	int32_t x, y, w, h;
+} UnderHeader;
+
+// Copy a rectangle between a framebuffer-stride buffer and a packed one.
+static void pack_rect(uint8_t *packed, uint8_t *buf, const struct fb_var_screeninfo *v,
+                      const struct fb_fix_screeninfo *f, int x, int y, int w, int h, int to_packed) {
+	size_t bytes = v->bits_per_pixel / 8, row = (size_t)w * bytes;
+	for (int i = 0; i < h; i++) {
+		size_t off = (size_t)(y + i) * f->line_length + (size_t)x * bytes;
+		if (to_packed)
+			memcpy(packed + i * row, buf + off, row);
+		else
+			memcpy(buf + off, packed + i * row, row);
+	}
+}
+
+static int rect_equals(const uint8_t *buf, const struct fb_var_screeninfo *v,
+                       const struct fb_fix_screeninfo *f, int x, int y, int w, int h,
+                       const uint8_t *packed) {
+	size_t bytes = v->bits_per_pixel / 8, row = (size_t)w * bytes;
+	for (int i = 0; i < h; i++)
+		if (memcmp(buf + (size_t)(y + i) * f->line_length + (size_t)x * bytes,
+		           packed + i * row, row))
+			return 0;
+	return 1;
+}
+
+// The previous pill's record, or NULL when there is none or it does not
+// describe this screen. On success *hdr holds its rectangle and the returned
+// buffer holds the background followed by the drawn pill, both packed.
+static uint8_t *under_load(const struct fb_var_screeninfo *v, UnderHeader *hdr) {
+	if (!under_path)
+		return NULL;
+	FILE *fp = fopen(under_path, "rb");
+	if (!fp)
+		return NULL;
+	uint8_t *pixels = NULL;
+	if (fread(hdr, sizeof(*hdr), 1, fp) == 1 &&
+	    !memcmp(hdr->magic, UNDER_MAGIC, sizeof(hdr->magic)) &&
+	    hdr->xres == v->xres && hdr->yres == v->yres && hdr->bpp == v->bits_per_pixel &&
+	    hdr->x >= 0 && hdr->y >= 0 && hdr->w > 0 && hdr->h > 0 &&
+	    hdr->x + hdr->w <= (int)v->xres && hdr->y + hdr->h <= (int)v->yres) {
+		size_t len = (size_t)hdr->w * hdr->h * (v->bits_per_pixel / 8) * 2;
+		pixels = malloc(len);
+		if (pixels && fread(pixels, 1, len, fp) != len) {
+			free(pixels);
+			pixels = NULL;
+		}
+	}
+	fclose(fp);
+	return pixels;
+}
+
+// Replace the record atomically; on any failure leave none, since a record
+// that no longer matches the screen is worse than no record.
+static void under_save(const struct fb_var_screeninfo *v, int x, int y, int w, int h,
+                       const uint8_t *under, const uint8_t *drawn) {
+	if (!under_path)
+		return;
+	unlink(under_path);
+	if (!under || !drawn)
+		return;
+	char tmp[256];
+	if (snprintf(tmp, sizeof(tmp), "%s.tmp", under_path) >= (int)sizeof(tmp))
+		return;
+	FILE *fp = fopen(tmp, "wb");
+	if (!fp)
+		return;
+	UnderHeader hdr;
+	memset(&hdr, 0, sizeof(hdr));
+	memcpy(hdr.magic, UNDER_MAGIC, sizeof(hdr.magic));
+	hdr.xres = v->xres;
+	hdr.yres = v->yres;
+	hdr.bpp = v->bits_per_pixel;
+	hdr.x = x; hdr.y = y; hdr.w = w; hdr.h = h;
+	size_t len = (size_t)w * h * (v->bits_per_pixel / 8);
+	int ok = fwrite(&hdr, sizeof(hdr), 1, fp) == 1 &&
+	         fwrite(under, 1, len, fp) == len && fwrite(drawn, 1, len, fp) == len;
+	ok = fclose(fp) == 0 && ok;
+	if (!ok || rename(tmp, under_path) != 0)
+		unlink(tmp);
+}
+
 static void render_pill(uint8_t *fb, struct fb_var_screeninfo *vp,
                         struct fb_fix_screeninfo *fp, int prog, const char *msg) {
 	struct fb_var_screeninfo v = *vp;
@@ -384,11 +489,14 @@ static void render_pill(uint8_t *fb, struct fb_var_screeninfo *vp,
 	// (NextUI's show2 does the same thing through SDL — redraw everything into
 	// an off-screen surface, present once — but with a long-lived process,
 	// which §5 of docs/04 rules out here.)
-	int box_x = pill_x - 1, box_y = pill_y - 1;
-	int box_w = pill_width + 2, box_h = pill_height + 2;
+	int box_x = clampi(pill_x - 1, 0, W - 1), box_y = clampi(pill_y - 1, 0, H - 1);
+	int box_w = clampi(pill_width + 2, 1, W - box_x);
+	int box_h = clampi(pill_height + 2, 1, H - box_y);
 	size_t map_len = f.smem_len ? f.smem_len : (size_t)f.line_length * v.yres;
+	UnderHeader old;
+	uint8_t *old_pixels = under_load(&v, &old);
 	uint8_t *canvas = malloc(map_len);
-	if (canvas)
+	if (canvas) {
 		// Seeding the canvas from the framebuffer is load-bearing, not a
 		// wasted read. What goes back is a rectangle, but the pill is a
 		// rounded shape: the corners, and the antialiased edge blended
@@ -396,8 +504,29 @@ static void render_pill(uint8_t *fb, struct fb_var_screeninfo *vp,
 		// would stamp a black box around the pill. It is also what keeps
 		// round_rect's alpha blending compositing over the real background.
 		blit_rect(canvas, fb, &v, &f, box_x, box_y, box_w, box_h);
-	else
+		if (old_pixels)
+			blit_rect(canvas, fb, &v, &f, old.x, old.y, old.w, old.h);
+	} else {
 		canvas = fb; // Never fail to draw; a visible flicker beats no status.
+	}
+
+	// Put back what the previous pill covered, if the screen still shows that
+	// pill. Done on the canvas, so the old pill gives way to the new one in the
+	// same blit with no bare-logo frame in between.
+	size_t old_len = old_pixels ? (size_t)old.w * old.h * (v.bits_per_pixel / 8) : 0;
+	if (old_pixels && rect_equals(canvas, &v, &f, old.x, old.y, old.w, old.h,
+	                              old_pixels + old_len))
+		pack_rect(old_pixels, canvas, &v, &f, old.x, old.y, old.w, old.h, 0);
+	else if (old_pixels) {
+		free(old_pixels);
+		old_pixels = NULL; // Stale: something else has drawn there since.
+	}
+
+	// The box is now background only; keep it for the next message.
+	size_t box_len = (size_t)box_w * box_h * (v.bits_per_pixel / 8);
+	uint8_t *under = under_path ? malloc(box_len * 2) : NULL;
+	if (under)
+		pack_rect(under, canvas, &v, &f, box_x, box_y, box_w, box_h, 1);
 
 	// Opaque enough for legibility over arbitrary custom artwork, with a quiet
 	// one-pixel edge that keeps the pill distinct on dark boot logos.
@@ -436,10 +565,18 @@ static void render_pill(uint8_t *fb, struct fb_var_screeninfo *vp,
 		         make_pixel(&v, text[0], text[1], text[2]));
 	}
 
+	if (under)
+		pack_rect(under + box_len, canvas, &v, &f, box_x, box_y, box_w, box_h, 1);
+	under_save(&v, box_x, box_y, box_w, box_h, under, under ? under + box_len : NULL);
+	free(under);
+
 	if (canvas != fb) {
+		if (old_pixels)
+			blit_rect(fb, canvas, &v, &f, old.x, old.y, old.w, old.h);
 		blit_rect(fb, canvas, &v, &f, box_x, box_y, box_w, box_h);
 		free(canvas);
 	}
+	free(old_pixels);
 }
 
 static void render(uint8_t *fb, struct fb_var_screeninfo *vp, struct fb_fix_screeninfo *fp, int prog, const char *msg) {
@@ -626,10 +763,14 @@ static void present(uint8_t *fb, struct fb_var_screeninfo *v,
 		}
 	}
 
-	if (pill)
+	if (pill) {
 		render_pill(canvas, rot ? &lv : v, rot ? &lf : f, prog, msg);
-	else
+	} else {
+		// The full-screen logo covers every pixel, any old pill included.
+		if (under_path)
+			unlink(under_path);
 		render(canvas, rot ? &lv : v, rot ? &lf : f, prog, msg);
+	}
 
 	if (canvas != fb) {
 		// Turning the whole frame back writes every visible pixel, but the copy
@@ -664,6 +805,11 @@ static int reject_options(int argc, char **argv) {
 // what a device would scan out. That is what make-bootlogo.sh needs; it also
 // means a rotated target's preview looks sideways in an image viewer and
 // upright on the hardware. Render with rotation 0 to eyeball the design itself.
+//
+// Further <progress> <message> pairs after the rotation draw more pills on top,
+// in order, the way successive fbsplash runs do on a device; the record of what
+// lies under each pill goes to <out>.under, standing in for the one in /run.
+// FBSPLASH_TEST_NO_UNDER=1 draws without that record, as builds before it did.
 #include <arpa/inet.h>
 int main(int argc, char **argv) {
 	if (reject_options(argc, argv)) {
@@ -692,11 +838,23 @@ int main(int argc, char **argv) {
 	f.line_length = W * 4;
 	f.smem_len = f.line_length * H;
 
+	char under[4096];
+	snprintf(under, sizeof(under), "%s.under", out);
+	if (!getenv("FBSPLASH_TEST_NO_UNDER"))
+		under_path = under;
+
 	uint8_t *fb = calloc(1, f.smem_len);
 	if (pill)
 		// Give offline previews the default static logo beneath the overlay.
 		present(fb, &v, &f, rot, 100, NULL, 0);
 	present(fb, &v, &f, rot, prog, msg, pill);
+	for (int i = 7; i + 1 < argc; i += 2) {
+		int next = atoi(argv[i]);
+		const char *next_msg = argv[i + 1];
+		present(fb, &v, &f, rot, next < 0 ? -1 : clampi(next, 0, 100),
+		        next_msg[0] ? next_msg : NULL, next_msg[0] != 0);
+	}
+	unlink(under);
 
 	FILE *fp = fopen(out, "wb");
 	fprintf(fp, "P6\n%d %d\n255\n", W, H);
@@ -712,6 +870,9 @@ int main(int argc, char **argv) {
 	return 0;
 }
 #else
+#include <linux/magic.h>
+#include <sys/vfs.h>
+
 // The panel rotation is device identity, so it is read from the file the build
 // already generates for the target and model rather than from a second source of
 // truth or a new argument (the argument list is a contract — see
@@ -743,6 +904,13 @@ int main(int argc, char **argv) {
 	const char *msg = (argc > 2 && argv[2][0]) ? argv[2] : NULL;
 	int pill = msg != NULL;
 	prog = pill && prog < 0 ? -1 : clampi(prog, 0, 100);
+
+	// The record of what lies under the pill is screen state for this power-on
+	// only. Keep it solely where it cannot reach the card: if /run is not
+	// tmpfs, go without (a wider old pill may then show around a narrower one).
+	struct statfs run;
+	if (statfs("/run", &run) == 0 && run.f_type == TMPFS_MAGIC)
+		under_path = "/run/baseos-splash-under";
 
 	int fd = open("/dev/fb0", O_RDWR);
 	if (fd < 0)

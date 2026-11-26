@@ -1,0 +1,343 @@
+{
+  "claim": "The clean mainline SPL and RAM-only loader substantially reduce matched warm boot time on RG34XX SP.",
+  "scope": "USB-connected warm restarts, hardware-counter origin to frontend exec and sampled settled NextUI framebuffer; not physical power-button timing.",
+  "pairs": 5,
+  "attempted_boots": 10,
+  "healthy_boots": 10,
+  "failed_boots": 0,
+  "benchmark_valid": true,
+  "visible_display_accepted": false,
+  "release_blocker": {
+    "issue": "User observed a green physical panel on the final native boot despite correct NextUI framebuffer contents. Stock reboot restored the visible NextUI menu.",
+    "native_boot_id": "3816bb8a-6509-4a31-843e-0a0bf51ac203",
+    "stock_boot_id": "c557bf9f-67ae-43cc-9fe9-65e888d4e51c",
+    "evidence": "work/h700-loader/green-screen-v1",
+    "interpretation": "Exec and framebuffer-content timings remain measured; they are not evidence of a usable visible frontend. Display manager reports iommu[0] native versus iommu[1] stock; cause under investigation."
+  },
+  "verdict": "faster",
+  "summary": {
+    "baseline": {
+      "pre_kernel_s": {
+        "n": 5,
+        "median": 4.375,
+        "min": 4.35,
+        "max": 4.887
+      },
+      "post_kernel_s": {
+        "n": 5,
+        "median": 1.429,
+        "min": 1.408,
+        "max": 1.485
+      },
+      "combined_s": {
+        "n": 5,
+        "median": 5.812,
+        "min": 5.784,
+        "max": 6.316
+      },
+      "settled_framebuffer_counter_s": {
+        "n": 5,
+        "median": 8.64,
+        "min": 8.485,
+        "max": 9.757
+      }
+    },
+    "native": {
+      "pre_kernel_s": {
+        "n": 5,
+        "median": 1.421,
+        "min": 1.417,
+        "max": 1.863
+      },
+      "post_kernel_s": {
+        "n": 5,
+        "median": 1.524,
+        "min": 1.507,
+        "max": 1.542
+      },
+      "combined_s": {
+        "n": 5,
+        "median": 2.959,
+        "min": 2.929,
+        "max": 3.371
+      },
+      "settled_framebuffer_counter_s": {
+        "n": 5,
+        "median": 5.759,
+        "min": 5.6370000000000005,
+        "max": 6.763
+      }
+    }
+  },
+  "frontend_saved_s": 2.853,
+  "frontend_reduction_percent": 49.08809359944941,
+  "limiter": "The restore-first lab path includes pre-DRAM SD initialization, stock boot0 restore/readback and result-sector writes. Native payload loading, decode and unchanged Linux/userspace remain. No write-free persistent boot result is claimed.",
+  "kernel_sha256": "1332da28ef5dd078963c98cc4e11de816b8fddc7c7b75dab93b79eda68d01bf0",
+  "native_generation": "9823b65384493e882e8afdca4c28d49b85d5c7d9215756f9c31b41c7c29f0961",
+  "spl_sha256": "f0f5568951a9a84343883a1c6b049e11ff696fb056f8340f3ff266de33cd947b",
+  "source": "work/h700-loader/native-comparison-v2/comparison.json",
+  "source_sha256": "3f319ead9988ad56db49b115e351d8978fec2bdf729a0cfd8493ea202e8e52ea",
+  "prior_stopped_comparison": {
+    "source": "work/h700-loader/native-comparison-v1/comparison.json",
+    "reason": "Healthy baseline boot stopped on full-header hash validation; stock calibration changes at words0xc/0xa0/0xa8/0xac are now explicitly permitted. Original stopped evidence is preserved. It is excluded from the restarted five matched pairs."
+  },
+  "limitations": [
+    "USB-connected warm restarts; counter origin is not physical power-button time.",
+    "Settled framebuffer is a sampled visible-frame proxy, not panel-photon timing.",
+    "Same current rootfs partition/release/startup/frontend hashes; no whole-rootfs or mutable-userdata hash.",
+    "First-stage staging, ADB recovery and validation wall time are outside reported counter metrics.",
+    "Both sides retain the same installed frame sampler; native trials also use the qualified watchdog observer."
+  ],
+  "runs": [
+    {
+      "pair": 1,
+      "side": "baseline",
+      "boot_id": "000e1797-a24d-4596-b7ca-458d5da5e726",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 4.35,
+        "post_kernel_s": 1.462,
+        "combined_s": 5.812,
+        "settled_framebuffer_counter_s": 8.64
+      },
+      "kernel_fdt_sha256": "7208de32e4ef95a8a3071d3fb0ab61085236e55ae18bb5758428077e3b726c7e",
+      "native_generation": null,
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    },
+    {
+      "pair": 1,
+      "side": "native",
+      "boot_id": "419e02d6-83d4-42b0-ae31-2652731e085f",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 1.863,
+        "post_kernel_s": 1.508,
+        "combined_s": 3.371,
+        "settled_framebuffer_counter_s": 6.763
+      },
+      "kernel_fdt_sha256": "a97e96a7544e23407d50a13c7d78d981c79b1a07d3549dbed6b21d3101284a55",
+      "native_generation": "9823b65384493e882e8afdca4c28d49b85d5c7d9215756f9c31b41c7c29f0961",
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    },
+    {
+      "pair": 2,
+      "side": "baseline",
+      "boot_id": "c59542d1-1f99-422f-9b87-e89ce2549966",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 4.887,
+        "post_kernel_s": 1.429,
+        "combined_s": 6.316,
+        "settled_framebuffer_counter_s": 9.757
+      },
+      "kernel_fdt_sha256": "7208de32e4ef95a8a3071d3fb0ab61085236e55ae18bb5758428077e3b726c7e",
+      "native_generation": null,
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    },
+    {
+      "pair": 2,
+      "side": "native",
+      "boot_id": "24b36a2e-aa5c-48a6-8be3-6d5d3b83798a",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 1.421,
+        "post_kernel_s": 1.507,
+        "combined_s": 2.929,
+        "settled_framebuffer_counter_s": 6.151000000000001
+      },
+      "kernel_fdt_sha256": "a6b087e5132c61bec0c71cbdb0a7000b66b52175096aaa89c20edb7b26082dec",
+      "native_generation": "9823b65384493e882e8afdca4c28d49b85d5c7d9215756f9c31b41c7c29f0961",
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    },
+    {
+      "pair": 3,
+      "side": "baseline",
+      "boot_id": "ad703c37-f207-4b23-b1b8-71389d5037a2",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 4.652,
+        "post_kernel_s": 1.485,
+        "combined_s": 6.137,
+        "settled_framebuffer_counter_s": 8.862
+      },
+      "kernel_fdt_sha256": "7208de32e4ef95a8a3071d3fb0ab61085236e55ae18bb5758428077e3b726c7e",
+      "native_generation": null,
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    },
+    {
+      "pair": 3,
+      "side": "native",
+      "boot_id": "157734a6-b61e-4018-8161-fc88c703bd5b",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 1.419,
+        "post_kernel_s": 1.542,
+        "combined_s": 2.96,
+        "settled_framebuffer_counter_s": 5.759
+      },
+      "kernel_fdt_sha256": "e3f95bb16aacb5d3b85e218c3b52fb117d09b214ba946e2503fd42c7509d9ddc",
+      "native_generation": "9823b65384493e882e8afdca4c28d49b85d5c7d9215756f9c31b41c7c29f0961",
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    },
+    {
+      "pair": 4,
+      "side": "baseline",
+      "boot_id": "901f0192-a174-4b52-8e52-06fb7f07b9bc",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 4.374,
+        "post_kernel_s": 1.413,
+        "combined_s": 5.787,
+        "settled_framebuffer_counter_s": 8.533999999999999
+      },
+      "kernel_fdt_sha256": "7208de32e4ef95a8a3071d3fb0ab61085236e55ae18bb5758428077e3b726c7e",
+      "native_generation": null,
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    },
+    {
+      "pair": 4,
+      "side": "native",
+      "boot_id": "ac05d624-de23-4a0d-9f20-3dce4b811910",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 1.427,
+        "post_kernel_s": 1.524,
+        "combined_s": 2.952,
+        "settled_framebuffer_counter_s": 5.6370000000000005
+      },
+      "kernel_fdt_sha256": "77e126c27c88efaae0770be2cb07e40a348815fa1e8d1f2bf78e7d49de7e3511",
+      "native_generation": "9823b65384493e882e8afdca4c28d49b85d5c7d9215756f9c31b41c7c29f0961",
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    },
+    {
+      "pair": 5,
+      "side": "baseline",
+      "boot_id": "1b869c6d-0c5d-471c-97a0-bf600b3bfc7d",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 4.375,
+        "post_kernel_s": 1.408,
+        "combined_s": 5.784,
+        "settled_framebuffer_counter_s": 8.485
+      },
+      "kernel_fdt_sha256": "7208de32e4ef95a8a3071d3fb0ab61085236e55ae18bb5758428077e3b726c7e",
+      "native_generation": null,
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    },
+    {
+      "pair": 5,
+      "side": "native",
+      "boot_id": "3816bb8a-6509-4a31-843e-0a0bf51ac203",
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ],
+      "metrics": {
+        "pre_kernel_s": 1.417,
+        "post_kernel_s": 1.542,
+        "combined_s": 2.959,
+        "settled_framebuffer_counter_s": 5.757
+      },
+      "kernel_fdt_sha256": "87188ef6a2a5996822a2877c10a6433792c504827d96425c5c56e4f155d7f317",
+      "native_generation": "9823b65384493e882e8afdca4c28d49b85d5c7d9215756f9c31b41c7c29f0961",
+      "stock_boot0_body_exact": true,
+      "stock_boot0_checksum_valid": true
+    }
+  ]
+}

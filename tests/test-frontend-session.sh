@@ -178,9 +178,9 @@ card_snapshot() {
 	find /mnt/sdcard -type f -exec sha256sum {} \; | sort
 }
 check_handoff_log() {
-	boot_time=$(cat /run/boot-frontend-exec)
-	grep -Fqx "$boot_time BaseOS boot time: $boot_time s (kernel start to frontend handoff)" "$1"
-	[ "$(grep -c ' BaseOS boot time:' "$1")" -eq "$2" ]
+	[ -s /run/boot-frontend-exec ]
+	grep -Eq '^[0-9.]+ Startup: ([0-9]+\.[0-9]{2} s before Linux, )?[0-9]+\.[0-9]{2} s Linux to menu(, [0-9]+\.[0-9]{2} s total)? \((Slot|MinUI|spruceOS|custom frontend)(, after [0-9.]+ s waiting for the GPU)?\)$' "$1"
+	[ "$(grep -c ' Startup: ' "$1")" -eq "$2" ]
 }
 
 reset
@@ -214,7 +214,7 @@ run_session
 check_handoff_log "$BOOT_LOG" 1
 grep -qx 'earlier session diagnostics' "$BOOT_LOG"
 [ "$(cat /tmp/slot.log)" = "$(printf 'slot stdout\nslot stderr\n')" ]
-[ "$(grep -c ' exec /mnt/sdcard/System/slot ' "$BOOT_LOG")" -eq 2 ]
+[ "$(grep -c ' Frontend started again: Slot$' "$BOOT_LOG")" -eq 1 ]
 ! grep -qE '^slot (stdout|stderr)$' "$BOOT_LOG"
 [ "$(grep -c '^early expansion diagnostics$' "$BOOT_LOG")" -eq 1 ]
 no_legacy_logs
@@ -226,7 +226,7 @@ run_session
 [ "$status" -eq 0 ]
 check_handoff_log "$BOOT_LOG" 2
 grep -qx 'previous boot diagnostics' "$BOOT_LOG"
-[ "$(grep -c ' exec /mnt/sdcard/System/slot ' "$BOOT_LOG")" -eq 3 ]
+[ "$(grep -c -e ' Startup: .*(Slot)$' -e ' Frontend started again: Slot$' "$BOOT_LOG")" -eq 3 ]
 echo 'ok: a later boot appends its timing without discarding prior boot logs'
 
 # The bind-mounted helper is read-only even for container root. An existing
@@ -534,12 +534,12 @@ run_session
 [ "$(cat /run/boot-frontend-exec)" = 2.31 ]
 [ "$(cat /run/boot-clock-handoff)" = '2.31 3.414 2.319 5.733' ]
 check_handoff_log "$BOOT_LOG" 1
-grep -Fqx '2.31 BaseOS boot stages: pre-kernel 3.414 s; post-kernel 2.319 s; combined 5.733 s (counter origin to frontend handoff; raw clock)' "$BOOT_LOG"
+grep -Eqx '[0-9.]+ Startup: 3\.41 s before Linux, 2\.32 s Linux to menu, 5\.73 s total \(MinUI\)' "$BOOT_LOG"
 rm /tmp/update.log
 run_session
 [ "$status" -eq 0 ]
 [ "$(cat /tmp/counter-calls)" = called ]
-[ "$(grep -c 'BaseOS boot stages:' "$BOOT_LOG")" -eq 1 ]
+[ "$(grep -c ' s before Linux, ' "$BOOT_LOG")" -eq 1 ]
 echo 'ok: counter stages retain BOOTTIME compatibility and survive respawns'
 
 # Unavailable counters must not prevent the frontend from starting or emit a
@@ -554,8 +554,30 @@ EOF
 run_session
 [ "$status" -eq 0 ]
 check_handoff_log "$BOOT_LOG" 1
-! grep -q 'BaseOS boot stages:' "$BOOT_LOG"
+! grep -q ' s before Linux, ' "$BOOT_LOG"
 echo 'ok: failed counter sampling falls back to uptime-only handoff'
+# The diagnostics helper starts once per boot, in the background, after the
+# first handoff, with the log the session chose. Respawns do not start it again.
+reset
+slot_card
+rm -f /usr/sbin/boot-clock
+cat > /usr/sbin/baseos-diag <<'EOF'
+#!/bin/sh
+printf '%s %s\n' "$*" "$BASEOS_BOOT_LOG" >> /tmp/diag.log
+EOF
+chmod 755 /usr/sbin/baseos-diag
+run_session
+[ "$status" -eq 0 ]
+n=0
+while [ ! -s /tmp/diag.log ] && [ "$n" -lt 50 ]; do /bin/sleep 0.1; n=$((n + 1)); done
+[ "$(cat /tmp/diag.log)" = "--boot $BOOT_LOG" ]
+rm /tmp/update.log
+run_session
+/bin/sleep 0.3
+[ "$(wc -l < /tmp/diag.log)" -eq 1 ]
+! grep -q BASEOS_BOOT_LOG /tmp/frontend-env.log
+rm /usr/sbin/baseos-diag
+echo 'ok: diagnostics start once per boot, after the first handoff'
 
 # The migration guard must short-circuit before executing its helper on all
 # later boots. A pending migration runs before confirming a rootfs update.

@@ -81,6 +81,44 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_HOST" \
   # A nonsense angle degrades to unrotated rather than to a blank panel.
   /tmp/fbtest 100 "" /out/logo-bogus.ppm 640 480 45
   cmp /out/logo-bogus.ppm /out/logo-upright.ppm
+
+  # Each message is its own run, drawn over whatever is on screen. A later
+  # pill must look exactly as if it had been the only one: no trace of a
+  # wider pill before it, at either orientation.
+  long="BOOT UPDATE FAILED: KEEP POWER ON"
+  short="ADD FRONTEND TO SD CARD"
+  for geo in "640 480 0" "480 640 90"; do
+    set -- $geo
+    tag="$1x$2-$3"
+    same() { # same NAME EXPECTED -- <fbtest args after the geometry>
+      cmp "/out/$1-$tag.ppm" "/out/$2-$tag.ppm" \
+        || { echo "$tag: $1 is not $2 alone" >&2; exit 1; }
+    }
+    /tmp/fbtest -1 "$short" "/out/short-$tag.ppm" "$@"
+    /tmp/fbtest -1 "$long" "/out/long-$tag.ppm" "$@"
+    /tmp/fbtest -1 "$long" "/out/seq-$tag.ppm" "$@" -1 "$short"
+    same seq short
+    # Without the record the old pill shows around the new one: the case
+    # above is the bug, not a pair that happens to overlap cleanly.
+    FBSPLASH_TEST_NO_UNDER=1 /tmp/fbtest -1 "$long" "/out/bug-$tag.ppm" "$@" -1 "$short"
+    ! cmp -s "/out/bug-$tag.ppm" "/out/short-$tag.ppm" \
+      || { echo "$tag: the old-pill case no longer reproduces" >&2; exit 1; }
+    # Three in a row: each restore must leave the true background, not the
+    # previous pill, under the next one.
+    /tmp/fbtest -1 "STARTING USB STORAGE" "/out/usb-$tag.ppm" "$@" \
+      -1 "USB STORAGE: EJECT BEFORE RESTART" -1 "$short"
+    same usb short
+    # A progress pill repainted in place matches a single draw at that step.
+    /tmp/fbtest 80 "UPDATING SYSTEM" "/out/update1-$tag.ppm" "$@"
+    /tmp/fbtest 50 "UPDATING SYSTEM" "/out/update2-$tag.ppm" "$@" \
+      80 "UPDATING SYSTEM"
+    same update2 update1
+    # The full-screen logo in between leaves nothing for the next pill to undo.
+    /tmp/fbtest -1 "$long" "/out/relogo-$tag.ppm" "$@" 100 "" -1 "$short"
+    same relogo short
+  done
+  [ -z "$(ls /out/*.under 2>/dev/null)" ] \
+    || { echo "harness left a pill record behind" >&2; exit 1; }
 '
 
 echo "splash rotation tests passed"

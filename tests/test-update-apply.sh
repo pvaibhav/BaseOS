@@ -12,9 +12,17 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 . "$HERE/tools/docker-platform.sh"
 
 docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_HOST" \
-  -v "$HERE/overlay/usr/sbin/baseos-update":/usr/sbin/baseos-update:ro \
+  -v "$HERE":/repo:ro \
+  -v "$HERE/overlay/usr/sbin/baseos-update":/baseos-update-source:ro \
   -v "$HERE/overlay/usr/share/baseos/boot-log.sh":/usr/share/baseos/boot-log.sh:ro \
   alpine:3.20 sh -euc '
+  apk add -q python3 e2fsprogs-extra
+  python3 /repo/tests/test-mkupdate.py
+  # Docker masks sys/firmware. Rebind only the FDT file literal in this private
+  # CLI copy; production source and all update logic remain unchanged.
+  sed "s|/sys/firmware/devicetree/base/chosen/baseos,native-boot|/tmp/native-fdt/baseos,native-boot|" \
+    /baseos-update-source > /usr/sbin/baseos-update
+  chmod 755 /usr/sbin/baseos-update
   # 8 MiB slots: small enough to stay quick, large enough that the chunked
   # write and read-back actually loop (step = max(1, MiB/16) = 1 MiB here).
   SLOT_BYTES=8388608
@@ -81,11 +89,102 @@ EOF
     rm -f /tmp/flip.log /tmp/splash.log /tmp/reboot.log /tmp/card-probes /tmp/no-card \
       /mnt/sdcard/baseos-boot.log /data/baseos-boot.log /tmp/baseos-boot.log
     rm -rf /data/update
+    rm -rf /etc/baseos /tmp/native-fdt
+    rm -f /usr/sbin/native-health
   }
   no_flip() {
     [ -f /tmp/flip.log ] && { echo "FAIL: $1 — the GPT was flipped" >&2; exit 1; }
     return 0
   }
+
+  native_policy() {
+    mkdir -p /etc/baseos
+    printf "%s" "0123456789abcdef0123456789abcdef" > /etc/baseos/native-generation
+    stub /usr/sbin/native-health "exit 0"
+    NATIVE_HEX="$(od -An -v -tx1 /etc/baseos/native-generation | tr -d " \n")"
+  }
+  native_field() {
+    printf "native-generation=%s\n" "$1" >> /tmp/pay/manifest
+    tar -cf /mnt/sdcard/baseos-rg40xxv-1.0.1.bosupd -C /tmp/pay manifest rootfs.img.gz
+  }
+  native_fdt() {
+    mkdir -p /tmp/native-fdt
+    cp /etc/baseos/native-generation /tmp/native-fdt/baseos,native-boot
+  }
+  refuse_unchanged() {
+    before="$(sha256sum /dev/mmcblk0)"
+    if baseos-update apply; then echo "FAIL: $1 accepted" >&2; exit 1; fi
+    no_flip "$1"
+    [ "$(sha256sum /dev/mmcblk0)" = "$before" ] || { echo "FAIL: $1 wrote the card" >&2; exit 1; }
+    test ! -f /tmp/reboot.log
+  }
+
+  echo "== a native payload updates a stock card; a native card needs one =="
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean
+  native_field 0000000000000000000000000000000000000000000000000000000000000000
+  refuse_unchanged "zero native payload on legacy card"
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean
+  native_field 89abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567
+  baseos-update apply
+  test -f /tmp/flip.log
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy
+  refuse_unchanged "legacy payload on native card"
+
+  echo "== the same or another model generation applies with FDT or stock fallback =="
+  for running in native stock other; do
+    reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy
+    if [ "$running" = other ]; then native_field 89abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567
+    else native_field "$NATIVE_HEX"; fi
+    [ "$running" = stock ] || native_fdt
+    prefix="$(dd if=/dev/mmcblk0 bs=1M count=9 2>/dev/null | sha256sum)"
+    suffix="$(dd if=/dev/mmcblk0 bs=1M skip=17 count=15 2>/dev/null | sha256sum)"
+    baseos-update apply
+    test -f /tmp/flip.log
+    [ "$(dd if=/dev/mmcblk0 bs=1M count=9 2>/dev/null | sha256sum)" = "$prefix" ]
+    [ "$(dd if=/dev/mmcblk0 bs=1M skip=17 count=15 2>/dev/null | sha256sum)" = "$suffix" ]
+  done
+
+  echo "== zero or malformed native generations never write the card =="
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy
+  native_field 0000000000000000000000000000000000000000000000000000000000000000
+  refuse_unchanged "zero payload generation"
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy; native_field "$NATIVE_HEX"; native_fdt
+  printf "%s" "fedcba9876543210fedcba9876543210" > /tmp/native-fdt/baseos,native-boot
+  refuse_unchanged "wrong running generation"
+  for value in "" short 000000000000000000000000000000000000000000000000000000000000000G; do
+    reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy; native_field "$value"
+    refuse_unchanged "malformed manifest generation"
+  done
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy
+  printf "native-generation=%s\n" "$NATIVE_HEX" >> /tmp/pay/manifest
+  native_field "$NATIVE_HEX"
+  refuse_unchanged "duplicate manifest generation"
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy; native_field "$NATIVE_HEX"
+  printf short > /etc/baseos/native-generation
+  refuse_unchanged "short installed generation"
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy; native_field "$NATIVE_HEX"
+  mv /etc/baseos/native-generation /etc/baseos/actual-generation
+  ln -s actual-generation /etc/baseos/native-generation
+  refuse_unchanged "symlink installed generation"
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy; native_field "$NATIVE_HEX"
+  mv /etc/baseos /etc/actual-baseos
+  ln -s actual-baseos /etc/baseos
+  refuse_unchanged "symlink installed policy directory"
+  rm -rf /etc/actual-baseos
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy; native_field "$NATIVE_HEX"
+  rm /usr/sbin/native-health
+  refuse_unchanged "missing installed native helper"
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy; native_field "$NATIVE_HEX"; native_fdt
+  printf short > /tmp/native-fdt/baseos,native-boot
+  refuse_unchanged "malformed native FDT"
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy; native_field "$NATIVE_HEX"; native_fdt
+  mv /tmp/native-fdt/baseos,native-boot /tmp/native-fdt/actual-generation
+  ln -s actual-generation /tmp/native-fdt/baseos,native-boot
+  refuse_unchanged "symlink native FDT property"
+  reset; make_payload rg40xxv "$SLOT_SECTORS" clean; native_policy; native_fdt
+  rm /etc/baseos/native-generation
+  refuse_unchanged "native FDT with missing installed policy"
+  rm -f /mnt/sdcard/*.bosupd
 
   echo "== no payload is a silent no-op =="
   reset
@@ -154,10 +253,12 @@ EOF
   test "$(tail -1 /tmp/progress.txt)" -eq 98 || { echo "FAIL: bar should reach 98" >&2; exit 1; }
   echo "  progress: $(tr "\n" " " < /tmp/progress.txt)"
   grep -qx "trial=1.0.1" /data/update/state || { echo "FAIL: no trial state" >&2; exit 1; }
-  grep -q "update: inactive slot verified" /mnt/sdcard/baseos-boot.log \
+  grep -q "update: 1.0.1 written and checked; restarting into it" /mnt/sdcard/baseos-boot.log \
     || { echo "FAIL: update events missing from shared card log" >&2; exit 1; }
-  grep -q "records out" /mnt/sdcard/baseos-boot.log \
-    || { echo "FAIL: update command diagnostics missing from shared card log" >&2; exit 1; }
+  ! grep -q -e "records out" -e "records in" -e " copied, " /mnt/sdcard/baseos-boot.log \
+    || { echo "FAIL: raw dd output in the card log" >&2; exit 1; }
+  test "$(grep -c "update: " /mnt/sdcard/baseos-boot.log)" -eq 2 \
+    || { echo "FAIL: an update should take two log lines" >&2; cat /mnt/sdcard/baseos-boot.log >&2; exit 1; }
   echo "ok"
 
   grep -q "^$want 1.0.1 test$" /data/update/history \
@@ -328,7 +429,7 @@ EOF
   grep -q "RESTORING SYSTEM" /tmp/splash.log || { echo "FAIL: no restore pill" >&2; exit 1; }
   test ! -e /tmp/card-probes && test ! -e /mnt/sdcard/baseos-boot.log \
     || { echo "FAIL: pre-card boot check accessed the frontend card" >&2; exit 1; }
-  grep -q "update: update trial boot 2" /data/baseos-boot.log \
+  grep -q "update: trying 1.0.1, start 2 of 3" /data/baseos-boot.log \
     || { echo "FAIL: trial diagnostics missing from persistent early log" >&2; exit 1; }
   grep -q "restoring" /data/baseos-boot.log \
     || { echo "FAIL: rollback diagnostics missing from persistent early log" >&2; exit 1; }
@@ -392,7 +493,7 @@ EOF
   printf "trial=1.0.1\nattempts=1\n" > /data/update/state
   baseos-update boot-check
   grep -qx "attempts=2" /data/update/state || { echo "FAIL: logging blocked trial count" >&2; exit 1; }
-  grep -q "update: update trial boot 2" /tmp/baseos-boot.log \
+  grep -q "update: trying 1.0.1, start 2 of 3" /tmp/baseos-boot.log \
     || { echo "FAIL: unavailable early log did not fall back to RAM" >&2; exit 1; }
   test ! -e /tmp/card-probes || { echo "FAIL: fallback probed the frontend card" >&2; exit 1; }
   rmdir /data/baseos-boot.log

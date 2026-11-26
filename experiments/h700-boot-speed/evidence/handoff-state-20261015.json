@@ -1,0 +1,278 @@
+{
+  "status": "stopped_at_user_request",
+  "created_utc": "2026-10-15T15:56:26.410474+00:00",
+  "checkout": "/Users/pvaibhav/Code/Me/BaseOS",
+  "branch": "uboot-trace",
+  "base_commit": "d34fe44e7475b929d23364b2f77112d89d03e217",
+  "main_checkout": true,
+  "old_boot_speed_worktree_has_source_changes": false,
+  "source_status": "unfinished_nonrelease_checkpoint",
+  "early_logo_hardware_qualified": false,
+  "step2_firmware_integrated": false,
+  "step2_hardware_tested": false,
+  "private_diagnostic_never_booted": true,
+  "personal_RGSP_untouched": true,
+  "all_agents_and_tests_stopped": true,
+  "rg40_final": {
+    "passed": true,
+    "target": "rg40xxv",
+    "boot_id": "61fb0e4d-2e5c-4744-a0e7-5b1a244716b6",
+    "no_reboot": true,
+    "diagnostic_never_booted": true,
+    "restored_generation": "6a8ce34bcf4f4e67e306cb2d4ab23a38309dd68f4882ef7d59437a19b87f406b",
+    "firmware_full_span_restored": true,
+    "primary_exact": true,
+    "original_artwork_restored": true,
+    "stock_recovery_unchanged": true,
+    "owned_pair_empty": true,
+    "original_image_readback_exact": true,
+    "rtc_after": {
+      "gp0": 1985229329,
+      "gp1": 1208071168,
+      "gp2": 15,
+      "gp3": 1477155,
+      "gp4": 0,
+      "gp5": 0,
+      "gp6": 0,
+      "gp7": 256,
+      "gp8": 0,
+      "gp9": 0,
+      "gp10": 0,
+      "gp11": 0,
+      "gp12": 0,
+      "gp13": 0,
+      "gp14": 0,
+      "gp15": 0
+    },
+    "watchdog_after": {
+      "wdt_config": 1,
+      "wdt_mode": 0
+    },
+    "installed_generation": "6a8ce34bcf4f4e67e306cb2d4ab23a38309dd68f4882ef7d59437a19b87f406b",
+    "running_generation": "a7f93be7439ec5b2416f477c28a18a356f57d6844a304c1645a164bb31bb55f0"
+  },
+  "source_files": {
+    "build-image.sh": {
+      "bytes": 9822,
+      "sha256": "dc67b84777b74f36b34939726ef0e0c5802d3d9197daeecc6c5cbc3efe0df7f5"
+    },
+    "build-update.sh": {
+      "bytes": 1813,
+      "sha256": "dd58dc0442827ddd19a72cd74e68a74b1cb7a6e35fc2e6acc42d9c4411c843d0"
+    },
+    "experiments/h700-boot-speed/HANDOFF.md": {
+      "bytes": 75228,
+      "sha256": "1c39d50c699df0a1ea483bf0a864e43fe83043f567acff5fa7838f048311564f"
+    },
+    "experiments/h700-boot-speed/PLAN.md": {
+      "bytes": 6531,
+      "sha256": "f5d802ad7da57bfe1bc96982d5376ac3e3effed7e0d4526526aa4ef932d62750"
+    },
+    "experiments/h700-boot-speed/PROJECT-HANDOFF.md": {
+      "bytes": 13522,
+      "sha256": "a70f0d4542d8a9404a22e979640191f5f872b3c330d4607f5b6ce98efc372993"
+    },
+    "experiments/h700-boot-speed/handoff-20261015/diagnostic-and-selector.md": {
+      "bytes": 11471,
+      "sha256": "59097abdc6e9d7afdad21df7cb800c21e5c9f88e6491e97b31ca24707d194537"
+    },
+    "experiments/h700-boot-speed/handoff-20261015/sequential-integration.md": {
+      "bytes": 11521,
+      "sha256": "4b99a1175e34bb7bcaaf7340111d259b42397f8b168dbe42b0ba2018d8f5068f"
+    },
+    "experiments/h700-boot-speed/handoff-20261015/vendor-and-packer.md": {
+      "bytes": 12915,
+      "sha256": "e81a0089ccdc525377e80bfa71ab02ddccf6b3792d2b3bb08295f2090290efd8"
+    },
+    "experiments/h700-boot-speed/native/boot-logo-file.h": {
+      "bytes": 7250,
+      "sha256": "436699784639996d24622943e127f57ebfae448f340ffbb5b07d6354453aae16"
+    },
+    "experiments/h700-boot-speed/native/boot-logo-pixels.h": {
+      "bytes": 2023,
+      "sha256": "d26b2c17270ea8d219b0c3b290addfe079b218aeabdc7b87ba999b380c1a422b"
+    },
+    "experiments/h700-boot-speed/native/build-display.py": {
+      "bytes": 7696,
+      "sha256": "47794b79ce3a84ed436a0befa36ff56396934956e112139e2586cfd876fbfee6"
+    },
+    "experiments/h700-boot-speed/native/build.py": {
+      "bytes": 26358,
+      "sha256": "33a0cd21f0f3ff1ac134c02a21a1b4d9ff93ec9b84da1a4b2c8243caef5320d7"
+    },
+    "experiments/h700-boot-speed/native/display-engine.json": {
+      "bytes": 708064,
+      "sha256": "9562d760c31475b768a3cf311a3114a7da6a21c4d9f991bc224c40c00e192593"
+    },
+    "experiments/h700-boot-speed/native/display-handoff.json": {
+      "bytes": 3219,
+      "sha256": "6645387a9eeba5061dfeb395d8d968f3a9af96e82b635f651577e44ab01bd1e2"
+    },
+    "experiments/h700-boot-speed/native/early-display.c": {
+      "bytes": 7045,
+      "sha256": "2c52eef83ab24f1f7421014b60c4f4684b2e857398959411c4f76d55852f4ec8"
+    },
+    "experiments/h700-boot-speed/native/loader.c": {
+      "bytes": 12737,
+      "sha256": "801ca37c36b3b3b5d9081dcf825d82354c6e37f15e992b708f6c7aa68fe5846e"
+    },
+    "experiments/h700-boot-speed/native/panel-init.json": {
+      "bytes": 54274,
+      "sha256": "310ff5fff211e0cb8e3b9c2197b11de632497b4a72d30b888de1fddf98b94b87"
+    },
+    "experiments/h700-boot-speed/native/panel-spi9.h": {
+      "bytes": 1765,
+      "sha256": "e0989780e254486be936aa38a22982497cc9f8cdd788c75e09ec123767b543a3"
+    },
+    "experiments/h700-boot-speed/native/verify-early-display.py": {
+      "bytes": 40124,
+      "sha256": "30880f27de4cea642eceb8275763c9377c24658054afe7a691b19b365174953f"
+    },
+    "experiments/h700-boot-speed/native/verify-fleet.py": {
+      "bytes": 29702,
+      "sha256": "ed2fe64fe383a43194c0d5bff3ddbcec8dcf70ccd28b9c7cb38889ec727de9c9"
+    },
+    "experiments/h700-boot-speed/native/verify-kernel-logo.py": {
+      "bytes": 19411,
+      "sha256": "2f7a2b42b6e9eb9ab7b9ad3fb41f5168a801ee4dee04fe6aaf3968f28db34f38"
+    },
+    "experiments/h700-boot-speed/native/verify-panel-init.py": {
+      "bytes": 9320,
+      "sha256": "b13d4c84d2263189514a2aee117a227a469ddd763fb0ca49e8da340128832e16"
+    },
+    "experiments/h700-boot-speed/native/verify-panel-spi9.py": {
+      "bytes": 17614,
+      "sha256": "cfae0838c37872bfd4fed2d42fc95abe807fd3ae102b67c781ddef0c1ae8bffd"
+    },
+    "experiments/h700-boot-speed/native/verify.py": {
+      "bytes": 53015,
+      "sha256": "f59edb33ecfaf064ee18b00b8c26775ab2f3d2b56d8c445621fb1421a1173ca3"
+    },
+    "experiments/h700-boot-speed/sequential/README.md": {
+      "bytes": 3844,
+      "sha256": "c3ed99bd80c26b76aba6360407dbb6ad18d6eedb479f97bb38977d97f1c8a8d8"
+    },
+    "experiments/h700-boot-speed/sequential/boot-blob.h": {
+      "bytes": 1654,
+      "sha256": "79ba4b3b5190005c348168017c091fe4dd4cde21bfa31bcb8eb8b5d6df79a5cc"
+    },
+    "experiments/h700-boot-speed/sequential/build-fixture.py": {
+      "bytes": 6141,
+      "sha256": "8440cc155a7c4cd42a9e6436edac7d011ca8a4ee92707c47b051201f983af2cd"
+    },
+    "experiments/h700-boot-speed/sequential/build-payload.py": {
+      "bytes": 7278,
+      "sha256": "66968cc9f9ff4d512465a0a3899b4f19c3257ce2872c01a96a225f6068ff428b"
+    },
+    "experiments/h700-boot-speed/sequential/init": {
+      "bytes": 1857,
+      "sha256": "92e9a9af9302aaba07d446e7b2244865e9bfb786d8a91af24adf2233dec5fac8"
+    },
+    "experiments/h700-boot-speed/sequential/slot-reader.h": {
+      "bytes": 7370,
+      "sha256": "35c6411441be0cfd69c70f338bda2bcb72e5a603186f2dadac2c5320cb3dc526"
+    },
+    "experiments/h700-boot-speed/sequential/test-fixture.py": {
+      "bytes": 14377,
+      "sha256": "ad38aee0b598a57bb4d1a9fa3f03ed4c42a98468e351c83fc6339b0eedc3a147"
+    },
+    "experiments/h700-boot-speed/sequential/test-slot-reader.py": {
+      "bytes": 14728,
+      "sha256": "ef7ca14fda4ebf57497c95ed768a0530bff8b9254ef29f6a263f67de4aad7df8"
+    },
+    "experiments/h700-boot-speed/spl/build-early-mmc.py": {
+      "bytes": 18672,
+      "sha256": "fc02bd5c3352d26c4fd5ace753936a12e0effabf1b1387dbc750376ce28c2fe0"
+    },
+    "experiments/h700-boot-speed/spl/native-boot.c": {
+      "bytes": 8395,
+      "sha256": "d0a8c32f34c5138c77ded465ba778198f1e7e5b3d08c5712ab62080aedb7fe78"
+    },
+    "experiments/h700-boot-speed/spl/native-cache.c": {
+      "bytes": 1665,
+      "sha256": "d98a0e97e02a896f9820a101a96c52969a2563b9864aed07ee8e479bb57a947f"
+    },
+    "experiments/h700-boot-speed/spl/native-display.h": {
+      "bytes": 2076,
+      "sha256": "5b5bbfe0bc34677f818ef2e192b38fc048a1687ae97d2393acb83e8e8a229cad"
+    },
+    "experiments/h700-boot-speed/spl/native-logo.h": {
+      "bytes": 692,
+      "sha256": "ad7731335bcfea8acb4015d33807856c73af03b4be41ccad68de8b65e8b90498"
+    },
+    "overlay/usr/sbin/baseos-update": {
+      "bytes": 24517,
+      "sha256": "1c9bd930a77a006c8cd8f151d45399da1d553e69795844ae82c4c31a9712f271"
+    },
+    "tests/test-sequential-update.py": {
+      "bytes": 13034,
+      "sha256": "25b53c6d33b7cadcbef2a897e345b6b6fb09f98a6d87e789089b70d07af9bf53"
+    },
+    "tests/test-sequential-update.sh": {
+      "bytes": 808,
+      "sha256": "0cb60c071552231a3cf40908d9e3fa5593b916dd889bd8877344a18838525b10"
+    },
+    "tools/boot_payload.py": {
+      "bytes": 10149,
+      "sha256": "cb491db6e226e4d21919edd5c9b2af41d51d2f1d5a1a71d2b8f276d7a1881546"
+    },
+    "tools/mkupdate.py": {
+      "bytes": 11304,
+      "sha256": "e3ab5d6bff202f58396c5b7abf3d39b539301869e24d5938065c56d92ff1655f"
+    },
+    "tools/slot_image.py": {
+      "bytes": 3810,
+      "sha256": "361572d87bf18bbe1aa6c1d4ab7c1eca75cee969ed6a017096761ca3e2a521e8"
+    },
+    "work/h700-loader/decisions.tsv": {
+      "bytes": 45333,
+      "sha256": "4ecd4e93e5ee9e005d79cd240508d83d209c46a5d2c5c2db5f961a78fcdd737a"
+    }
+  },
+  "proofs": {
+    "logo_all_eleven": {
+      "path": "work/h700-loader/native-logo-v1/fleet-v1/fleet.json",
+      "sha256": "329f046abf6f81832f14f53e88ec1fe43bcf7fa2efea63d6aaed7be4b1130cea"
+    },
+    "logo_artifact_pins": {
+      "path": "work/h700-loader/native-logo-v1/artifacts-v3/artifact-pins.json",
+      "sha256": "7f5c7543a6b13ec90b952040c20418449f8ac2aa2ffadc11d6ef8ffcead0353c"
+    },
+    "logo_ROM": {
+      "path": "work/h700-loader/native-logo-v1/artifacts-v3/rom-summary.json",
+      "sha256": "768c52f88cf96bc0d2b40ec6760fda190bc911409e94cd35af7b8d377149f587"
+    },
+    "logo_RG40_failed_noack": {
+      "path": "work/h700-loader/native-logo-v1/hardware/rg40xxv/noack/run.json",
+      "sha256": "82e499dffdac5e3784d7c5f972043ab1edc36bdb3fb1615573645121e1beef7a"
+    },
+    "logo_RG40_without_artwork": {
+      "path": "work/h700-loader/native-logo-v1/hardware/rg40xxv/without-artwork/run.json",
+      "sha256": "c0d556a4c9a7114ea31e1bc15507cd04de04f8c7cddd8fdbda883a4ff70b1ba9"
+    },
+    "RG40_final_restore": {
+      "path": "work/h700-loader/native-logo-v1/hardware/rg40xxv/restore-qualified-before-handoff/run.json",
+      "sha256": "1575e044557c03f45b1a39b9395b2ebc0c65f0d1ddf87cc85e319efb632e3cb9"
+    },
+    "SP_old_v2_normalized": {
+      "path": "work/h700-loader/native-logo-v1/hardware/rg34xxsp/old-native-normalize/run.json",
+      "sha256": "10fe9f7af7c611f46738aea56b633362618561cfec17136313232d113ee59be8"
+    },
+    "private_phase_host": {
+      "path": "work/h700-loader/native-logo-v1/diag-artifacts-v1/rg40xxv/phase-helper-verification.json",
+      "sha256": "d71184a83028b9391389ac0faeb500d36172066a48b1e034973ecd9582cb3e41"
+    },
+    "private_ROM": {
+      "path": "work/h700-loader/native-logo-v1/diag-artifacts-v1/rom-summary.json",
+      "sha256": "f815bf3ee0287e214c6f3a3257aab8e8043adfe77b04eb5844551fadddbf9d7a"
+    },
+    "step2_update_host": {
+      "path": "work/h700-loader/sequential-v2/update-host-v1/host-proof.json",
+      "sha256": "3062290c60cf86bd28fdb1beb01d99ee800b7aaf5d3e9db1dc0ec30abad1b263"
+    },
+    "step2_real_asset_pack": {
+      "path": "work/h700-loader/sequential-v2/build-sp-v1/manifest.json",
+      "sha256": "a240da78213fd436519585300df0376592f5a2b7c7c580f4cc14cbacc50ed23e"
+    }
+  }
+}

@@ -93,8 +93,12 @@ Boot diagnostics
 ----------------
 
 BaseOS appends boot diagnostics to baseos-boot.log at the root of the active
-frontend card: TF2 when usable, otherwise TF1. This includes BaseOS's time
-from kernel start to frontend handoff.
+frontend card: TF2 when usable, otherwise TF1. Each start gets a header, its
+startup time, and a "Loader:" line that says whether the fast loader started
+it and, if not, why. After an update, or when something about the start
+changed, a "Diagnostics" block follows with the hardware and boot details
+needed to report a problem. It holds no Wi-Fi settings, addresses or serial
+numbers. The log trims its oldest starts by itself.
 
 Optional startup sound
 ----------------------

@@ -1,0 +1,701 @@
+#!/bin/sh
+# Which loader started this boot, and why; plus a read-only diagnostics block.
+# Everything goes into the card's existing baseos-boot.log: no other file is
+# created on the card.
+#
+#   baseos-diag           print a diagnostics block and add it to the log
+#   baseos-diag --boot    once per boot, from frontend-session in the background
+#                         at the lowest priority: one "Loader:" line now, and a
+#                         block a little later when it is useful (see below)
+#   baseos-diag --loader  print only the "Loader:" line
+#
+# A boot gets a block when it is the first boot of a BaseOS build, when the
+# fast loader install ran in it, when a fast start failed its health check,
+# when the loader line differs from the previous boot's, and, while the fast
+# loader is installed but the stock loader keeps starting, every 20th boot so
+# a recent block survives the log trimming.
+#
+# Read only: the card's boot areas, the chip registers (baseos-regs), the install
+# step's files and the device tree. Nothing is read or written while a computer
+# owns USB storage. No Wi-Fi settings, MAC addresses or serial numbers appear.
+set -u
+ROOT=${BASEOS_DIAG_ROOT:-}
+if [ -n "$ROOT" ]; then
+	[ "${BASEOS_DIAG_TESTING:-}" = 1 ] || exit 1
+fi
+MODE=${1:-report}
+case "$MODE" in report|--boot|--loader) ;; *)
+	echo "usage: baseos-diag [--boot|--loader]" >&2; exit 2 ;;
+esac
+
+CARD="$ROOT/mnt/sdcard"
+CARD_LOG="$CARD/baseos-boot.log"
+# The log keeps its name: past MAX bytes its oldest boots are dropped, down to
+# about KEEP bytes.
+MAX_LOG_BYTES=262144
+KEEP_LOG_BYTES=196608
+MAX_BLOCK_BYTES=16384
+REPEAT_EVERY=20
+DT="$ROOT/sys/firmware/devicetree/base"
+CHOSEN="$DT/chosen"
+NATIVE_DIR="$ROOT/usr/share/baseos/native"
+NSTATE="$ROOT/data/boot-native-v1"
+PENDING=42535031
+TICKS_PER_SECOND=24000000
+
+# ------------------------------------------------------------------ helpers
+
+hexof() { od -An -v -tx1 "$1" 2>/dev/null | tr -d ' \n'; }
+first_line() { [ -r "$1" ] && head -n 1 "$1" 2>/dev/null; }
+short() { printf '%.8s' "$1"; }
+mask_private() {
+	sed -E -e 's/([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}/xx:xx:xx:xx:xx:xx/g' \
+		-e 's/(snum|serialno|serial|specialstr)=[^ ]*/\1=(hidden)/g'
+}
+usb_storage_on() { [ -s "$ROOT/run/usb-storage-device" ]; }
+card_usable() {
+	! usb_storage_on && mountpoint -q "$CARD" 2>/dev/null && ( : >> "$CARD_LOG" ) 2>/dev/null
+}
+uptime_now() { up_s=0; read -r up_s _ 2>/dev/null < "$ROOT/proc/uptime"; printf '%s' "$up_s"; }
+dt_u32() { od -An -tu1 -N4 "$1" 2>/dev/null | awk 'NF == 4 { printf "%.0f\n", $1 * 16777216 + $2 * 65536 + $3 * 256 + $4 }'; }
+dt_x32() { od -An -tu1 -N4 "$1" 2>/dev/null | awk 'NF == 4 { printf "0x%02x%02x%02x%02x\n", $1, $2, $3, $4 }'; }
+# The same, without leading zeros: layout words read as 0x30fa/0x4000000.
+dt_xs() { od -An -tu1 -N4 "$1" 2>/dev/null | awk 'NF == 4 { printf "0x%x\n", $1 * 16777216 + $2 * 65536 + $3 * 256 + $4 }'; }
+hexs() { printf '0x%x' $((0x$1)); }
+dram_name() { case "$1" in 3) echo DDR3 ;; 7) echo LPDDR3 ;; 8) echo LPDDR4 ;; '') echo unknown ;; *) echo "type $1" ;; esac; }
+# reg NAME: the register as 8 lowercase hex digits, or nothing when unreadable.
+reg() { printf '%s\n' "$REGS" | awk -v name="$1" '$1 == name && $3 ~ /^0x/ { print tolower(substr($3, 3)) }'; }
+cmdline_value() { tr ' ' '\n' < "$ROOT/proc/cmdline" 2>/dev/null | sed -n "s/^$1=//p" | head -n 1; }
+
+# ------------------------------------------------------------ system state
+
+load_state() {
+	BASEOS_VERSION= BASEOS_BUILD= BASEOS_TARGET= BASEOS_MODEL=
+	# shellcheck disable=SC1091
+	[ ! -r "$ROOT/etc/baseos-release" ] || . "$ROOT/etc/baseos-release"
+	HAVE_NATIVE=0 NATIVE_GENERATION= NATIVE_COOKIE= NATIVE_TARGET=
+	if [ -r "$NATIVE_DIR/manifest" ]; then
+		# shellcheck disable=SC1091
+		. "$NATIVE_DIR/manifest" && HAVE_NATIVE=1
+	fi
+	NATIVE_COOKIE=$(printf '%s' "${NATIVE_COOKIE:-}" | tr 'A-F' 'a-f')
+	if [ -r "$ROOT/usr/share/baseos/boot-gzip/manifest" ]; then
+		# shellcheck disable=SC1091
+		. "$ROOT/usr/share/baseos/boot-gzip/manifest"
+	fi
+	INSTALLED_GENERATION=$(hexof "$ROOT/etc/baseos/native-generation")
+	NATIVE_BOOT=0 RUNNING_GENERATION=
+	if [ -e "$CHOSEN/baseos,native-boot" ]; then
+		NATIVE_BOOT=1
+		RUNNING_GENERATION=$(hexof "$CHOSEN/baseos,native-boot")
+	fi
+	REGS=
+	[ ! -x "$ROOT/usr/sbin/baseos-regs" ] || REGS=$("$ROOT/usr/sbin/baseos-regs" 2>/dev/null)
+	GP14=$(reg rtc_gp14) GP15=$(reg rtc_gp15)
+	DONE= ATTEMPTS=0
+	if [ -n "$NATIVE_GENERATION" ]; then
+		DONE=$(first_line "$NSTATE/done-$NATIVE_GENERATION")
+		[ ! -r "$NSTATE/attempts-$NATIVE_GENERATION" ] || read -r ATTEMPTS < "$NSTATE/attempts-$NATIVE_GENERATION" || ATTEMPTS=0
+	fi
+	case "$ATTEMPTS" in ''|*[!0-9]*) ATTEMPTS=0 ;; esac
+	LATCH_FILE=$(first_line "$NSTATE/latch")
+	RESULT=$(first_line "$ROOT/run/baseos-native-result")
+	RESULT_KIND=${RESULT%% *} RESULT_TEXT=${RESULT#* }
+	BOOT_ID=$(first_line "$ROOT/proc/sys/kernel/random/boot_id")
+}
+
+# The RTC pair GP14/GP15, as native-health and the capsule use it.
+latch_state() {
+	if [ -z "$GP14" ] || [ -z "$GP15" ]; then echo unknown
+	elif [ "$GP14$GP15" = 0000000000000000 ]; then echo idle
+	elif [ "$GP15" = "$PENDING" ] && [ -n "$NATIVE_COOKIE" ] && [ "$GP14" = "$NATIVE_COOKIE" ]; then echo held
+	elif [ "$GP15" = "$PENDING" ] && [ "$GP14" = 00000000 ]; then echo clearing
+	elif [ "${GP15%??????}" = 54 ]; then echo trace
+	else echo other
+	fi
+}
+
+# A lab loader's progress trace in the pair (work/h700-loader/v152-lp4):
+# GP15 = 0x54 | candidate << 20 | memory setups << 16 | stage, GP14 = state << 28 |
+# detail. Stage 0x4000 and up is a size probe: columns, rows, ranks, full width.
+describe_trace() {
+	awk -v gp14="$GP14" -v gp15="$GP15" 'function hex(s,   i, v) { v = 0; for (i = 1; i <= length(s); i++) v = v * 16 + index("0123456789abcdef", substr(s, i, 1)) - 1; return v }
+	BEGIN {
+		w15 = hex(gp15); w14 = hex(gp14)
+		cand = int(w15 / 1048576) % 16; inits = int(w15 / 65536) % 16; stage = w15 % 65536
+		state = int(w14 / 268435456); detail = w14 % 268435456
+		if (stage >= 16384) where = sprintf("size check, %d columns, %d rows, %d rank(s), %s width", int(stage / 256) % 64, int(stage / 4) % 64, stage % 4 >= 2 ? 2 : 1, stage % 2 ? "full" : "half")
+		else where = sprintf("stage 0x%x", stage)
+		split("waiting on register|read calibration poll|wait bound reached|wait timed out|probing size", names, "|")
+		what = state == 10 ? names[1] : state == 12 ? names[2] : state == 13 ? names[3] : state == 14 ? names[4] : state == 11 ? names[5] : sprintf("state %x", state)
+		if (state == 11) what = what sprintf(" %d MiB", detail); else what = what sprintf(" 0x%07x", detail)
+		printf "memory setting %d, %d setup run(s), %s; last: %s", cand, inits, where, what
+	}'
+}
+
+describe_latch() {
+	case "$(latch_state)" in
+	unknown) echo "could not be read" ;;
+	idle) echo "$GP14 $GP15, clear: the fast loader may start" ;;
+	held)
+		if [ "$LATCH_FILE" = "$NATIVE_GENERATION" ]; then
+			echo "$GP14 $GP15, held by the install step, which has not finished"
+		else
+			echo "$GP14 $GP15, set by the fast loader itself: a start did not finish, so the stock loader starts"
+		fi ;;
+	clearing) echo "$GP14 $GP15, half cleared: a restart came while it was being cleared" ;;
+	trace) echo "$GP14 $GP15, a progress trace from the fast loader: $(describe_trace)" ;;
+	other)
+		if [ "$GP15" = "$PENDING" ]; then
+			echo "$GP14 $GP15, set for another BaseOS build (this one's cookie is ${NATIVE_COOKIE:-unknown})"
+		else
+			echo "$GP14 $GP15, an unexpected value"
+		fi ;;
+	esac
+}
+
+# install.log without dd's copy counters, the "native: " prefix and blank lines.
+install_log_plain() {
+	[ -r "$NSTATE/install.log" ] || return 0
+	grep -v -E -e '^[0-9]+\+[0-9]+ records (in|out)$' -e ' bytes \(.*\) copied, ' -e '^$' \
+		-e '^native-health: stock latch (held|released)$' "$NSTATE/install.log" \
+		| sed 's/^native: //'
+}
+
+# The first error of the most recent install try.
+first_error() {
+	install_log_plain | awk '
+		/^found / { error = "" }
+		error == "" && /(FAILED|did not|could not|cannot|unverified)/ { error = $0 }
+		END { print error }'
+}
+
+health_failure() {
+	install_log_plain | awk '
+		/^installed$|^stock latch cleared/ { failure = "" }
+		/reached Linux but failed its health check/ {
+			failure = $0; sub(/.*health check[^:]*: /, "", failure); gsub(/native-health: /, "", failure); sub(/ +$/, "", failure)
+		}
+		END { print failure }'
+}
+
+latched_stock_reason() {
+	why=$(health_failure)
+	if [ -n "$why" ]; then
+		echo "the fast loader's start failed: it is installed, but its last start reached Linux and failed its health check ($why), so the chip's latch now selects the stock loader"
+	else
+		echo "the fast loader's start failed: it is installed, but its last start did not reach Linux, so the chip's latch now selects the stock loader"
+	fi
+}
+
+plain_wait() {
+	case "$1" in
+	*'owns USB storage'*) echo "a computer was using USB storage" ;;
+	*'boot pair step has not finished'*)
+		echo "the earlier boot file update has not finished ($(first_line "$ROOT/data/boot-pair-v2/complete" || tail -n 1 "$ROOT/data/boot-pair-v2/migration.log" 2>/dev/null | sed 's/^boot-pair: //'))" ;;
+	*) echo "$1" ;;
+	esac
+}
+
+# Why this boot used the stock loader, in one plain sentence.
+stock_reason() {
+	[ "$HAVE_NATIVE" = 1 ] || { echo "this BaseOS has no fast loader for ${BASEOS_TARGET:-this model}"; return; }
+	case "$RESULT_KIND" in
+	installed) echo "fast loader not installed yet; it was installed and checked during this start and is used from the next one"; return ;;
+	in-place) echo "fast loader files were already in place; it is used from the next start"; return ;;
+	failed)
+		case "$RESULT_TEXT" in failed*) echo "fast loader install $RESULT_TEXT" ;; *) echo "fast loader install failed: $RESULT_TEXT" ;; esac
+		return ;;
+	deferred) echo "fast loader not installed yet: $(plain_wait "$RESULT_TEXT")"; return ;;
+	skipped) echo "fast loader install $RESULT_TEXT"; return ;;
+	gave-up) echo "fast loader install gave up after 3 failed tries; first error: $(first_error)"; return ;;
+	start-failed) latched_stock_reason; return ;;
+	esac
+	case "$DONE" in
+	'') echo "fast loader not installed yet" ;;
+	skipped:*) echo "fast loader install not possible on this card: ${DONE#skipped: }" ;;
+	'gave up'*) echo "fast loader install gave up after 3 failed tries; first error: $(first_error)" ;;
+	'native boot failed health'*) latched_stock_reason ;;
+	installed*)
+		case "$(latch_state)" in
+		held)
+			if [ "$LATCH_FILE" = "$NATIVE_GENERATION" ]; then
+				echo "a fast loader install was interrupted; it continues at the next start"
+			else
+				latched_stock_reason
+			fi ;;
+		trace) echo "the fast loader's start failed; it left a progress trace: $(describe_trace)" ;;
+		clearing) echo "the chip's latch was being cleared when the device restarted" ;;
+		other) echo "the chip's latch holds a value this build does not know ($GP14 $GP15)" ;;
+		unknown) echo "the fast loader is installed, but the chip's latch could not be read" ;;
+		idle)
+			retention=$(reg rtc_1f8)
+			if [ -n "$retention" ] && [ $((0x$retention & 0x10000)) -ne 0 ]; then
+				echo "the chip asked for the vendor's resume path (RTC 0x070001f8 = $retention)"
+			else
+				echo "unknown: the fast loader is installed and the chip's latch is clear"
+			fi ;;
+		esac ;;
+	*) echo "fast loader install state: $DONE" ;;
+	esac
+}
+
+loader_line() {
+	if [ "$NATIVE_BOOT" = 1 ]; then
+		if [ -n "$NATIVE_GENERATION" ] && [ "$RUNNING_GENERATION" = "$NATIVE_GENERATION" ]; then
+			echo "Loader: fast"
+		else
+			echo "Loader: fast, from another BaseOS build (generation $(short "$RUNNING_GENERATION"))"
+		fi
+	else
+		echo "Loader: stock ($(stock_reason))"
+	fi
+}
+
+# ------------------------------------------------------------ boot areas
+
+# grab DEVICE OFFSET BYTES FILE: the card's own bytes (direct I/O from a 1 MiB
+# buffer, as the install step reads them), or a plain read where direct I/O is
+# refused. Read only.
+grab() {
+	rm -f "$4"
+	dd if="$1" of="$4" bs=1M skip="$2" count="$3" iflag=direct,skip_bytes,count_bytes status=none 2>/dev/null \
+		&& [ "$(wc -c < "$4")" -eq "$3" ] && return 0
+	dd if="$1" of="$4" bs=1M skip="$2" count="$3" iflag=skip_bytes,count_bytes status=none 2>/dev/null \
+		&& [ "$(wc -c < "$4")" -eq "$3" ]
+}
+sha_of() { sha256sum "$1" 2>/dev/null | cut -d ' ' -f 1; }
+sha_at() {
+	if grab "$1" "$2" "$3" "$WORK/area"; then sha_of "$WORK/area"; else echo unreadable; fi
+	rm -f "$WORK/area"
+}
+
+# egon FILE: "MAGIC LENGTH CHECKSUM-OK" for an eGON boot header. The checksum is
+# the 32-bit sum of the first LENGTH bytes as little-endian words, with word 3
+# counted as 0x5F0A6C39.
+egon() {
+	magic=$(od -An -tx1 -j4 -N8 "$1" 2>/dev/null | tr -d ' \n')
+	length=$(od -An -tu4 -j16 -N4 "$1" 2>/dev/null | tr -d ' ')
+	case "$length" in ''|*[!0-9]*) length=0 ;; esac
+	[ "$magic" = 65474f4e2e425430 ] || { echo "none $length no"; return; }
+	head -c "$length" "$1" | od -An -v -tu4 | awk -v want="$((length / 4))" -v bytes="$length" '
+		{ for (i = 1; i <= NF; i++) { if (n == 3) stored = $i; else total += $i; n++ } }
+		END { printf "eGON %d %s\n", bytes, (n == want && n > 4 && (total + 1594518585) % 4294967296 == stored) ? "yes" : "no" }'
+}
+
+# stock_boot0 FILE (64 KiB): this model's vendor boot0, judged as the install
+# step judges it. Prints why not.
+stock_boot0() {
+	# shellcheck disable=SC2046
+	set -- "$1" $(egon "$1")
+	[ "$2" = eGON ] || { echo "no boot header"; return 1; }
+	[ "$3" = 65536 ] || { echo "length $3"; return 1; }
+	[ "$4" = yes ] || { echo "checksum does not add up"; return 1; }
+	[ "$(tail -c +513 "$1" | sha256sum | cut -d ' ' -f 1)" = "${BOOT_BOOT0_BODY_SHA256:-none}" ] \
+		|| { echo "not this model's vendor loader"; return 1; }
+}
+
+# Canonical sector-0 bytes with mutable fields masked: checksum (12..15),
+# ROM media byte (40), and per-unit wake DRAM block (56..183).
+capsule_sector0_fixed() {
+	head -c 512 "$1" | od -An -v -tu1 2>/dev/null | awk '
+		{ for (i = 1; i <= NF; i++) {
+			if ((n >= 12 && n < 16) || n == 40 || (n >= 56 && n < 184)) printf "0 "
+			else printf "%s ", $i
+			n++
+		} }
+		END { if (n != 512) exit 1 }'
+}
+
+# this_capsule FILE: matches this BaseOS's capsule, allowing per-unit wake DRAM
+# header bytes in sector 0 while keeping the eGON checksum and body exact.
+this_capsule() {
+	[ "$HAVE_NATIVE" = 1 ] || return 1
+	if [ "$(sha_of "$1")" = "${NATIVE_CAPSULE_SHA256:-}" ]; then return 0; fi
+	[ "$2" = eGON ] && [ "$3" = "$capsule_size" ] && [ "$4" = yes ] || return 1
+	ref="$ROOT/usr/share/baseos/native/capsule.bin"
+	want_body=${NATIVE_CAPSULE_BODY_SHA256:-}
+	if [ -z "$want_body" ] && [ -r "$ref" ]; then
+		want_body=$(tail -c +513 "$ref" | sha256sum | cut -d ' ' -f 1)
+	fi
+	[ -n "$want_body" ] || return 1
+	[ "$(tail -c +513 "$1" | sha256sum | cut -d ' ' -f 1)" = "$want_body" ] || return 1
+	if [ -r "$ref" ]; then
+		[ "$(capsule_sector0_fixed "$1")" = "$(capsule_sector0_fixed "$ref")" ] || return 1
+	fi
+}
+
+# The unit's memory settings in a boot0 header: words 0x38..0xc4.
+dram_words() { od -An -v -tx4 -j 56 -N 144 "$1" 2>/dev/null | tr -s ' \n' ' ' | sed 's/^ //; s/ $//'; }
+describe_dram_words() {
+	# shellcheck disable=SC2046
+	set -- $(dram_words "$1")
+	[ "$#" -eq 36 ] || { echo "unreadable"; return; }
+	clk=$((0x$1)) type=$((0x$2))
+	shift 6; layout="$(hexs "$1")/$(hexs "$2")"
+	shift 20; echo "$(dram_name "$type") at $clk MHz, layout $layout, tpr6 0x$1, tpr10 0x$2, tpr11 0x$3, tpr12 0x$4"
+}
+
+boot_areas() {
+	DISK="$ROOT/dev/mmcblk0" BOOTP="$ROOT/dev/mmcblk0p4"
+	capsule_sector=${NATIVE_CAPSULE_SECTOR:-16} capsule_size=${NATIVE_CAPSULE_SIZE:-131072}
+	secondary_sector=${NATIVE_SECONDARY_SECTOR:-512}
+	toc_sector=${NATIVE_TOC_SECTOR:-$(( ${BOOT_PACKAGE_OFFSET:-16793600} / 512 ))}
+	toc_size=${NATIVE_TOC_SIZE:-${BOOT_PACKAGE_SIZE:-1310720}}
+	primary=unreadable secondary=unreadable toc=unreadable stock_image=unknown firmware=none image=none
+	if [ ! -r "$DISK" ]; then
+		AREA_VERDICT="unknown (the card cannot be read)"
+		echo "  card: cannot be read"
+		return
+	fi
+	if grab "$DISK" $((capsule_sector * 512)) "$capsule_size" "$WORK/primary"; then
+		head -c 65536 "$WORK/primary" > "$WORK/primary64"
+		# shellcheck disable=SC2046
+		set -- $(egon "$WORK/primary")
+		header="$1 header, $2 bytes, checksum $( [ "$3" = yes ] && echo ok || echo bad)"
+		if this_capsule "$WORK/primary" "$1" "$2" "$3"; then
+			primary=fast text="fast loader of this BaseOS"
+		elif why=$(stock_boot0 "$WORK/primary64"); then
+			primary=stock text="vendor loader"
+		elif [ "$1" = eGON ] && [ "$2" = 131072 ] \
+			&& [ "$(dd if="$WORK/primary" bs=512 skip=9 count=127 status=none 2>/dev/null | sha256sum | cut -d ' ' -f 1)" = "${BOOT_BOOT0_BODY_SHA256:-none}" ]; then
+			primary=earlier text="fast loader of an earlier BaseOS"
+		else
+			primary=mismatch text="not recognised ($why)"
+		fi
+		echo "  sector $capsule_sector: $text ($header)"
+	else
+		echo "  sector $capsule_sector: cannot be read"
+	fi
+	if grab "$DISK" $((secondary_sector * 512)) 65536 "$WORK/secondary"; then
+		if why=$(stock_boot0 "$WORK/secondary"); then
+			secondary=ok; echo "  sector $secondary_sector: vendor loader, the fallback copy (ok)"
+		else
+			secondary=bad; echo "  sector $secondary_sector: NOT a usable vendor loader ($why)"
+		fi
+	else
+		secondary=bad; echo "  sector $secondary_sector: cannot be read"
+	fi
+	toc_sha=$(sha_at "$DISK" $((toc_sector * 512)) "$toc_size")
+	case "$toc_sha" in
+	"${NATIVE_TOC_SHA256:-none}") toc=fast text="the fast loader's fallback package of this BaseOS" ;;
+	"${BOOT_PACKAGE_SHA256:-none}") toc=v140 text="the 1.4.0 package" ;;
+	"${BOOT_GZIP_PACKAGE_SHA256:-none}") toc=gzip text="the first optimised package" ;;
+	"${BOOT_ORIGINAL_PACKAGE_SHA256:-none}") toc=original text="the original vendor package" ;;
+	unreadable) toc=unreadable text="cannot be read" ;;
+	*)
+		case " ${NATIVE_PREVIOUS_TOC_SHA256:-} " in
+		*" $toc_sha "*) toc=earlier text="an earlier BaseOS fast loader's package" ;;
+		*) toc=mismatch text="not recognised" ;;
+		esac ;;
+	esac
+	echo "  U-Boot package (sector $toc_sector): $text"
+	if [ -r "$BOOTP" ] && [ -n "${BOOT_BOOT_IMAGE_SIZE:-}" ]; then
+		if [ "$(sha_at "$BOOTP" 0 "$BOOT_BOOT_IMAGE_SIZE")" = "${BOOT_BOOT_IMAGE_SHA256:-none}" ]; then
+			stock_image=ok
+		else
+			stock_image=other
+		fi
+	fi
+	if [ "$HAVE_NATIVE" = 1 ] && [ -r "$BOOTP" ]; then
+		[ "$(sha_at "$BOOTP" "$NATIVE_FIRMWARE_OFFSET" "$NATIVE_FIRMWARE_SIZE")" = "$NATIVE_FIRMWARE_SHA256" ] && firmware=ok || firmware=other
+		[ "$(sha_at "$BOOTP" "$NATIVE_IMAGE_OFFSET" "$NATIVE_IMAGE_SIZE")" = "$NATIVE_IMAGE_SHA256" ] && image=ok || image=other
+	fi
+	echo "  boot partition: stock kernel image $stock_image, fast loader firmware $firmware, fast loader kernel $image"
+	if [ "$primary/$secondary/$toc/$firmware/$image/$stock_image" = fast/ok/fast/ok/ok/ok ]; then
+		AREA_VERDICT="matches the BaseOS ${BASEOS_VERSION:-?} fast loader for ${NATIVE_TARGET:-?}"
+	elif [ "$primary/$secondary" = stock/ok ]; then
+		AREA_VERDICT="stock vendor loader"
+		[ "$firmware/$image" != ok/ok ] || AREA_VERDICT="stock vendor loader (the fast loader's other files are in place)"
+	else
+		AREA_VERDICT="mismatch (sector $capsule_sector $primary, sector $secondary_sector $secondary, package $toc, firmware $firmware, kernel $image, stock kernel $stock_image)"
+	fi
+	if [ -s "$WORK/primary" ] && [ "$primary" = fast ]; then
+		echo "  wake memory settings in the fast loader header: $(describe_dram_words "$WORK/primary")"
+	fi
+	if [ -s "$WORK/secondary" ] && [ "$secondary" = ok ]; then
+		echo "  factory memory settings in the fallback copy: $(describe_dram_words "$WORK/secondary")"
+	fi
+	rm -f "$WORK/primary" "$WORK/primary64" "$WORK/secondary"
+}
+
+# ----------------------------------------------------------- loader records
+
+# baseos,boot-display (80 bytes, little-endian): magic, version, size, FNV-1a
+# over the record with its own field zero, panel 0 old / 1 boe, logo bytes,
+# two hashes, the generation, the tick the logo lit, two zero words.
+decode_display() {
+	od -An -v -tu1 "$1" | awk -v running="$RUNNING_GENERATION" -v hz="$TICKS_PER_SECOND" '
+		function le32(i) { return b[i] + b[i+1] * 256 + b[i+2] * 65536 + b[i+3] * 16777216 }
+		function step(h, x,   lo) { lo = h % 256; h = h - lo + xor(lo, x); return ((h % 256) * 16777216 + h * 403) % 4294967296 }
+		{ for (i = 1; i <= NF; i++) b[n++] = $i }
+		END {
+			if (n != 80) { printf "%d bytes, expected 80", n; exit }
+			h = 2166136261
+			for (i = 0; i < 80; i++) h = step(h, (i >= 12 && i < 16) ? 0 : b[i])
+			gen = ""; for (i = 32; i < 64; i++) gen = gen sprintf("%02x", b[i])
+			shown = le32(64) + le32(68) * 4294967296
+			panel = le32(16)
+			ok = le32(0) == 827347780 && le32(4) == 1 && le32(8) == 80 && le32(12) == h && panel <= 1 && le32(20) >= 54 && shown && !le32(72) && !le32(76) && gen == running
+			printf "panel %s, logo lit %.3f s after power-on, record %s", panel == 0 ? "old" : panel == 1 ? "boe" : "unknown", shown / hz, ok ? "valid" : "INVALID"
+		}'
+}
+
+# baseos,native-timing: seven big-endian 64-bit counter values (24 MHz).
+decode_timing() {
+	od -An -v -tu1 "$1" | awk -v hz="$TICKS_PER_SECOND" '
+		{ for (i = 1; i <= NF; i++) b[n++] = $i }
+		END {
+			split("first stage|card read|files loaded|second stage|kernel unpacked|device tree ready|kernel started", label, "|")
+			if (n != 56) { printf "%d bytes, expected 56", n; exit }
+			for (k = 0; k < 7; k++) {
+				v = 0; for (i = 0; i < 8; i++) v = v * 256 + b[k * 8 + i]
+				printf "%s%s %.3f", k ? ", " : "", label[k + 1], v / hz
+			}
+			printf " s"
+		}'
+}
+
+loader_records() {
+	found=0
+	for prop in "$CHOSEN"/baseos,*; do
+		[ -e "$prop" ] || continue
+		found=1 name=${prop##*/}
+		case "$name" in
+		baseos,native-boot) echo "  $name: generation $(short "$(hexof "$prop")")$( [ "$(hexof "$prop")" = "$INSTALLED_GENERATION" ] || echo ", DIFFERENT from the installed one")" ;;
+		baseos,boot-display) echo "  $name: $(decode_display "$prop")" ;;
+		baseos,native-timing) echo "  $name: $(decode_timing "$prop")" ;;
+		*) echo "  $name: $(wc -c < "$prop") bytes" ;;
+		esac
+	done
+	[ "$found" = 1 ] || echo "  none (the stock loader leaves none)"
+}
+
+# ---------------------------------------------------------------- the block
+
+variant_line() {
+	dram_type=$(dt_u32 "$DT/dram/dram_type")
+	size=
+	if [ -r "$DT/memory@40000000/reg" ]; then
+		size=$(od -An -v -tu1 "$DT/memory@40000000/reg" | awk '
+			{ for (i = 1; i <= NF; i++) b[n++] = $i }
+			END { if (n >= 8) { v = 0; for (i = n / 2; i < n; i++) v = v * 256 + b[i]; printf "%d MiB", v / 1048576 } }')
+	fi
+	[ -n "$size" ] || size=$(awk '/^MemTotal/ { printf "about %d MiB usable", $2 / 1024 }' "$ROOT/proc/meminfo" 2>/dev/null)
+	# The vendor's /dram names are off by two words: dram_mr0/dram_mr1 hold
+	# boot0's layout words 6 and 7.
+	layout="$(dt_xs "$DT/dram/dram_mr0")/$(dt_xs "$DT/dram/dram_mr1")"
+	pmic=$(ls "$ROOT/sys/class/power_supply" 2>/dev/null | sed -n 's/^\(axp[0-9]*\).*/\1/p' | head -n 1 | tr 'a-z' 'A-Z')
+	echo "Variant: ${BASEOS_TARGET:-unknown}, $(dram_name "$dram_type") ${size:-size unknown} at $(dt_u32 "$DT/dram/dram_clk") MHz, layout $layout, panel $(cmdline_value lcd_type), PMIC ${pmic:-unknown}"
+}
+
+# Did an earlier boot of this same build (header "BaseOS X for Y") use the fast loader?
+fast_starts_of_this_build() {
+	awk -v build=", BaseOS ${BASEOS_VERSION:-?} for ${BASEOS_TARGET:-?}," '
+		/=== BaseOS boot / { same = index($0, build) > 0 }
+		same && / Loader: fast$/ { found = 1 }
+		END { exit !found }' "$LOG_FOR_HISTORY" 2>/dev/null
+}
+
+reached_linux() {
+	if [ "$NATIVE_BOOT" = 1 ]; then echo "yes, this start"
+	elif fast_starts_of_this_build; then echo "yes, earlier starts of this BaseOS in this log used it"
+	elif why=$(health_failure) && [ -n "$why" ]; then echo "yes, but it failed its health check: $why"
+	elif [ "$HAVE_NATIVE" = 1 ] && [ "${DONE%%;*}" = installed ]; then echo "no start since the install has (a start that reaches Linux leaves a record)"
+	else echo "not yet"
+	fi
+}
+
+power_now() {
+	line=
+	for supply in "$ROOT"/sys/class/power_supply/*; do
+		[ -d "$supply" ] || continue
+		name=${supply##*/}
+		# Read only the console PMIC. A peripheral battery read can block
+		# on a synchronous HID report; do not probe foreign nodes, even type.
+		case "$name" in
+		axp2202-battery) line="$line battery $(first_line "$supply/capacity")% $(first_line "$supply/status")," ;;
+		axp2202-usb|axp2202-ac) line="$line $name $( [ "$(first_line "$supply/online")" = 1 ] && echo connected || echo "not connected")," ;;
+		esac
+	done
+	echo "${line%,}"
+}
+
+report() {
+	echo "$(variant_line)"
+	echo "BaseOS: ${BASEOS_VERSION:-unknown} (build ${BASEOS_BUILD:-unknown}) for ${BASEOS_TARGET:-unknown}${BASEOS_MODEL:+ ($BASEOS_MODEL)}"
+	echo "$LOADER_LINE"
+	echo "Fast loader: $( [ "$HAVE_NATIVE" = 1 ] && echo "generation $(short "$NATIVE_GENERATION"), cookie ${NATIVE_COOKIE:-?}; installed generation $(short "${INSTALLED_GENERATION:-none}")" || echo "none in this build")"
+	markers=
+	for file in "$NSTATE"/done-*; do
+		[ -e "$file" ] || continue
+		gen=${file##*/done-}
+		markers="$markers $(short "$gen") \"$(first_line "$file")\";"
+	done
+	latch_file=none
+	[ -z "$LATCH_FILE" ] || latch_file="held for $(short "$LATCH_FILE")"
+	echo "Install: ${DONE:-not done} for this generation, tries $ATTEMPTS of 3, latch file $latch_file; this start: ${RESULT_TEXT:-the install step did not run}"
+	[ -z "$markers" ] || echo "  done markers:${markers%;}"
+	echo "A fast start reached Linux: $(reached_linux)"
+	echo "Latch (RTC 0x07000138/0x0700013c): $(describe_latch)"
+	gp= n=0
+	while [ "$n" -le 13 ]; do
+		value=$(reg "rtc_gp$n")
+		[ -z "$value" ] || [ "$value" = 00000000 ] || gp="$gp GP$n=$value"
+		n=$((n + 1))
+	done
+	retention=$(reg rtc_1f8)
+	[ -z "$retention" ] || echo "Other RTC words: 0x070001f8 $retention, 0x070001fc $(reg rtc_1fc)${gp:+;$gp}"
+	wdt_mode=$(reg wdt_mode)
+	[ -z "$wdt_mode" ] || echo "Watchdog: config $(reg wdt_cfg), mode $wdt_mode ($( [ $((0x$wdt_mode & 1)) -ne 0 ] && echo running || echo stopped))"
+	echo "Loader records (device tree /chosen):"
+	loader_records
+	echo "Boot areas:"
+	boot_areas
+	echo "  verdict: $AREA_VERDICT"
+	if [ -r "$NSTATE/primary-before.bin" ]; then
+		echo "This unit's own trained memory settings (primary-before.bin): $(describe_dram_words "$NSTATE/primary-before.bin")"
+		echo "  words 0x38-0xc4: $(dram_words "$NSTATE/primary-before.bin")"
+	fi
+	if [ -e "$DT/dram/dram_type" ]; then
+		echo "Memory settings now (device tree /dram): $(dram_name "$(dt_u32 "$DT/dram/dram_type")") at $(dt_u32 "$DT/dram/dram_clk") MHz, layout $(dt_xs "$DT/dram/dram_mr0")/$(dt_xs "$DT/dram/dram_mr1"), odt $(dt_x32 "$DT/dram/dram_odt_en"), para $(dt_x32 "$DT/dram/dram_para1")/$(dt_x32 "$DT/dram/dram_para2")"
+	fi
+	sid=$(reg sid0)
+	[ -z "$sid" ] || echo "Chip: id low half $sid (picks the memory wiring)"
+	pe=$(reg pe_dat)
+	panel="lcd_type $(cmdline_value lcd_type), boot reason $(cmdline_value bootreason)"
+	[ ! -r "$ROOT/sys/class/graphics/fb0/virtual_size" ] || panel="$panel, framebuffer $(first_line "$ROOT/sys/class/graphics/fb0/virtual_size" | tr , x) at $(first_line "$ROOT/sys/class/graphics/fb0/bits_per_pixel") bpp"
+	[ -z "$pe" ] || panel="$panel, PE6 now $( [ $((0x$pe & 0x40)) -ne 0 ] && echo high || echo low) (cfg $(reg pe_cfg0) data $pe pull $(reg pe_pull0)), PI cfg $(reg pi_cfg1) data $(reg pi_dat)"
+	echo "Panel: $panel"
+	[ -z "$(reg de_top0)" ] || echo "Display engine: $(reg de_top0) $(reg de_top4) $(reg de_top8), $(reg de_top100) size $(reg de_top108), TCON line $(reg tcon_line)"
+	echo "Power now:$(power_now); at the install: $(install_log_plain | sed -n 's/^found .*, \(battery [^,]*, charger [^,]*\).*/\1/p' | tail -n 1)"
+	udc=$(first_line "$ROOT/sys/class/udc/"*/state 2>/dev/null)
+	echo "USB: storage mode $(usb_storage_on && echo on || echo off)${udc:+, port $udc}"
+	echo "Earlier boot file update: $(first_line "$ROOT/data/boot-pair-v2/complete" || echo "not finished")"
+	if [ -x "$ROOT/usr/sbin/native-health" ]; then
+		check=$("$ROOT/usr/sbin/native-health" --check 2>&1); status=$?
+		echo "Health check now (read only): exit $status, $(printf '%s' "$check" | tr '\n' ' ' | sed 's/native-health: //g; s/ *$//')"
+	fi
+	if [ -r "$NSTATE/install.log" ]; then
+		echo "Install log (last 30 lines, copy counters removed):"
+		install_log_plain | tail -n 30 | sed 's/^/  /'
+	fi
+	# sdc1 is the Wi-Fi slot; without Wi-Fi (RG28XX) it only logs timeouts.
+	echo "Kernel messages (selected):"
+	dmesg 2>/dev/null | grep -i -E 'dram|ddr|memory:|mmc0|sunxi-mmc|disp|lcd|tcon|axp|pmu|watchdog|wdt|error|fail|panic|oops' \
+		| grep -v -i -E 'command line|wlan|bluetooth|bt_|rtl8|8821' \
+		| grep -v -E 'sdc1.*RTO|sdc1.*(timeout|smc 1 p1 err)' | tail -n 25 | sed 's/^/  /'
+}
+
+# ------------------------------------------------------------ the boot log
+
+log_line() { printf '%s %s\n' "$(uptime_now)" "$1" >> "$LOG" 2>/dev/null || :; }
+
+# One block at a time: a boot's block and one asked for by hand share the log.
+take_turn() {
+	exec 9>>"$ROOT/run/baseos-diag.lock"
+	flock -w 300 9 2>/dev/null || :
+}
+
+# Keep the log under MAX bytes in place of itself, dropping whole boots from
+# the start. Runs only at boot, before anything else of this boot is added by
+# this script; the session writes no more lines after its handoff.
+trim_log() {
+	size=$(wc -c < "$LOG" 2>/dev/null)
+	[ "${size:-0}" -gt "$MAX_LOG_BYTES" ] || return 0
+	{ echo "[older boots removed to keep this log small]"
+		tail -c "$KEEP_LOG_BYTES" "$LOG" | sed -n '/=== BaseOS boot /,$p'; } > "$LOG.trim" 2>/dev/null \
+		&& mv -f "$LOG.trim" "$LOG" 2>/dev/null || rm -f "$LOG.trim"
+}
+
+# Facts about the log before this script adds its own lines.
+read_history() {
+	PREVIOUS_LOADER=$(grep ' Loader: ' "$LOG" 2>/dev/null | tail -n 1 | sed 's/^[^ ]* Loader: //')
+	# The header's "BaseOS X for Y" part, this boot's and the one before.
+	BUILDS=$(sed -n 's/.*=== BaseOS boot [^,]*\(, BaseOS [^,]*\)\{0,1\}.*/\1/p' "$LOG" 2>/dev/null | tail -n 2)
+	HEADERS=$(grep -c '=== BaseOS boot ' "$LOG" 2>/dev/null)
+	SINCE_BLOCK=$(awk '/=== BaseOS boot / { n++ } /^--- Diagnostics / { n = 0 } END { print n + 0 }' "$LOG" 2>/dev/null)
+	THIS_BOOT=$(awk '/=== BaseOS boot / { text = "" } { text = text $0 "\n" } END { printf "%s", text }' "$LOG" 2>/dev/null)
+}
+
+# Why this boot should carry a block, or nothing.
+block_reason() {
+	if [ "${HEADERS:-0}" -ge 2 ] && [ "$(printf '%s\n' "$BUILDS" | head -n 1)" != "$(printf '%s\n' "$BUILDS" | tail -n 1)" ]; then
+		echo "first boot of BaseOS ${BASEOS_VERSION:-?}"; return
+	fi
+	case "$RESULT_KIND" in ''|deferred) ;; *) echo "the fast loader install ran"; return ;; esac
+	case "$THIS_BOOT" in *'reached Linux but failed its health check'*) echo "a fast start failed its health check"; return ;; esac
+	current=$(printf '%s' "$LOADER_LINE" | sed 's/^Loader: //' | tr -d '0-9')
+	if [ -n "$PREVIOUS_LOADER" ] && [ "$current" != "$(printf '%s' "$PREVIOUS_LOADER" | tr -d '0-9')" ]; then
+		echo "the loader line changed"; return
+	fi
+	if [ "$HAVE_NATIVE" = 1 ] && [ "$NATIVE_BOOT" = 0 ] && [ "${DONE%%;*}" = installed ] \
+		&& { [ -z "$PREVIOUS_LOADER" ] || [ "${SINCE_BLOCK:-0}" -ge "$REPEAT_EVERY" ]; }; then
+		echo "the fast loader is installed but the stock loader started"
+	fi
+}
+
+make_block() {
+	{
+		echo "--- Diagnostics for boot $(short "$BOOT_ID"), $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ($1) ---"
+		report
+		echo "--- end of diagnostics ---"
+	} 2>/dev/null | mask_private > "$WORK/block"
+	if [ "$(wc -c < "$WORK/block")" -gt "$MAX_BLOCK_BYTES" ]; then
+		head -c "$MAX_BLOCK_BYTES" "$WORK/block" | sed '$d' > "$WORK/block.cut"
+		printf '[shortened]\n--- end of diagnostics ---\n' >> "$WORK/block.cut"
+		mv "$WORK/block.cut" "$WORK/block"
+	fi
+}
+
+append_block() {
+	card_usable || return 1
+	cat "$WORK/block" >> "$LOG" 2>/dev/null || return 1
+	fsync "$LOG" 2>/dev/null || sync
+}
+
+# ------------------------------------------------------------------- main
+
+usb_storage_on && [ "$MODE" != --loader ] && exit 0
+WORK=$(mktemp -d "$ROOT/tmp/baseos-diag.XXXXXX") || exit 1
+trap 'rm -rf "$WORK"' EXIT
+trap 'exit 1' HUP INT TERM
+load_state
+LOADER_LINE=$(loader_line)
+LOG=$CARD_LOG LOG_FOR_HISTORY=$CARD_LOG
+
+case "$MODE" in
+--loader)
+	echo "$LOADER_LINE" ;;
+--boot)
+	[ ! -e "$ROOT/run/baseos-diag-boot" ] || exit 0
+	: > "$ROOT/run/baseos-diag-boot"
+	LOG=${BASEOS_BOOT_LOG:-$CARD_LOG}
+	[ -n "$ROOT" ] || [ "$LOG" = /mnt/sdcard/baseos-boot.log ] || [ "$LOG" = /tmp/baseos-boot.log ] || exit 1
+	LOG_FOR_HISTORY=$LOG
+	take_turn
+	[ "$LOG" != "$CARD_LOG" ] || card_usable || exit 0
+	[ "$LOG" != "$CARD_LOG" ] || trim_log
+	read_history
+	log_line "$LOADER_LINE"
+	reason=$(block_reason)
+	flock -u 9 2>/dev/null
+	# A block is only worth its card reads on the card's own log.
+	[ -n "$reason" ] && [ "$LOG" = "$CARD_LOG" ] || exit 0
+	# It reads a few megabytes: let the frontend load first.
+	sleep "${BASEOS_DIAG_DELAY:-20}"
+	usb_storage_on && exit 0
+	take_turn
+	make_block "$reason"
+	append_block ;;
+report)
+	take_turn
+	make_block "asked for by hand"
+	cat "$WORK/block"
+	if append_block; then
+		echo "Added to $CARD_LOG" >&2
+	else
+		echo "Not added to baseos-boot.log: the card is not mounted or writable, or a computer is using USB storage" >&2
+	fi ;;
+esac
+exit 0

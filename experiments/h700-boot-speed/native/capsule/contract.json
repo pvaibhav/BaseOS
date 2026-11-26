@@ -1,0 +1,33 @@
+{
+  "board": "embedded exact prepared stock[f0:f8] bytes in generated header",
+  "checkpoint": "RAM stamps only, zero RTC/media writes",
+  "durable_install_eligible": false,
+  "generation_cookie": "fnv1a32(raw generation[32]); zero refused",
+  "generation_excludes": [
+    "derived payload FNV/cookie headers",
+    "final inner binary hash",
+    "final outer binary hash"
+  ],
+  "hardware_qualified": false,
+  "inner_media": "payload reads only; no journal/source header or boot0 writes; SPL_MMC_WRITE disabled",
+  "inner_validation": "exact pair and WDT config1/modeb1 twice with DSB before clocks and MMC/DRAM",
+  "mode": "raw-capsule-outer-commit-inner-adopt",
+  "outer_layout": {
+    "bytes": 131072,
+    "context_bytes": 72,
+    "context_pa": 335872,
+    "copy_stub_pa": 327680,
+    "dispatcher_pa": 132096,
+    "header_reserved": 1024,
+    "media_byte_transfer": 40,
+    "native_bytes": 49152,
+    "native_pa": 200704,
+    "private_stack_top": 356352,
+    "stock_bytes": 65536,
+    "stock_pa": 135168
+  },
+  "pending_magic": "0x42535031",
+  "protocol_version": 2,
+  "selection": "retention1f8bit16 first; any nonzero pair stock; normal empty pair native",
+  "source_pins": "canonical protocol, actual repository capsule/build/inner sources and explicit compiler policy; derived cookie/FNV headers and final outputs excluded"
+}

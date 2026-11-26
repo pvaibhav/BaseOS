@@ -85,19 +85,17 @@ check_gptgrow_output() {
 }
 
 # An already-expanded card must never be formatted or show expansion progress.
-# Its diagnostics are appended to the early spool before a card is mounted.
+# That is every ordinary boot, so it leaves the log alone.
 reset_case
 echo 'earlier boot diagnostics' > "$QUEUE"
 run_expansion
 [ "$status" -eq 0 ]
 [ "$(cat /tmp/calls.log)" = gptgrow ]
 [ ! -e /tmp/splash.log ] && [ ! -e /tmp/mkfs.log ]
-grep -qx 'earlier boot diagnostics' "$QUEUE"
-check_gptgrow_output "$QUEUE"
-grep -q ' expand: p7 already fills the disk; leaving it untouched$' "$QUEUE"
+[ "$(cat "$QUEUE")" = 'earlier boot diagnostics' ]
 [ ! -e "$RAM_LOG" ]
 check_unmounted_card
-echo 'ok: an already-expanded card only appends diagnostics to the early spool'
+echo 'ok: an already-expanded card adds nothing to the log'
 
 # First boot may format only after gptgrow confirms that it changed p7.
 reset_case
@@ -155,12 +153,13 @@ echo 'ok: format failure retains diagnostics and stops before mounting'
 reset_case
 readonly_hash=$(sha256sum /usr/share/baseos/boot-log.sh)
 ln -s /usr/share/baseos/boot-log.sh "$QUEUE"
+echo 2 > /tmp/gptgrow-exit
 run_expansion
-[ "$status" -eq 0 ]
+[ "$status" -eq 1 ]
 [ "$(sha256sum /usr/share/baseos/boot-log.sh)" = "$readonly_hash" ]
 [ "$(readlink "$QUEUE")" = /usr/share/baseos/boot-log.sh ]
 check_gptgrow_output "$RAM_LOG"
-grep -q ' expand: p7 already fills the disk; leaving it untouched$' "$RAM_LOG"
+grep -q ' gptgrow failed (exit 2); leaving p7 untouched$' "$RAM_LOG"
 [ "$(cat /tmp/calls.log)" = gptgrow ]
 check_unmounted_card
 echo 'ok: an unwritable early spool falls back to RAM without changing expansion safety'

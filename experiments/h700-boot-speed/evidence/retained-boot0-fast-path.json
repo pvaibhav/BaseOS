@@ -1,0 +1,315 @@
+{
+  "claim": "The retained-boot0 fast path reduces counter-to-frontend and first-menu time.",
+  "limiter": "Unchanged boot0 takes about 2.61 seconds before U-Boot entry.",
+  "baseline": "compare-gzip",
+  "candidate": "compare-fast",
+  "pairs": 5,
+  "summary": {
+    "compare-gzip": {
+      "pre_kernel_s": {
+        "median": 4.37,
+        "min": 4.359,
+        "max": 4.716
+      },
+      "settled_framebuffer_counter_s": {
+        "median": 8.739,
+        "min": 8.600000000000001,
+        "max": 9.916
+      },
+      "post_kernel_s": {
+        "median": 1.468,
+        "min": 1.42,
+        "max": 1.509
+      },
+      "combined_s": {
+        "median": 5.868,
+        "min": 5.791,
+        "max": 6.215
+      }
+    },
+    "compare-fast": {
+      "pre_kernel_s": {
+        "median": 3.747,
+        "min": 3.742,
+        "max": 3.994
+      },
+      "settled_framebuffer_counter_s": {
+        "median": 8.035,
+        "min": 7.862,
+        "max": 9.27
+      },
+      "post_kernel_s": {
+        "median": 1.464,
+        "min": 1.407,
+        "max": 1.47
+      },
+      "combined_s": {
+        "median": 5.213,
+        "min": 5.154,
+        "max": 5.424
+      }
+    }
+  },
+  "scope": "Warm restarts with USB attached; counter origin to exec and settled NextUI framebuffer. Retained vendor boot0 and identical kernel/rootfs/card.",
+  "old_v140_benchmark": {
+    "frontend": "Slot on TF2; current runs use NextUI on TF1",
+    "pre_kernel_s": 4.34,
+    "handoff_s": 5.793,
+    "source": "rg34xxsp-1.3.0-to-1.4.0.txt",
+    "first_frame_comparison_valid": false
+  },
+  "runs": [
+    {
+      "label": "compare-gzip",
+      "pair": 0,
+      "boot_id": "2b8d2356-7462-47a2-b4b7-fb962511a5ac",
+      "pre_kernel_s": 4.716,
+      "post_kernel_s": 1.499,
+      "combined_s": 6.215,
+      "settled_framebuffer_s": 5.2,
+      "settled_framebuffer_counter_s": 9.916,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "9e7deed25bd00944c2c070102b70d33686a4889130572822e6aaf6352d654c28",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    },
+    {
+      "label": "compare-fast",
+      "pair": 0,
+      "boot_id": "c1f322f9-2729-4fb4-b84b-dbedc9aa5a90",
+      "pre_kernel_s": 3.82,
+      "post_kernel_s": 1.464,
+      "combined_s": 5.284,
+      "settled_framebuffer_s": 5.45,
+      "settled_framebuffer_counter_s": 9.27,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "a1a44269ad44e9d5b2796f4e1cc5e82aaff9ee5f47f1a100459e6c3541a23806",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    },
+    {
+      "label": "compare-gzip",
+      "pair": 1,
+      "boot_id": "fc9d80d2-230e-48a5-a5eb-3baabe162757",
+      "pre_kernel_s": 4.604,
+      "post_kernel_s": 1.468,
+      "combined_s": 6.072,
+      "settled_framebuffer_s": 4.24,
+      "settled_framebuffer_counter_s": 8.844000000000001,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "9e7deed25bd00944c2c070102b70d33686a4889130572822e6aaf6352d654c28",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    },
+    {
+      "label": "compare-fast",
+      "pair": 1,
+      "boot_id": "29413261-0c5f-46ec-844e-5578f99de8a7",
+      "pre_kernel_s": 3.747,
+      "post_kernel_s": 1.407,
+      "combined_s": 5.154,
+      "settled_framebuffer_s": 4.2,
+      "settled_framebuffer_counter_s": 7.947,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "a1a44269ad44e9d5b2796f4e1cc5e82aaff9ee5f47f1a100459e6c3541a23806",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    },
+    {
+      "label": "compare-gzip",
+      "pair": 2,
+      "boot_id": "f25970bf-5fb4-41a7-b95f-193858bbca27",
+      "pre_kernel_s": 4.365,
+      "post_kernel_s": 1.432,
+      "combined_s": 5.797,
+      "settled_framebuffer_s": 4.29,
+      "settled_framebuffer_counter_s": 8.655000000000001,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "9e7deed25bd00944c2c070102b70d33686a4889130572822e6aaf6352d654c28",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    },
+    {
+      "label": "compare-fast",
+      "pair": 2,
+      "boot_id": "1ba89276-42cd-46ad-a1bf-c2ea640e2ab1",
+      "pre_kernel_s": 3.994,
+      "post_kernel_s": 1.431,
+      "combined_s": 5.424,
+      "settled_framebuffer_s": 4.2,
+      "settled_framebuffer_counter_s": 8.194,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "a1a44269ad44e9d5b2796f4e1cc5e82aaff9ee5f47f1a100459e6c3541a23806",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    },
+    {
+      "label": "compare-gzip",
+      "pair": 3,
+      "boot_id": "8394e90d-219c-4d99-a032-eb71ecc25aa0",
+      "pre_kernel_s": 4.359,
+      "post_kernel_s": 1.509,
+      "combined_s": 5.868,
+      "settled_framebuffer_s": 4.38,
+      "settled_framebuffer_counter_s": 8.739,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "9e7deed25bd00944c2c070102b70d33686a4889130572822e6aaf6352d654c28",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    },
+    {
+      "label": "compare-fast",
+      "pair": 3,
+      "boot_id": "f1ec6b2e-e40e-4044-9f3f-c7b0ce03889c",
+      "pre_kernel_s": 3.745,
+      "post_kernel_s": 1.468,
+      "combined_s": 5.213,
+      "settled_framebuffer_s": 4.29,
+      "settled_framebuffer_counter_s": 8.035,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "a1a44269ad44e9d5b2796f4e1cc5e82aaff9ee5f47f1a100459e6c3541a23806",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    },
+    {
+      "label": "compare-gzip",
+      "pair": 4,
+      "boot_id": "7ca71b4b-87d0-413b-b5e1-d1304a15991a",
+      "pre_kernel_s": 4.37,
+      "post_kernel_s": 1.42,
+      "combined_s": 5.791,
+      "settled_framebuffer_s": 4.23,
+      "settled_framebuffer_counter_s": 8.600000000000001,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "9e7deed25bd00944c2c070102b70d33686a4889130572822e6aaf6352d654c28",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    },
+    {
+      "label": "compare-fast",
+      "pair": 4,
+      "boot_id": "a7217eb0-e5d8-408d-a200-7c32cf759fe6",
+      "pre_kernel_s": 3.742,
+      "post_kernel_s": 1.47,
+      "combined_s": 5.212,
+      "settled_framebuffer_s": 4.12,
+      "settled_framebuffer_counter_s": 7.862,
+      "package_sha256": "1d884f4a48a532d2679efa2aff834e553999ba82718fdf5d05a709e8885965dd",
+      "staged_image_sha256": "a1a44269ad44e9d5b2796f4e1cc5e82aaff9ee5f47f1a100459e6c3541a23806",
+      "primary_image_sha256": "21f8001711fa870c1f5d680f768141b7c528c1315fde56c056ef122b348dfbe1",
+      "normal_restored": true,
+      "trial_active": true,
+      "health": [
+        "GPU_OK",
+        "WIFI_OK",
+        "FB_OK",
+        "6",
+        "3",
+        "6",
+        "100",
+        "1"
+      ]
+    }
+  ],
+  "failures": 0,
+  "limitation": "One-sector environment consume adds trial work; first pair retained as observed after pre-staging. No cold power-on measurement or mainline SPL success is claimed."
+}

@@ -1,0 +1,185 @@
+{
+  "output": "boot-package-stamped-v3.bin",
+  "original_package_sha256": "32f92785f3e0819acbd60776e2ef839c1fd1924b31960b98363a93c85300db7e",
+  "patched_package_sha256": "c37a096cd83a580322c8a11ccc5e40fef32270bd9bc0149c69b67303577f5164",
+  "changed_bytes": 677,
+  "stub_area": [
+    "0x92fd8",
+    "0x93240"
+  ],
+  "block_words": 34,
+  "tail": 192,
+  "stubs": [
+    {
+      "slot": 0,
+      "kind": "table",
+      "stub": "0x92fd8",
+      "stub_size": 104,
+      "site": "0x9edfc",
+      "original_target": "0xf11c",
+      "meaning": "init_sequence_r[0]: board_init_r sequence starts (magic, clears slots)",
+      "slot_address": "0x40000100"
+    },
+    {
+      "slot": 1,
+      "kind": "table",
+      "stub": "0x93040",
+      "stub_size": 24,
+      "site": "0x9ee24",
+      "original_target": "0x25d8",
+      "meaning": "init_sequence_r[10]: power/PMIC init starts",
+      "slot_address": "0x40000108"
+    },
+    {
+      "slot": 2,
+      "kind": "table",
+      "stub": "0x93058",
+      "stub_size": 24,
+      "site": "0x9ee28",
+      "original_target": "0x12a30",
+      "meaning": "init_sequence_r[11]: after power init",
+      "slot_address": "0x40000110"
+    },
+    {
+      "slot": 3,
+      "kind": "table",
+      "stub": "0x93070",
+      "stub_size": 24,
+      "site": "0x9ee34",
+      "original_target": "0x2a04",
+      "meaning": "init_sequence_r[14]: display driver init starts",
+      "slot_address": "0x40000118"
+    },
+    {
+      "slot": 4,
+      "kind": "table",
+      "stub": "0x93088",
+      "stub_size": 24,
+      "site": "0x9ee50",
+      "original_target": "0x2738",
+      "meaning": "init_sequence_r[21]: after display init and stdio",
+      "slot_address": "0x40000120"
+    },
+    {
+      "slot": 5,
+      "kind": "table",
+      "stub": "0x930a0",
+      "stub_size": 24,
+      "site": "0x9ee5c",
+      "original_target": "0xf26c",
+      "meaning": "init_sequence_r[24]: flash hook / burn key",
+      "slot_address": "0x40000128"
+    },
+    {
+      "slot": 6,
+      "kind": "table",
+      "stub": "0x930b8",
+      "stub_size": 24,
+      "site": "0x9ee60",
+      "original_target": "0xf1bc",
+      "meaning": "init_sequence_r[25]: initr_sunxi_flash (card init, IR, key recovery)",
+      "slot_address": "0x40000130"
+    },
+    {
+      "slot": 7,
+      "kind": "table",
+      "stub": "0x930d0",
+      "stub_size": 24,
+      "site": "0x9ee64",
+      "original_target": "0xf174",
+      "meaning": "init_sequence_r[26]: after flash init",
+      "slot_address": "0x40000138"
+    },
+    {
+      "slot": 8,
+      "kind": "table",
+      "stub": "0x930e8",
+      "stub_size": 24,
+      "site": "0x9ee68",
+      "original_target": "0x2a8c",
+      "meaning": "init_sequence_r[27]: boot0 update check",
+      "slot_address": "0x40000140"
+    },
+    {
+      "slot": 9,
+      "kind": "table",
+      "stub": "0x93100",
+      "stub_size": 24,
+      "site": "0x9ee74",
+      "original_target": "0x2b14",
+      "meaning": "init_sequence_r[30]: board_late_init starts (logo next)",
+      "slot_address": "0x40000148"
+    },
+    {
+      "slot": 10,
+      "kind": "bl",
+      "stub": "0x93118",
+      "stub_size": 24,
+      "site": "0x2b22",
+      "original_target": "0x2aa8",
+      "meaning": "logo routine returned",
+      "slot_address": "0x40000150"
+    },
+    {
+      "slot": 11,
+      "kind": "bl",
+      "stub": "0x93130",
+      "stub_size": 24,
+      "site": "0xf13e",
+      "original_target": "0xea90",
+      "meaning": "main_loop entered",
+      "slot_address": "0x40000158"
+    },
+    {
+      "slot": 12,
+      "kind": "bl",
+      "stub": "0x93148",
+      "stub_size": 24,
+      "site": "0xc1fc",
+      "original_target": "0xfe0",
+      "meaning": "card read of the boot image starts",
+      "slot_address": "0x40000160"
+    },
+    {
+      "slot": 13,
+      "kind": "bl",
+      "stub": "0x93160",
+      "stub_size": 24,
+      "site": "0x7e80",
+      "original_target": "0xe8f8",
+      "meaning": "card read done, bootm starts",
+      "slot_address": "0x40000168"
+    },
+    {
+      "slot": 14,
+      "kind": "bl",
+      "stub": "0x93178",
+      "stub_size": 24,
+      "site": "0x152a",
+      "original_target": "0x13fc",
+      "meaning": "kernel unpacked, boot_prep_linux",
+      "slot_address": "0x40000170"
+    },
+    {
+      "slot": 15,
+      "kind": "bl",
+      "stub": "0x93190",
+      "stub_size": 176,
+      "site": "0x1482",
+      "original_target": "0xe8f8",
+      "meaning": "boot_jump_linux: about to jump; copies the block into the tree",
+      "slot_address": "0x40000178"
+    }
+  ],
+  "verification": {
+    "ft_len": 139775,
+    "blocks_end": 138359,
+    "tail_offset": 139583,
+    "bl_stamps": [
+      75770338495812,
+      75770338764250,
+      75770478422937,
+      75770503068750
+    ]
+  }
+}

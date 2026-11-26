@@ -52,6 +52,25 @@ def boot0_checksum(blob):
 
 
 class Migration(unittest.TestCase):
+    def test_native_package_is_left_to_the_native_step(self):
+        """A card already carrying a native install: the pair step writes nothing."""
+        native = self.root / "usr/share/baseos/native"
+        native.mkdir(parents=True)
+        for listed in ("NATIVE_TOC_SHA256", "NATIVE_PREVIOUS_TOC_SHA256"):
+            with self.subTest(listed=listed):
+                self.build()
+                native.mkdir(parents=True, exist_ok=True)
+                self.flash(self.packages["original"][::-1], "fast")
+                other = "0" * 64
+                package = sha(self.packages["original"][::-1])
+                (native / "manifest").write_text(
+                    f"NATIVE_TOC_SHA256={package if listed == 'NATIVE_TOC_SHA256' else other}\n"
+                    f"NATIVE_PREVIOUS_TOC_SHA256=\"{other} {package}\"\n")
+                self.run_migration()
+                self.assert_untouched()
+                self.assertEqual(self.ops(), ["read package", "read image"])
+                self.assertEqual(self.marker(), "native boot files present")
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -374,7 +393,10 @@ class Migration(unittest.TestCase):
     def test_killed_run_resumes_at_next_boot(self):
         # Kill the migrator itself between the verified image and the package.
         self.inject('case "$*" in *"/boot-package.bin of="*) kill -KILL "$PPID"; exit 1 ;; esac')
-        self.run_migration(expected=-9)
+        # The pair step runs in its own shell; its death is reported, not hidden.
+        result = subprocess.run(["/bin/busybox", "sh", str(SCRIPT)], env=self.env,
+                                capture_output=True, text=True, timeout=60)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (137, "", "Killed\n"))
         self.assertFalse((self.state / "complete").exists())
         self.assertEqual(self.boot.read_bytes()[:IMAGE_SIZE["fast"]], self.images["fast"])
         self.assertEqual(self.package(), self.packages["gzip"])

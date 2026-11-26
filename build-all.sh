@@ -8,8 +8,8 @@
 #
 # Inputs come from fetch-prepared.sh (or prepare-stock.sh), so this needs no
 # StockMod .img. The shared tools are built once and reused; the per-target work
-# is rootfs -> QEMU userspace smoke test -> image -> update payload, which is the
-# same sequence build-stockmod.sh runs, minus the preparation step.
+# is rootfs -> QEMU userspace smoke test -> native loader -> image -> update
+# payload; build-stockmod.sh runs the same sequence without the native loader.
 #
 # The structural gates on the prepared inputs live in verify-target.sh and run at
 # prepare or pack time, not here: they check assumptions about vendor firmware,
@@ -49,6 +49,7 @@ if [ ! -x "$HERE/work/tools/busybox" ] \
   || [ ! -x "$HERE/work/tools/adbd" ] \
   || [ ! -x "$HERE/work/tools/avahi-daemon" ] \
   || [ ! -x "$HERE/work/tools/boot-clock" ] \
+  || [ ! -x "$HERE/work/tools/baseos-regs" ] \
   || [ ! -x "$HERE/work/tools/e2fsck" ] \
   || ! "$HERE/tools/tools-stamp.sh" | cmp -s - "$HERE/work/tools/.stamp"; then
   "$HERE/build-tools.sh"
@@ -61,7 +62,15 @@ for target in $TARGETS; do
   echo "=============================== $target"
   "$HERE/build-rootfs.sh" "$target"
   "$HERE/test-boot-qemu.sh" "$target"
-  "$HERE/build-image.sh" "$target"
+  # The model's native loader, built fresh from the prepared stock boot0 (needs
+  # clang, the rustup ld.lld, a Python with capstone and unicorn (set
+  # BASEOS_NATIVE_PYTHON) and the running
+  # baseos-h700-mainline container). The image carries it written in place,
+  # and the update payload carries it for its first boot to install.
+  native="$HERE/work/$target/native-release"
+  rm -rf "$native"
+  "${BASEOS_NATIVE_PYTHON:-python3}" "$HERE/experiments/h700-boot-speed/native/build-release.py" "$target" "$native"
+  "$HERE/build-image.sh" "$target" --native-release "$native/release"
   "$HERE/build-update.sh" "$target"
 
   work="$HERE/work/$target"

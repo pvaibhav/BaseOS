@@ -1,0 +1,171 @@
+{
+  "passed": true,
+  "scope": "Compiled vendor panel acquisition, health refusal, both BOE laboratory functional qualification and personal old-panel installation with user-confirmed normal Slot picture.",
+  "root_cause": "Native sampled PE6 before PI15 power/PI14 reset, selected mux0 instead of vendor mux6 and ignored model-specific pull-up policy; personal stockold became nativeboe.",
+  "panel_probe": {
+    "path": "/tmp/h700-panel-probe-v2/verification.json",
+    "sha256": "514b80cd0a43fec6308ead29915fcc2e41f1c40547bafb22b6a8ace42da47077"
+  },
+  "all_eleven_fleet": {
+    "path": "work/h700-loader/panel-fleet-proof-v2/fleet.json",
+    "sha256": "58ccdd7dd92dd3adb4c98f74f18d4554a585fcf9889b5e9be05518eda8dd4f27"
+  },
+  "health_guard": {
+    "path": "work/h700-loader/panel-health-v1/proof.json",
+    "sha256": "bcd847d1e7222c273ba5f2b50d4021a05f4fe5b57d6e1d9f79dc316a06ec2750"
+  },
+  "installer_host": {
+    "path": "work/h700-loader/rgsp-user-install/panel-acceptance-review-v1/canonical-host-v1/host-proof.json",
+    "sha256": "c531549a05250d936693eea6642bf771035a869cdadb97ae7fdfde24d3ca4be9"
+  },
+  "rom": {
+    "path": "work/h700-loader/panel-release-artifacts-v2/rom-summary.json",
+    "sha256": "0fb62fe3478228a51b797141e228063e07406271dd31fc6b0945a22d4293356c"
+  },
+  "models": {
+    "rg34xxsp": {
+      "generation": "29d6650a43366b5a8e86beda15e927bea8f6279b41db2c19c2bbd0d2e2e71d8f",
+      "capsule_sha256": "b1df4ca385b0e80fd08bf069e73ab4b39c2ca61cd93dcb0259dc5461a5dba884",
+      "expected_panel": "boe",
+      "reports": {
+        "noack": {
+          "path": "work/h700-loader/panel-persistent-hardware-v2/rg34xxsp/noack/run.json",
+          "sha256": "30252785ce5da53bb69a08ec399aa67b70814d5114950fe4839cf50852ed13f0",
+          "boot_id": null,
+          "native_boot_id": "b800a929-3374-4013-86e4-89bb0aeff00d",
+          "recovery_boot_id": "c256dbea-a2fa-484b-87d8-910027dcd08b",
+          "panel_stages": {
+            "native": {
+              "boot_id": "b800a929-3374-4013-86e4-89bb0aeff00d",
+              "lcd_type": "boe"
+            },
+            "recovery": {
+              "boot_id": "c256dbea-a2fa-484b-87d8-910027dcd08b",
+              "lcd_type": "boe"
+            }
+          }
+        },
+        "native-cycle-1": {
+          "path": "work/h700-loader/panel-persistent-hardware-v2/rg34xxsp/native-cycle-1/run.json",
+          "sha256": "5f2697082b7e5bdf3d1ca82152a956b547eb4b0dcef27d18e8e3841c90b6f84a",
+          "boot_id": "3f6d0a3d-2dac-4e1d-8774-140e200fa166",
+          "native_boot_id": null,
+          "recovery_boot_id": null,
+          "panel_stages": {
+            "native": {
+              "boot_id": "3f6d0a3d-2dac-4e1d-8774-140e200fa166",
+              "lcd_type": "boe"
+            }
+          }
+        },
+        "native-cycle-2": {
+          "path": "work/h700-loader/panel-persistent-hardware-v2/rg34xxsp/native-cycle-2/run.json",
+          "sha256": "0a7516694a710fcd90f7f7a4346c409c30310294700f58a3beea68d37a47b040",
+          "boot_id": "968814df-b9ff-4727-bf05-b7dd482998c1",
+          "native_boot_id": null,
+          "recovery_boot_id": null,
+          "panel_stages": {
+            "native": {
+              "boot_id": "968814df-b9ff-4727-bf05-b7dd482998c1",
+              "lcd_type": "boe"
+            }
+          }
+        },
+        "sleep": {
+          "path": "work/h700-loader/panel-persistent-hardware-v2/rg34xxsp/sleep/run.json",
+          "sha256": "faa033adf05b2083bc5c9e4629bf65d4683c8342e3daabda5f194915e1c76983",
+          "boot_id": null,
+          "native_boot_id": null,
+          "recovery_boot_id": null,
+          "panel_stages": {
+            "before": {
+              "boot_id": "968814df-b9ff-4727-bf05-b7dd482998c1",
+              "lcd_type": "boe"
+            },
+            "after": {
+              "boot_id": "968814df-b9ff-4727-bf05-b7dd482998c1",
+              "lcd_type": "boe"
+            }
+          }
+        }
+      }
+    },
+    "rg40xxv": {
+      "generation": "6a8ce34bcf4f4e67e306cb2d4ab23a38309dd68f4882ef7d59437a19b87f406b",
+      "capsule_sha256": "296c1e7ed012302cbd9e201d5489c25ca4ba8f45f6318c432bddd0d2b986c081",
+      "expected_panel": "boe",
+      "reports": {
+        "noack": {
+          "path": "work/h700-loader/panel-persistent-hardware-v2/rg40xxv/noack/run.json",
+          "sha256": "717f3eb2767b8bd62d330a19de31179b5924ca411d98c68dfcfd26e1fb5dbfc5",
+          "boot_id": null,
+          "native_boot_id": "e63100ad-466c-4024-9913-255ad6a17de4",
+          "recovery_boot_id": "9fb00260-2ff1-43e6-a703-03f01bbd67cb",
+          "panel_stages": {
+            "native": {
+              "boot_id": "e63100ad-466c-4024-9913-255ad6a17de4",
+              "lcd_type": "boe"
+            },
+            "recovery": {
+              "boot_id": "9fb00260-2ff1-43e6-a703-03f01bbd67cb",
+              "lcd_type": "boe"
+            }
+          }
+        },
+        "native-cycle-1": {
+          "path": "work/h700-loader/panel-persistent-hardware-v2/rg40xxv/native-cycle-1/run.json",
+          "sha256": "b5e682a6b26d5f9bc566081581c91b5772672823f5cebd20d6266c8f4998c564",
+          "boot_id": "49c2bcb0-7f8c-4ef4-a15f-89888309fa0d",
+          "native_boot_id": null,
+          "recovery_boot_id": null,
+          "panel_stages": {
+            "native": {
+              "boot_id": "49c2bcb0-7f8c-4ef4-a15f-89888309fa0d",
+              "lcd_type": "boe"
+            }
+          }
+        },
+        "native-cycle-2": {
+          "path": "work/h700-loader/panel-persistent-hardware-v2/rg40xxv/native-cycle-2/run.json",
+          "sha256": "dceac60869f7a5614a92ff22fb478a4ed43de7d13fa6c53b8f7e8f8b8271ecba",
+          "boot_id": "c7073ca5-63e5-4a62-8543-629ca3accfe3",
+          "native_boot_id": null,
+          "recovery_boot_id": null,
+          "panel_stages": {
+            "native": {
+              "boot_id": "c7073ca5-63e5-4a62-8543-629ca3accfe3",
+              "lcd_type": "boe"
+            }
+          }
+        },
+        "sleep": {
+          "path": "work/h700-loader/panel-persistent-hardware-v2/rg40xxv/sleep/run.json",
+          "sha256": "d630287bb5a8b60dd4b5945c382bfd2204830fbe47f61e5d37af9127aaea1ff3",
+          "boot_id": null,
+          "native_boot_id": null,
+          "recovery_boot_id": null,
+          "panel_stages": {
+            "before": {
+              "boot_id": "c7073ca5-63e5-4a62-8543-629ca3accfe3",
+              "lcd_type": "boe"
+            },
+            "after": {
+              "boot_id": "c7073ca5-63e5-4a62-8543-629ca3accfe3",
+              "lcd_type": "boe"
+            }
+          }
+        }
+      }
+    }
+  },
+  "personal_device": {
+    "current": "corrected native old; user confirmed normal Slot",
+    "old_native_acceptance_withdrawn": true,
+    "reinstall_pending": false,
+    "physical_old_panel_qualified": true,
+    "confirmation": "Yes, normal Slot screen",
+    "scope": "One corrected native verification boot and user picture confirmation; no personal benchmark."
+  },
+  "measurement_scope": "Functional USB warm boots only; original five-pair benchmarks predate added195ms vendor panel sequence. No new paired speedup or physical-button measurement.",
+  "new_rgsp_generation": "b875b0e05d7aa35fa88c329db5ed45287499769208fa3edd63ecbe6e6ffc57d5"
+}

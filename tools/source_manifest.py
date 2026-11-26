@@ -53,11 +53,44 @@ def verify_prepared(data: dict, directory: Path) -> None:
             raise ValueError(f"prepared artifact hash changed: {path}")
 
 
-def verify_composed(data: dict, prefix: Path, image: Path, logo: Path) -> None:
+def native_files(directory: Path, package_offset: int) -> dict:
+    """The model's native boot files and where they go; checked against their manifest."""
+    fields = dict(line.split("=", 1) for line in (directory / "manifest").read_text().splitlines() if line)
+    files = {name: (directory / f"{name}.bin").read_bytes()
+             for name in ("capsule", "firmware", "image", "recovery-toc")}
+    for name, key in (("capsule", "CAPSULE"), ("firmware", "FIRMWARE"), ("image", "IMAGE"), ("recovery-toc", "TOC")):
+        if len(files[name]) != int(fields[f"NATIVE_{key}_SIZE"]) or blob_sha(files[name]) != fields[f"NATIVE_{key}_SHA256"]:
+            raise ValueError(f"native {name} differs from its manifest")
+    if int(fields["NATIVE_CAPSULE_SECTOR"]) * 512 != BOOT0_OFFSET or int(fields["NATIVE_TOC_SECTOR"]) * 512 != package_offset:
+        raise ValueError("native capsule or package sector differs from the boot layout")
+    if (directory / "generation.bin").read_bytes().hex() != fields["NATIVE_GENERATION"]:
+        raise ValueError("native generation differs from its manifest")
+    return {"raw": [(BOOT0_OFFSET, files["capsule"]), (package_offset, files["recovery-toc"])],
+            "boot": [(int(fields["NATIVE_FIRMWARE_OFFSET"]), files["firmware"]),
+                     (int(fields["NATIVE_IMAGE_OFFSET"]), files["image"])]}
+
+
+def write_native(data: dict, prefix: Path, image: Path, directory: Path) -> None:
+    """Write the capsule, recovery package, firmware and kernel image into a composed card image."""
+    boot = partition(data["layout"], 4)
+    native = native_files(directory, derive_gzip(data["target"], prefix)["profile"]["package_offset"])
+    with image.open("r+b") as handle:
+        for offset, blob in native["raw"]:
+            handle.seek(offset)
+            handle.write(blob)
+        for offset, blob in native["boot"]:
+            if offset + len(blob) > boot["sector_count"] * 512:
+                raise ValueError("native payload exceeds the boot partition")
+            handle.seek(boot["start_sector"] * 512 + offset)
+            handle.write(blob)
+
+
+def verify_composed(data: dict, prefix: Path, image: Path, logo: Path, native_dir: Path | None = None) -> None:
     verify_prepared(data, prefix.parent)
     source_layout = data["layout"]
     output_layout = parse_gpt(image, BASEOS_NAMES)
     gzip_boot = derive_gzip(data["target"], prefix)
+    native = native_files(native_dir, gzip_boot["profile"]["package_offset"]) if native_dir else None
 
     # All four boot partitions retain their GPT identity and geometry. p2 has
     # the replacement bootlogo; p4 must match the exact gzip derivation.
@@ -75,7 +108,12 @@ def verify_composed(data: dict, prefix: Path, image: Path, logo: Path) -> None:
             item["sha256"] for item in data["preserved_regions"] if item["partition"] == number
         )
         if number == 4:
-            expected = blob_sha(gzip_boot["expected_boot"])
+            expected_boot = bytearray(gzip_boot["expected_boot"])
+            for at, blob in native["boot"] if native else ():
+                expected_boot[at:at + len(blob)] = blob
+            if len(expected_boot) != size:
+                raise ValueError("native payload exceeds the boot partition")
+            expected = blob_sha(bytes(expected_boot))
         if sha256_range(image, offset, size) != expected:
             raise ValueError(f"partition {number} differs from its expected composed bytes")
 
@@ -88,8 +126,11 @@ def verify_composed(data: dict, prefix: Path, image: Path, logo: Path) -> None:
     for offset, blob in ((BOOT0_OFFSET, gzip_boot["boot0"]),
                          (gzip_boot["profile"]["package_offset"], gzip_boot["package"])):
         expected_raw[offset - raw_offset:offset - raw_offset + len(blob)] = blob
+    for offset, blob in native["raw"] if native else ():
+        expected_raw[offset - raw_offset:offset - raw_offset + len(blob)] = blob
     if sha256_range(image, raw_offset, raw_size) != blob_sha(expected_raw):
-        raise ValueError("raw boot region differs from the exact gzip bootloader derivation")
+        raise ValueError("raw boot region differs from the exact gzip bootloader derivation"
+                         + (" with the native boot files" if native else ""))
 
     source_root = partition(source_layout, 5)
     output_root = partition(output_layout, 5)
@@ -140,6 +181,13 @@ def main() -> int:
     image_parser.add_argument("prefix", type=Path)
     image_parser.add_argument("image", type=Path)
     image_parser.add_argument("logo", type=Path)
+    image_parser.add_argument("--native", type=Path, help="also expect this native boot directory's files")
+    native_parser = subparsers.add_parser("write-native")
+    native_parser.add_argument("manifest", type=Path)
+    native_parser.add_argument("target")
+    native_parser.add_argument("prefix", type=Path)
+    native_parser.add_argument("image", type=Path)
+    native_parser.add_argument("native", type=Path)
     arguments = parser.parse_args()
 
     data = load(arguments.manifest, arguments.target)
@@ -159,8 +207,10 @@ def main() -> int:
     elif arguments.command == "verify":
         verify_prepared(data, arguments.manifest.parent)
         print(f"prepared artifacts OK: {data['target']}")
+    elif arguments.command == "write-native":
+        write_native(data, arguments.prefix, arguments.image, arguments.native)
     else:
-        verify_composed(data, arguments.prefix, arguments.image, arguments.logo)
+        verify_composed(data, arguments.prefix, arguments.image, arguments.logo, arguments.native)
         print(f"preserved firmware regions and boot logo OK: {data['target']}")
     return 0
 

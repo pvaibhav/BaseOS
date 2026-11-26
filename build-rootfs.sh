@@ -20,7 +20,7 @@ TOOLS="$HERE/work/tools"
 
 [ -f "$WORK/source.json" ] || { echo "missing $WORK/source.json (run prepare-stock.sh $TARGET IMAGE)"; exit 1; }
 [ -f "$WORK/stock-harvest.tar" ] || { echo "missing $WORK/stock-harvest.tar (run prepare-stock.sh $TARGET IMAGE)"; exit 1; }
-for tool in busybox dropbearmulti curl fbsplash gptgrow gptslot sftp-server adbd axp-off charger-wait avahi-daemon boot-clock e2fsck; do
+for tool in busybox dropbearmulti curl fbsplash gptgrow gptslot sftp-server adbd axp-off charger-wait avahi-daemon boot-clock native-health baseos-regs e2fsck; do
   [ -x "$TOOLS/$tool" ] || { echo "missing $TOOLS/$tool (run build-tools.sh)"; exit 1; }
 done
 BASEOS_VERSION="$(tr -d ' \n' < "$HERE/VERSION")"
@@ -231,6 +231,11 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   # Shared H700 counter reader; unavailable counters retain uptime-only logs.
   cp /tools/boot-clock "$R/usr/sbin/boot-clock"
   chmod 755 "$R/usr/sbin/boot-clock"
+  cp /tools/native-health "$R/usr/sbin/native-health"
+  chmod 755 "$R/usr/sbin/native-health"
+  # Read-only register view for baseos-diag (RTC pair, watchdog, panel strap).
+  cp /tools/baseos-regs "$R/usr/sbin/baseos-regs"
+  chmod 755 "$R/usr/sbin/baseos-regs"
   # Root filesystem repair for boots without the vendor initramfs, which used
   # to run its own. rcS calls it only when the filesystem has recorded errors.
   cp /tools/e2fsck "$R/usr/sbin/e2fsck"
@@ -270,7 +275,7 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   find "$R/usr/bin" "$R/usr/sbin" "$R/usr/libexec" -type f | while read -r f; do
     head -c4 "$f" | grep -q "^.ELF" || continue
     case "$f" in
-      */busybox|*/dropbearmulti|*/curl|*/fbsplash|*/gptgrow|*/gptslot|*/ldconfig|*/ldconfig.real|*/rtk_hciattach|*/sftp-server|*/adbd|*/axp-off|*/charger-wait|*/avahi-daemon|*/boot-clock|*/e2fsck) continue ;;
+      */busybox|*/dropbearmulti|*/curl|*/fbsplash|*/gptgrow|*/gptslot|*/ldconfig|*/ldconfig.real|*/rtk_hciattach|*/sftp-server|*/adbd|*/axp-off|*/charger-wait|*/avahi-daemon|*/boot-clock|*/native-health|*/baseos-regs|*/e2fsck) continue ;;
     esac
     if ! chroot "$R" /usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 --list \
         "${f#"$R"}" 2>/dev/null | grep -q "=>"; then

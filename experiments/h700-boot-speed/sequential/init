@@ -1,0 +1,36 @@
+#!/bin/busybox sh
+# External initramfs: retain the selected rootfs, health and update lifecycle.
+BB=/bin/busybox
+fail() {
+    echo "baseos: sequential init refused: $*; watchdog recovery remains armed" > /dev/kmsg
+    while :; do "$BB" sleep 60; done
+}
+"$BB" mount -t devtmpfs dev /dev || fail devtmpfs
+"$BB" mount -t proc -o nodev,noexec,nosuid proc /proc || fail proc
+"$BB" mount -t sysfs -o nodev,noexec,nosuid sys /sys || fail sysfs
+attempt=0
+while [ ! -b /dev/mmcblk0p5 ]; do
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt 100 ] || fail root-device-timeout
+    "$BB" sleep 0.05
+done
+"$BB" mount -t ext4 -o ro,noatime /dev/mmcblk0p5 /newroot || fail root-mount
+[ -f /newroot/etc/baseos/boot-payload-id ] && [ ! -L /newroot/etc/baseos/boot-payload-id ] \
+    || fail root-identity-file
+"$BB" cmp -s /baseos/root-build-id /newroot/etc/baseos/boot-payload-id || fail root-identity
+[ -d /newroot/usr/share/baseos/boot-ram ] && [ ! -L /newroot/usr/share/baseos/boot-ram ] \
+    || fail ram-mountpoint
+[ -f /newroot/usr/share/baseos/usr-lib.sqfs ] && [ ! -L /newroot/usr/share/baseos/usr-lib.sqfs ] \
+    || fail library-mountpoint
+"$BB" mount -t tmpfs -o mode=700,size=40m,nodev,nosuid tmpfs /newroot/usr/share/baseos/boot-ram \
+    || fail ram-mount
+"$BB" cp /baseos/usr-lib.sqfs /newroot/usr/share/baseos/boot-ram/usr-lib.sqfs || fail library-copy
+"$BB" mount -o bind /newroot/usr/share/baseos/boot-ram/usr-lib.sqfs /newroot/usr/share/baseos/usr-lib.sqfs \
+    || fail library-bind
+# The child tmpfs and file bind travel with the new root. Original rcS mounts
+# this RAM-backed file at /usr/lib using its existing squashfs block.
+"$BB" mount -o move /proc /newroot/proc || fail proc-move
+"$BB" mount -o move /sys /newroot/sys || fail sys-move
+"$BB" mount -o move /dev /newroot/dev || fail dev-move
+exec "$BB" switch_root /newroot /init
+fail switch-root

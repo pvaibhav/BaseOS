@@ -79,6 +79,72 @@ splash() {
 
 field() { sed -n "s/^$2=//p" "$1" 2>/dev/null | head -1; }
 
+raw_generation() {
+	[ -f "$1" ] && [ ! -L "$1" ] && [ "$(wc -c < "$1" 2>/dev/null)" = 32 ] || return 1
+	generation_hex="$(od -An -v -tx1 "$1" 2>/dev/null | tr -d " \n")"
+	[ "${#generation_hex}" -eq 64 ] || return 1
+	printf "%s" "$generation_hex"
+}
+
+boot_compatible() {
+	if [ -e /etc/baseos/boot-payload-format ] || [ -L /etc/baseos/boot-payload-format ] \
+		|| [ -e /etc/baseos/native-abi ] || [ -L /etc/baseos/native-abi ] \
+		|| [ -e /etc/baseos/boot-payload-id ] || [ -L /etc/baseos/boot-payload-id ]; then
+		EV_REASON="this card has an unfinished sequential boot release"; return 1
+	fi
+	native_fields="$(grep -c "^native-generation=" "$manifest")"
+	payload_generation="$(field "$manifest" native-generation)"
+	case "$native_fields" in
+		0) ;;
+		1)
+			case "$payload_generation" in *[!0-9a-f]*) EV_REASON="malformed payload native generation"; return 1 ;; esac
+			[ "${#payload_generation}" -eq 64 ] || { EV_REASON="malformed payload native generation"; return 1; }
+			;;
+		*) EV_REASON="duplicate payload native generation"; return 1 ;;
+	esac
+	installed=/etc/baseos/native-generation
+	running=/sys/firmware/devicetree/base/chosen/baseos,native-boot
+	if [ -L /etc ] || [ -L /etc/baseos ]; then
+		EV_REASON="installed boot policy path is a symlink"; return 1
+	fi
+	if [ -e /etc/baseos ] && [ ! -d /etc/baseos ]; then
+		EV_REASON="installed boot policy path is not a directory"; return 1
+	fi
+	if [ -e "$installed" ] || [ -L "$installed" ]; then
+		installed_generation="$(raw_generation "$installed")" || {
+			EV_REASON="malformed installed native generation"; return 1;
+		}
+		if [ ! -f /usr/sbin/native-health ] || [ -L /usr/sbin/native-health ] || [ ! -x /usr/sbin/native-health ]; then
+			EV_REASON="installed native health helper is unavailable"; return 1
+		fi
+		# Native files belong to the model and travel inside the rootfs; the
+		# new slot's first boot installs its own loader. A payload without
+		# them would leave this card's native loader with no health check.
+		if [ "$native_fields" -ne 1 ]; then
+			EV_REASON="payload carries no native boot files for this native system"; return 1
+		fi
+		case "$payload_generation" in *[1-9a-f]*) ;; *) EV_REASON="zero payload native generation"; return 1 ;; esac
+	else
+		# A stock card takes a native payload: its first boot installs the loader.
+		if [ "$native_fields" -ne 0 ]; then
+			case "$payload_generation" in *[1-9a-f]*) ;; *) EV_REASON="zero payload native generation"; return 1 ;; esac
+		fi
+		if [ -e "$running" ] || [ -L "$running" ]; then
+			EV_REASON="native FDT has no installed boot generation"; return 1
+		fi
+		return 0
+	fi
+	if [ -e "$running" ] || [ -L "$running" ]; then
+		running_generation="$(raw_generation "$running")" || {
+			EV_REASON="malformed running native generation"; return 1;
+		}
+		if [ "$running_generation" != "$installed_generation" ]; then
+			EV_REASON="running and installed native boot generations differ"; return 1
+		fi
+	fi
+	return 0
+}
+
 cleanup() {
 	[ "$OWN_MOUNTED" -eq 0 ] || umount "$OWN_MNT" 2>/dev/null
 	return 0
@@ -172,6 +238,7 @@ evaluate() {
 		[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;;
 		*) EV_REASON="no usable image-sha256"; return 2 ;;
 	esac
+	boot_compatible || return 2
 
 	# Only ever move forward. Without this an old payload the user left on the
 	# card becomes "applicable" again the moment you update past it, so the
@@ -226,7 +293,7 @@ remove_payload() {
 		fi
 	fi
 	if rm -f -- "$payload" 2>>"$LOG"; then
-		update_log "removed applied payload $payload"
+		:
 	else
 		update_log "could not remove applied payload $payload"
 	fi
@@ -273,7 +340,7 @@ apply() {
 	want_sha="$EV_SHA"
 
 	mkdir -p "$STATE_DIR"
-	update_log "applying $version ($build) from $payload to slot at LBA $SLOT_INACTIVE_START"
+	update_log "installing $version ($build) from ${payload##*/}"
 	splash "$WRITE_FROM" "UPDATING SYSTEM"
 
 	seek_mb=$((SLOT_INACTIVE_START / 2048))
@@ -291,7 +358,7 @@ apply() {
 			this="$step"
 			[ $((written + this)) -le "$count_mb" ] || this=$((count_mb - written))
 			dd of="$DISK" bs=1M seek=$((seek_mb + written)) count="$this" \
-				iflag=fullblock conv=notrunc,fsync 2>>"$LOG" || exit 1
+				iflag=fullblock conv=notrunc,fsync status=none 2>>"$LOG" || exit 1
 			written=$((written + this))
 			splash $((WRITE_FROM + (WRITE_TO - WRITE_FROM) * written / count_mb)) \
 				"UPDATING SYSTEM"
@@ -328,11 +395,11 @@ apply() {
 		cleanup
 		return 1
 	fi
-	update_log "inactive slot verified"
 
 	# The commit. Everything above is reversible by doing nothing.
-	if ! /usr/sbin/gptslot "$DISK" flip >> "$LOG" 2>&1; then
-		update_log "slot flip failed — still running the old slot"
+	if ! flip_output="$(/usr/sbin/gptslot "$DISK" flip 2>&1)"; then
+		[ -z "$flip_output" ] || printf "%s\n" "$flip_output" >> "$LOG" 2>/dev/null
+		update_log "written and checked, but the slot flip failed — still running the old slot"
 		splash -1 "UPDATE FAILED"
 		cleanup
 		return 1
@@ -355,7 +422,7 @@ apply() {
 	# flip, the history append and this sync take a few seconds between them,
 	# and painting before them left the bar looking stalled at its final value.
 	splash "$COMMIT_STAGE" "UPDATING SYSTEM"
-	update_log "flipped to slot $version; rebooting"
+	update_log "$version written and checked; restarting into it"
 	cleanup
 	reboot
 	# init takes over from here; hold rcS briefly so it does not race ahead
@@ -367,6 +434,7 @@ apply() {
 boot_check() {
 	[ -f "$STATE" ] || return 0
 	attempts="$(field "$STATE" attempts)"
+	trial_version="$(field "$STATE" trial)"
 	[ -n "$attempts" ] || attempts=0
 	attempts=$((attempts + 1))
 	if [ "$attempts" -ge "$MAX_TRIAL_BOOTS" ]; then
@@ -386,7 +454,7 @@ boot_check() {
 	fi
 	sed "s/^attempts=.*/attempts=$attempts/" "$STATE" > "$STATE.new" \
 		&& mv "$STATE.new" "$STATE"
-	update_log "update trial boot $attempts of $MAX_TRIAL_BOOTS"
+	update_log "trying ${trial_version:-the new system}, start $attempts of $MAX_TRIAL_BOOTS"
 	return 0
 }
 

@@ -22,9 +22,16 @@ CARD_MISSING=0
 # disks owned by the USB host. Keep this before update-trial confirmation.
 # The marker is boot-pair-v2: a card that finished the earlier gzip migration
 # (boot-gzip-v1) runs the helper once more to receive the faster pair.
-if [ ! -e /data/boot-pair-v2/complete ] && [ ! -s /run/usb-storage-device ] \
+# The native loader has one marker per generation, named after it.
+boot_steps_done=1
+[ -e /data/boot-pair-v2/complete ] || boot_steps_done=0
+if [ -r /usr/share/baseos/native/generation ]; then
+	read -r native_generation < /usr/share/baseos/native/generation || native_generation=
+	[ -e "/data/boot-native-v1/done-$native_generation" ] || boot_steps_done=0
+fi
+if [ "$boot_steps_done" = 0 ] && [ ! -s /run/usb-storage-device ] \
 	&& [ -x /usr/sbin/baseos-boot-migrate ]; then
-	if ! /usr/sbin/baseos-boot-migrate; then
+	if ! BASEOS_BOOT_LOG="$LOG" /usr/sbin/baseos-boot-migrate; then
 		# Failure with an unverified restore must not trigger a reboot or trial
 		# confirmation. ADB started by rcS stays available for recovery.
 		while :; do sleep 3600; done
@@ -39,6 +46,24 @@ fi
 # /usr/lib image did not mount, and only the rollback can repair that.
 [ -x /usr/sbin/baseos-update ] && [ -e /lib/ld-linux-aarch64.so.1 ] \
 	&& /usr/sbin/baseos-update confirm 2>/dev/null
+
+# 1.236 -> 1.24: two decimals are plenty for a person reading the log.
+seconds() {
+	sec_whole=${1%%.*} sec_part=
+	[ "$sec_whole" = "$1" ] || sec_part=${1#*.}
+	sec_part=${sec_part}000
+	sec_part=${sec_part%"${sec_part#???}"}
+	sec_cs=$(( (${sec_whole:-0} * 1000 + 1$sec_part - 1000 + 5) / 10 ))
+	printf '%d.%02d' $((sec_cs / 100)) $((sec_cs % 100))
+}
+
+# Which loader started this boot, and a diagnostics block when it is useful:
+# read only, at the lowest priority, once per boot, after the menu is up.
+start_diagnostics() {
+	[ -x /usr/sbin/baseos-diag ] && [ ! -e /run/baseos-diag-boot ] || return 0
+	BASEOS_BOOT_LOG="$LOG" nice -n 19 ionice -c 3 /usr/sbin/baseos-diag --boot \
+		</dev/null >/dev/null 2>&1 &
+}
 
 important_splash() {
 	[ -x /usr/bin/baseos-splash ] \
@@ -170,11 +195,23 @@ if [ "$CARD_MISSING" -eq 0 ] && [ -f "$LAUNCH" ]; then
 		sleep 0.1 2>/dev/null || sleep 1
 		m=$((m + 1))
 	done
-	log "exec $LAUNCH (mali wait ${m}x)"
+	# A plain name for the log: the pak's name (MinUI for NextUI's MinUI.pak),
+	# else the frontend's own.
+	case "$LAUNCH" in
+		*/*.pak/*) frontend_name=${LAUNCH%.pak/*} frontend_name=${frontend_name##*/} ;;
+		*)
+			case "$FRONTEND" in
+				slot) frontend_name=Slot ;;
+				spruce) frontend_name=spruceOS ;;
+				*) frontend_name="custom frontend" ;;
+			esac ;;
+	esac
+	gpu_wait=
+	[ "$m" -eq 0 ] || gpu_wait=", after $((m / 10)).$((m % 10)) s waiting for the GPU"
 	# Keep the first handoff across respawns and record it in the readable log.
 	if [ ! -s /run/boot-frontend-exec ]; then
 		# boot-clock validates counter access/frequency at the first handoff.
-		# Keep BOOTTIME for the existing marker/budget. The additional split
+		# Keep BOOTTIME for the existing marker/budget. The split in the log
 		# uses the unadjusted clock so NTP cannot masquerade as boot work.
 		boot_pre= boot_post= boot_total=
 		if ! { [ -x /usr/sbin/boot-clock ] \
@@ -183,14 +220,15 @@ if [ "$CARD_MISSING" -eq 0 ] && [ -f "$LAUNCH" ]; then
 			boot_pre= boot_post= boot_total=
 			read -r boot_uptime boot_idle < /proc/uptime || boot_uptime=
 		fi
-		{ [ -n "$boot_uptime" ] \
-			&& printf '%s\n' "$boot_uptime" > /run/boot-frontend-exec \
-			&& printf '%s BaseOS boot time: %s s (kernel start to frontend handoff)\n' \
-				"$boot_uptime" "$boot_uptime" >> "$LOG"; } 2>/dev/null || :
+		[ -z "$boot_uptime" ] || printf '%s\n' "$boot_uptime" > /run/boot-frontend-exec 2>/dev/null || :
 		if [ -n "$boot_total" ]; then
-			printf '%s BaseOS boot stages: pre-kernel %s s; post-kernel %s s; combined %s s (counter origin to frontend handoff; raw clock)\n' \
-				"$boot_uptime" "$boot_pre" "$boot_post" "$boot_total" >> "$LOG" 2>/dev/null || :
+			log "Startup: $(seconds "$boot_pre") s before Linux, $(seconds "$boot_post") s Linux to menu, $(seconds "$boot_total") s total ($frontend_name$gpu_wait)"
+		elif [ -n "$boot_uptime" ]; then
+			log "Startup: $(seconds "$boot_uptime") s Linux to menu ($frontend_name$gpu_wait)"
 		fi
+		start_diagnostics
+	else
+		log "Frontend started again: $frontend_name$gpu_wait"
 	fi
 	if [ "$LAUNCH_TYPE" = binary ]; then
 		# Binaries use the glibc AArch64 runtime. Use the system
@@ -216,5 +254,6 @@ else
 	log "no frontend on card — waiting for the user to add one"
 	important_splash -1 "ADD FRONTEND TO SD CARD"
 fi
+[ "$CARD_MISSING" -eq 1 ] || start_diagnostics
 sleep 5
 exit 1

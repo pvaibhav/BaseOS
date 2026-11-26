@@ -1,7 +1,7 @@
-# 11 — Charger-only boot
+# 11. Charger-only boot
 
 On charger-origin boots, BaseOS powers the processor off while the PMIC
-continues charging. It handles this before starting the frontend, GPU,
+keeps charging. It handles this before starting the frontend, GPU,
 network services, storage expansion or update trials.
 
 ## Boot detection
@@ -16,7 +16,7 @@ never selects charging mode.
 
 `baseos-charger` handles the charging path:
 
-- Holding MENU preserves USB-storage maintenance startup.
+- Holding MENU keeps USB-storage maintenance startup.
 - Creating `/data/no-charger-off` disables charger-only handling.
 - Otherwise, the helper checks `/data` and the RTC, records a shutdown stamp,
   and calls `axp-off --now`. The PMIC helper flushes persistent filesystems
@@ -24,7 +24,7 @@ never selects charging mode.
 
 A recent shutdown stamp (less than 120 seconds old), a future stamp, or a
 failed prerequisite selects the fallback instead of another shutdown attempt.
-This prevents power cycling; a rapid deliberate cable reinsertion also takes
+This prevents power cycling. A quick deliberate cable reinsertion also takes
 this path.
 
 ## Fallback
@@ -32,13 +32,13 @@ this path.
 The fallback turns off the backlight, selects the `powersave` CPU governor
 and waits for a fresh one-second POWER hold. It uses blocking input events,
 not suspend. A button already held on entry must be released and pressed again.
-Missing input or helper failures retry at 60-second intervals without starting
-the frontend.
+If input is missing or a helper fails, the fallback retries every 60 seconds
+without starting the frontend.
 
 An accepted hold restores brightness and the governor, lights the power LED,
 draws the BaseOS logo once and continues initialization in the same boot,
 without waiting for button release. Frontend storage and normal services stay
-inactive until then; charging does not consume or confirm an update trial.
+inactive until then. Charging does not consume or confirm an update trial.
 
 ## Validation
 

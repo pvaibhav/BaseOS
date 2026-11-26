@@ -1,0 +1,3874 @@
+{
+ "rg28xx": {
+  "flow": {
+   "panel": "fog_fj035fhd05_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     158732,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156538,
+       100
+      ],
+      [
+       157972,
+       120
+      ],
+      [
+       158032,
+       10
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     158668,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "linear": [
+     [
+      156438,
+      15
+     ],
+     [
+      156486,
+      50
+     ],
+     [
+      156538,
+      100
+     ],
+     [
+      157972,
+      120
+     ],
+     [
+      158032,
+      10
+     ]
+    ],
+    "total": 295
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x59f90",
+     "0x59f34",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3d48c",
+    "0x3d478",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x3f1d0",
+    "0x3efcc",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5b348",
+    "0x5af90",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6aa46",
+    "0x6aa3c",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x3f222",
+    "0x3efcc",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6af72",
+    "0x6af6c",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6b8ca",
+    "0x6b784",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6e818",
+    "0x6e7f0",
+    "variable",
+    "0x6e808: str r3, [r4]"
+   ],
+   [
+    "0x6e89a",
+    "0x6e82c",
+    "variable",
+    "0x6e894: str r3, [r0]"
+   ],
+   [
+    "0x6e916",
+    "0x6e8d0",
+    "variable",
+    "0x6e910: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x698a8",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rg34xx": {
+  "flow": {
+   "panel": "rg34xx_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     160816,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156534,
+       100
+      ],
+      [
+       158442,
+       200
+      ],
+      [
+       158454,
+       100
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     160752,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "prefix": [
+     [
+      "0x26316",
+      15
+     ],
+     [
+      "0x26346",
+      50
+     ],
+     [
+      "0x26376",
+      100
+     ]
+    ],
+    "cond": "cmp r5, #1 ; bne.w #0x26b18",
+    "derivation": [
+     "0x263c0: ldr r3, [pc, #0x4c]",
+     "0x263c2: ldr r1, [r3]",
+     "0x263c8: ldr r4, [pc, #0x48]",
+     "0x263ca: eor r3, r1, #0x40",
+     "0x263ce: ubfx r3, r3, #6, #1",
+     "0x263d2: ldr r0, [pc, #0x44]",
+     "0x263d4: str r3, [r4]",
+     "0x263d6: bl #0x69f94",
+     "0x263da: ldr r3, [r4]",
+     "0x263dc: mov.w r2, #0x112",
+     "0x263e0: ldr r1, [pc, #0x38]",
+     "0x263e2: ldr r0, [pc, #0x3c]",
+     "0x263e4: bl #0x69f94",
+     "0x263e8: ldr r5, [r4]",
+     "0x263ea: movs r0, #0xff",
+     "0x263ec: cmp r5, #1",
+     "0x263ee: bne.w #0x26b18"
+    ],
+    "fall": [],
+    "taken": [],
+    "shared": [
+     [
+      "0x26aea",
+      200
+     ],
+     [
+      "0x26af6",
+      100
+     ]
+    ],
+    "total_fall": 465,
+    "total_taken": 465
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x59948",
+     "0x598ec",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3ce44",
+    "0x3ce30",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x3eb88",
+    "0x3e984",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5ad00",
+    "0x5a948",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6a3fe",
+    "0x6a3f4",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x3ebda",
+    "0x3e984",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6a92a",
+    "0x6a924",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6b282",
+    "0x6b13c",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6e1d0",
+    "0x6e1a8",
+    "variable",
+    "0x6e1c0: str r3, [r4]"
+   ],
+   [
+    "0x6e252",
+    "0x6e1e4",
+    "variable",
+    "0x6e24c: str r3, [r0]"
+   ],
+   [
+    "0x6e2ce",
+    "0x6e288",
+    "variable",
+    "0x6e2c8: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x69260",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rg34xxsp": {
+  "flow": {
+   "panel": "rg34xxsp_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     162904,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156534,
+       100
+      ],
+      [
+       158444,
+       200
+      ],
+      [
+       158456,
+       100
+      ],
+      [
+       162288,
+       120
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     162840,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "prefix": [
+     [
+      "0x26316",
+      15
+     ],
+     [
+      "0x26346",
+      50
+     ],
+     [
+      "0x26376",
+      100
+     ]
+    ],
+    "cond": "cmp r5, #1 ; bne.w #0x26b18",
+    "derivation": [
+     "0x263c0: ldr r3, [pc, #0x4c]",
+     "0x263c2: ldr r1, [r3]",
+     "0x263c8: ldr r4, [pc, #0x48]",
+     "0x263ca: eor r3, r1, #0x40",
+     "0x263ce: ubfx r3, r3, #6, #1",
+     "0x263d2: ldr r0, [pc, #0x44]",
+     "0x263d4: str r3, [r4]",
+     "0x263d6: bl #0x6a7bc",
+     "0x263da: ldr r3, [r4]",
+     "0x263dc: mov.w r2, #0x112",
+     "0x263e0: ldr r1, [pc, #0x38]",
+     "0x263e2: ldr r0, [pc, #0x3c]",
+     "0x263e4: bl #0x6a7bc",
+     "0x263e8: ldr r5, [r4]",
+     "0x263ea: cmp r5, #1",
+     "0x263ec: bne.w #0x26b18"
+    ],
+    "fall": [
+     [
+      "0x26aec",
+      200
+     ],
+     [
+      "0x26af8",
+      100
+     ]
+    ],
+    "taken": [
+     [
+      "0x279f0",
+      120
+     ]
+    ],
+    "shared": [],
+    "total_fall": 465,
+    "total_taken": 285
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x5a170",
+     "0x5a114",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3d66c",
+    "0x3d658",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x3f3b0",
+    "0x3f1ac",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5b528",
+    "0x5b170",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6ac26",
+    "0x6ac1c",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x3f402",
+    "0x3f1ac",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6b152",
+    "0x6b14c",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6baaa",
+    "0x6b964",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6e9f8",
+    "0x6e9d0",
+    "variable",
+    "0x6e9e8: str r3, [r4]"
+   ],
+   [
+    "0x6ea7a",
+    "0x6ea0c",
+    "variable",
+    "0x6ea74: str r3, [r0]"
+   ],
+   [
+    "0x6eaf6",
+    "0x6eab0",
+    "variable",
+    "0x6eaf0: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x69a88",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rg35xxh": {
+  "flow": {
+   "panel": "fog_fj035fhd05_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     161416,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156534,
+       100
+      ],
+      [
+       158454,
+       200
+      ],
+      [
+       158466,
+       100
+      ],
+      [
+       160792,
+       120
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     161352,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "prefix": [
+     [
+      "0x26316",
+      15
+     ],
+     [
+      "0x26346",
+      50
+     ],
+     [
+      "0x26376",
+      100
+     ]
+    ],
+    "cond": "cmp r4, #1 ; bne.w #0x26b24",
+    "derivation": [
+     "0x263c0: ldr r3, [pc, #0x4c]",
+     "0x263c2: ldr r1, [r3]",
+     "0x263c8: ldr r5, [pc, #0x48]",
+     "0x263ca: eor r3, r1, #0x40",
+     "0x263ce: ubfx r3, r3, #6, #1",
+     "0x263d2: ldr r0, [pc, #0x44]",
+     "0x263d4: str r3, [r5]",
+     "0x263d6: bl #0x6b054",
+     "0x263da: ldr r3, [r5]",
+     "0x263dc: mov.w r2, #0x112",
+     "0x263e0: ldr r1, [pc, #0x38]",
+     "0x263e2: ldr r0, [pc, #0x3c]",
+     "0x263e4: bl #0x6b054",
+     "0x263e8: ldr r4, [r5]",
+     "0x263ea: movs r0, #0xff",
+     "0x263ec: cmp r4, #1",
+     "0x263ee: bne.w #0x26b24"
+    ],
+    "fall": [
+     [
+      "0x26af6",
+      200
+     ]
+    ],
+    "taken": [
+     [
+      "0x27418",
+      120
+     ]
+    ],
+    "shared": [
+     [
+      "0x26b02",
+      100
+     ]
+    ],
+    "total_fall": 465,
+    "total_taken": 385
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x5aa08",
+     "0x5a9ac",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3df04",
+    "0x3def0",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x3fc48",
+    "0x3fa44",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5bdc0",
+    "0x5ba08",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6b4be",
+    "0x6b4b4",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x3fc9a",
+    "0x3fa44",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6b9ea",
+    "0x6b9e4",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6c342",
+    "0x6c1fc",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6f290",
+    "0x6f268",
+    "variable",
+    "0x6f280: str r3, [r4]"
+   ],
+   [
+    "0x6f312",
+    "0x6f2a4",
+    "variable",
+    "0x6f30c: str r3, [r0]"
+   ],
+   [
+    "0x6f38e",
+    "0x6f348",
+    "variable",
+    "0x6f388: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x6a320",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rg35xxplus": {
+  "flow": {
+   "panel": "fog_fj035fhd05_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     161404,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156534,
+       100
+      ],
+      [
+       158454,
+       200
+      ],
+      [
+       158466,
+       100
+      ],
+      [
+       160780,
+       120
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     161340,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "prefix": [
+     [
+      "0x26316",
+      15
+     ],
+     [
+      "0x26346",
+      50
+     ],
+     [
+      "0x26376",
+      100
+     ]
+    ],
+    "cond": "cmp r4, #1 ; bne.w #0x26b24",
+    "derivation": [
+     "0x263c0: ldr r3, [pc, #0x4c]",
+     "0x263c2: ldr r1, [r3]",
+     "0x263c8: ldr r5, [pc, #0x48]",
+     "0x263ca: eor r3, r1, #0x40",
+     "0x263ce: ubfx r3, r3, #6, #1",
+     "0x263d2: ldr r0, [pc, #0x44]",
+     "0x263d4: str r3, [r5]",
+     "0x263d6: bl #0x6b04c",
+     "0x263da: ldr r3, [r5]",
+     "0x263dc: mov.w r2, #0x112",
+     "0x263e0: ldr r1, [pc, #0x38]",
+     "0x263e2: ldr r0, [pc, #0x3c]",
+     "0x263e4: bl #0x6b04c",
+     "0x263e8: ldr r4, [r5]",
+     "0x263ea: movs r0, #0xff",
+     "0x263ec: cmp r4, #1",
+     "0x263ee: bne.w #0x26b24"
+    ],
+    "fall": [
+     [
+      "0x26af6",
+      200
+     ]
+    ],
+    "taken": [
+     [
+      "0x2740c",
+      120
+     ]
+    ],
+    "shared": [
+     [
+      "0x26b02",
+      100
+     ]
+    ],
+    "total_fall": 465,
+    "total_taken": 385
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x5aa00",
+     "0x5a9a4",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3defc",
+    "0x3dee8",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x3fc40",
+    "0x3fa3c",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5bdb8",
+    "0x5ba00",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6b4b6",
+    "0x6b4ac",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x3fc92",
+    "0x3fa3c",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6b9e2",
+    "0x6b9dc",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6c33a",
+    "0x6c1f4",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6f288",
+    "0x6f260",
+    "variable",
+    "0x6f278: str r3, [r4]"
+   ],
+   [
+    "0x6f30a",
+    "0x6f29c",
+    "variable",
+    "0x6f304: str r3, [r0]"
+   ],
+   [
+    "0x6f386",
+    "0x6f340",
+    "variable",
+    "0x6f380: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x6a318",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rg35xxpro": {
+  "flow": {
+   "panel": "fog_fj035fhd05_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     161416,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156534,
+       100
+      ],
+      [
+       158454,
+       200
+      ],
+      [
+       158466,
+       100
+      ],
+      [
+       160792,
+       120
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     161352,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "prefix": [
+     [
+      "0x26316",
+      15
+     ],
+     [
+      "0x26346",
+      50
+     ],
+     [
+      "0x26376",
+      100
+     ]
+    ],
+    "cond": "cmp r4, #1 ; bne.w #0x26b24",
+    "derivation": [
+     "0x263c0: ldr r3, [pc, #0x4c]",
+     "0x263c2: ldr r1, [r3]",
+     "0x263c8: ldr r5, [pc, #0x48]",
+     "0x263ca: eor r3, r1, #0x40",
+     "0x263ce: ubfx r3, r3, #6, #1",
+     "0x263d2: ldr r0, [pc, #0x44]",
+     "0x263d4: str r3, [r5]",
+     "0x263d6: bl #0x6b054",
+     "0x263da: ldr r3, [r5]",
+     "0x263dc: mov.w r2, #0x112",
+     "0x263e0: ldr r1, [pc, #0x38]",
+     "0x263e2: ldr r0, [pc, #0x3c]",
+     "0x263e4: bl #0x6b054",
+     "0x263e8: ldr r4, [r5]",
+     "0x263ea: movs r0, #0xff",
+     "0x263ec: cmp r4, #1",
+     "0x263ee: bne.w #0x26b24"
+    ],
+    "fall": [
+     [
+      "0x26af6",
+      200
+     ]
+    ],
+    "taken": [
+     [
+      "0x27418",
+      120
+     ]
+    ],
+    "shared": [
+     [
+      "0x26b02",
+      100
+     ]
+    ],
+    "total_fall": 465,
+    "total_taken": 385
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x5aa08",
+     "0x5a9ac",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3df04",
+    "0x3def0",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x3fc48",
+    "0x3fa44",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5bdc0",
+    "0x5ba08",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6b4be",
+    "0x6b4b4",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x3fc9a",
+    "0x3fa44",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6b9ea",
+    "0x6b9e4",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6c342",
+    "0x6c1fc",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6f290",
+    "0x6f268",
+    "variable",
+    "0x6f280: str r3, [r4]"
+   ],
+   [
+    "0x6f312",
+    "0x6f2a4",
+    "variable",
+    "0x6f30c: str r3, [r0]"
+   ],
+   [
+    "0x6f38e",
+    "0x6f348",
+    "variable",
+    "0x6f388: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x6a320",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rg35xxsp": {
+  "flow": {
+   "panel": "fog_fj035fhd05_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     163432,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156534,
+       100
+      ],
+      [
+       160480,
+       120
+      ],
+      [
+       162802,
+       120
+      ],
+      [
+       162820,
+       10
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     163368,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "prefix": [
+     [
+      "0x26316",
+      15
+     ],
+     [
+      "0x26346",
+      50
+     ],
+     [
+      "0x26376",
+      100
+     ]
+    ],
+    "cond": "cmp r4, #1 ; bne.w #0x27308",
+    "derivation": [
+     "0x26396: ldr r3, [pc, #0x44]",
+     "0x26398: ldr r1, [r3]",
+     "0x2639e: ldr r5, [pc, #0x40]",
+     "0x263a0: eor r2, r1, #0x40",
+     "0x263a4: ubfx r2, r2, #6, #1",
+     "0x263a8: ldr r0, [pc, #0x38]",
+     "0x263aa: str r2, [r5]",
+     "0x263ac: bl #0x6a9cc",
+     "0x263b0: ldr r3, [r5]",
+     "0x263b2: mov.w r2, #0x114",
+     "0x263b6: ldr r1, [pc, #0x30]",
+     "0x263b8: ldr r0, [pc, #0x30]",
+     "0x263ba: bl #0x6a9cc",
+     "0x263be: ldr r4, [r5]",
+     "0x263c0: cmp r4, #1",
+     "0x263c2: bne.w #0x27308"
+    ],
+    "fall": [
+     [
+      "0x272e0",
+      120
+     ]
+    ],
+    "taken": [
+     [
+      "0x27bf2",
+      120
+     ],
+     [
+      "0x27c04",
+      10
+     ]
+    ],
+    "shared": [],
+    "total_fall": 285,
+    "total_taken": 295
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x5a380",
+     "0x5a324",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3d87c",
+    "0x3d868",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x3f5c0",
+    "0x3f3bc",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5b738",
+    "0x5b380",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6ae36",
+    "0x6ae2c",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x3f612",
+    "0x3f3bc",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6b362",
+    "0x6b35c",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6bcba",
+    "0x6bb74",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6ec08",
+    "0x6ebe0",
+    "variable",
+    "0x6ebf8: str r3, [r4]"
+   ],
+   [
+    "0x6ec8a",
+    "0x6ec1c",
+    "variable",
+    "0x6ec84: str r3, [r0]"
+   ],
+   [
+    "0x6ed06",
+    "0x6ecc0",
+    "variable",
+    "0x6ed00: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x69c98",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rg40xxh": {
+  "flow": {
+   "panel": "fog_fj035fhd05_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     163296,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156534,
+       100
+      ],
+      [
+       160456,
+       120
+      ],
+      [
+       160474,
+       20
+      ],
+      [
+       162670,
+       200
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     163232,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "prefix": [
+     [
+      "0x26316",
+      15
+     ],
+     [
+      "0x26346",
+      50
+     ],
+     [
+      "0x26376",
+      100
+     ]
+    ],
+    "cond": "cmp r4, #1 ; bne.w #0x272fc",
+    "derivation": [
+     "0x26396: ldr r3, [pc, #0x44]",
+     "0x26398: ldr r1, [r3]",
+     "0x2639e: ldr r5, [pc, #0x40]",
+     "0x263a0: eor r2, r1, #0x40",
+     "0x263a4: ubfx r2, r2, #6, #1",
+     "0x263a8: ldr r0, [pc, #0x38]",
+     "0x263aa: str r2, [r5]",
+     "0x263ac: bl #0x6b7ac",
+     "0x263b0: ldr r3, [r5]",
+     "0x263b2: mov.w r2, #0x114",
+     "0x263b6: ldr r1, [pc, #0x30]",
+     "0x263b8: ldr r0, [pc, #0x30]",
+     "0x263ba: bl #0x6b7ac",
+     "0x263be: ldr r4, [r5]",
+     "0x263c0: cmp r4, #1",
+     "0x263c2: bne.w #0x272fc"
+    ],
+    "fall": [
+     [
+      "0x272c8",
+      120
+     ]
+    ],
+    "taken": [
+     [
+      "0x27b6e",
+      200
+     ]
+    ],
+    "shared": [
+     [
+      "0x272da",
+      20
+     ]
+    ],
+    "total_fall": 305,
+    "total_taken": 385
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x5b160",
+     "0x5b104",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3e65c",
+    "0x3e648",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x403a0",
+    "0x4019c",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5c518",
+    "0x5c160",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6bc16",
+    "0x6bc0c",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x403f2",
+    "0x4019c",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6c142",
+    "0x6c13c",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6ca9a",
+    "0x6c954",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6f9e8",
+    "0x6f9c0",
+    "variable",
+    "0x6f9d8: str r3, [r4]"
+   ],
+   [
+    "0x6fa6a",
+    "0x6f9fc",
+    "variable",
+    "0x6fa64: str r3, [r0]"
+   ],
+   [
+    "0x6fae6",
+    "0x6faa0",
+    "variable",
+    "0x6fae0: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x6aa78",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rg40xxv": {
+  "flow": {
+   "panel": "fog_fj035fhd05_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     163296,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156534,
+       100
+      ],
+      [
+       160456,
+       120
+      ],
+      [
+       160474,
+       20
+      ],
+      [
+       162670,
+       200
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     163232,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "prefix": [
+     [
+      "0x26316",
+      15
+     ],
+     [
+      "0x26346",
+      50
+     ],
+     [
+      "0x26376",
+      100
+     ]
+    ],
+    "cond": "cmp r4, #1 ; bne.w #0x272fc",
+    "derivation": [
+     "0x26396: ldr r3, [pc, #0x44]",
+     "0x26398: ldr r1, [r3]",
+     "0x2639e: ldr r5, [pc, #0x40]",
+     "0x263a0: eor r2, r1, #0x40",
+     "0x263a4: ubfx r2, r2, #6, #1",
+     "0x263a8: ldr r0, [pc, #0x38]",
+     "0x263aa: str r2, [r5]",
+     "0x263ac: bl #0x6b7ac",
+     "0x263b0: ldr r3, [r5]",
+     "0x263b2: mov.w r2, #0x114",
+     "0x263b6: ldr r1, [pc, #0x30]",
+     "0x263b8: ldr r0, [pc, #0x30]",
+     "0x263ba: bl #0x6b7ac",
+     "0x263be: ldr r4, [r5]",
+     "0x263c0: cmp r4, #1",
+     "0x263c2: bne.w #0x272fc"
+    ],
+    "fall": [
+     [
+      "0x272c8",
+      120
+     ]
+    ],
+    "taken": [
+     [
+      "0x27b6e",
+      200
+     ]
+    ],
+    "shared": [
+     [
+      "0x272da",
+      20
+     ]
+    ],
+    "total_fall": 305,
+    "total_taken": 385
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x5b160",
+     "0x5b104",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3e65c",
+    "0x3e648",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x403a0",
+    "0x4019c",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5c518",
+    "0x5c160",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6bc16",
+    "0x6bc0c",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x403f2",
+    "0x4019c",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6c142",
+    "0x6c13c",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6ca9a",
+    "0x6c954",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6f9e8",
+    "0x6f9c0",
+    "variable",
+    "0x6f9d8: str r3, [r4]"
+   ],
+   [
+    "0x6fa6a",
+    "0x6f9fc",
+    "variable",
+    "0x6fa64: str r3, [r0]"
+   ],
+   [
+    "0x6fae6",
+    "0x6faa0",
+    "variable",
+    "0x6fae0: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x6aa78",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rgcubexx": {
+  "flow": {
+   "panel": "fog_fj035fhd05_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     160960,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156538,
+       100
+      ],
+      [
+       158604,
+       200
+      ],
+      [
+       158622,
+       100
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     160896,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "linear": [
+     [
+      156438,
+      15
+     ],
+     [
+      156486,
+      50
+     ],
+     [
+      156538,
+      100
+     ],
+     [
+      158604,
+      200
+     ],
+     [
+      158622,
+      100
+     ]
+    ],
+    "total": 465
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x5a840",
+     "0x5a7e4",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3dd3c",
+    "0x3dd28",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x3fa80",
+    "0x3f87c",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5bbf8",
+    "0x5b840",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6b2f6",
+    "0x6b2ec",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x3fad2",
+    "0x3f87c",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6b822",
+    "0x6b81c",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6c17a",
+    "0x6c034",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6f0c8",
+    "0x6f0a0",
+    "variable",
+    "0x6f0b8: str r3, [r4]"
+   ],
+   [
+    "0x6f14a",
+    "0x6f0dc",
+    "variable",
+    "0x6f144: str r3, [r0]"
+   ],
+   [
+    "0x6f1c6",
+    "0x6f180",
+    "variable",
+    "0x6f1c0: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x6a158",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ },
+ "rgsp": {
+  "flow": {
+   "panel": "rg34xxsp_v1",
+   "gaps": [
+    30,
+    50,
+    100,
+    0
+   ],
+   "gap_sum": 180,
+   "steps": [
+    [
+     162904,
+     30,
+     []
+    ],
+    [
+     156388,
+     50,
+     [
+      [
+       156438,
+       15
+      ],
+      [
+       156486,
+       50
+      ],
+      [
+       156534,
+       100
+      ],
+      [
+       158444,
+       200
+      ],
+      [
+       158456,
+       100
+      ],
+      [
+       162288,
+       120
+      ]
+     ]
+    ],
+    [
+     156208,
+     100,
+     []
+    ],
+    [
+     162840,
+     0,
+     []
+    ]
+   ],
+   "init": {
+    "func": 156388,
+    "prefix": [
+     [
+      "0x26316",
+      15
+     ],
+     [
+      "0x26346",
+      50
+     ],
+     [
+      "0x26376",
+      100
+     ]
+    ],
+    "cond": "cmp r5, #1 ; bne.w #0x26b18",
+    "derivation": [
+     "0x263c0: ldr r3, [pc, #0x4c]",
+     "0x263c2: ldr r1, [r3]",
+     "0x263c8: ldr r4, [pc, #0x48]",
+     "0x263ca: eor r3, r1, #0x40",
+     "0x263ce: ubfx r3, r3, #6, #1",
+     "0x263d2: ldr r0, [pc, #0x44]",
+     "0x263d4: str r3, [r4]",
+     "0x263d6: bl #0x6a7bc",
+     "0x263da: ldr r3, [r4]",
+     "0x263dc: mov.w r2, #0x112",
+     "0x263e0: ldr r1, [pc, #0x38]",
+     "0x263e2: ldr r0, [pc, #0x3c]",
+     "0x263e4: bl #0x6a7bc",
+     "0x263e8: ldr r5, [r4]",
+     "0x263ea: cmp r5, #1",
+     "0x263ec: bne.w #0x26b18"
+    ],
+    "fall": [
+     [
+      "0x26aec",
+      200
+     ],
+     [
+      "0x26af8",
+      100
+     ]
+    ],
+    "taken": [
+     [
+      "0x279f0",
+      120
+     ]
+    ],
+    "shared": [],
+    "total_fall": 465,
+    "total_taken": 285
+   },
+   "other_step_delays": []
+  },
+  "board": {
+   "n_sites": 42,
+   "n_const": 41,
+   "n_variable": 1,
+   "sum_once_ms": 3309.24,
+   "sum_with_loop_counts_ms": 17523.04,
+   "loops_unbounded": 0,
+   "variable_sites": [
+    [
+     "0x5a170",
+     "0x5a114",
+     "__msdelay/mdelay"
+    ]
+   ]
+  },
+  "common": {
+   "n_sites": 83,
+   "n_const": 79,
+   "n_variable": 4,
+   "sum_once_ms": 2148.458,
+   "sum_with_loop_counts_ms": 43450.906,
+   "loops_unbounded": 21,
+   "variable_sites": [
+    [
+     "0x9928",
+     "0x98ae",
+     "udelay"
+    ],
+    [
+     "0x13586",
+     "0x134fc",
+     "udelay"
+    ],
+    [
+     "0x23208",
+     "0x230dc",
+     "disp_delay_ms"
+    ],
+    [
+     "0x23452",
+     "0x23378",
+     "disp_delay_ms"
+    ]
+   ]
+  },
+  "board_post": {
+   "n_sites": 1,
+   "n_const": 1,
+   "n_variable": 0,
+   "sum_once_ms": 100.0,
+   "sum_with_loop_counts_ms": 100.0,
+   "loops_unbounded": 0,
+   "variable_sites": []
+  },
+  "common_post": {
+   "n_sites": 24,
+   "n_const": 24,
+   "n_variable": 0,
+   "sum_once_ms": 379.121,
+   "sum_with_loop_counts_ms": 41374.611,
+   "loops_unbounded": 11,
+   "variable_sites": []
+  },
+  "timeouts": [
+   [
+    "0x34c0",
+    "0x34b8",
+    199,
+    "cmp r0, #0xc7",
+    "common",
+    true
+   ],
+   [
+    "0xd518",
+    "0xd494",
+    3000,
+    "cmp r0, r8",
+    "common",
+    false
+   ],
+   [
+    "0xd530",
+    "0xd494",
+    800,
+    "cmp.w r0, #0x320",
+    "common",
+    false
+   ],
+   [
+    "0xedea",
+    "0xed48",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x1335c",
+    "0x13348",
+    2000,
+    "cmp.w r0, #0x7d0",
+    "common",
+    false
+   ],
+   [
+    "0x17a02",
+    "0x179d4",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "common",
+    true
+   ],
+   [
+    "0x3d66c",
+    "0x3d658",
+    39999,
+    "cmp r0, r8",
+    "board",
+    false
+   ],
+   [
+    "0x3f3b0",
+    "0x3f1ac",
+    1000,
+    "cmp.w r0, #0x3e8",
+    "board",
+    false
+   ],
+   [
+    "0x5b528",
+    "0x5b170",
+    30000,
+    "cmp r0, r3",
+    "board",
+    false
+   ],
+   [
+    "0x6ac26",
+    "0x6ac1c",
+    5000,
+    "cmp r3, r1",
+    "board",
+    false
+   ]
+  ],
+  "timeouts_variable": [
+   [
+    "0xa85e",
+    "0xa814",
+    "cmp r0, r4",
+    "common"
+   ],
+   [
+    "0x1ae7c",
+    "0x1ae54",
+    "cmp r0, r7",
+    "common"
+   ],
+   [
+    "0x1b15e",
+    "0x1b0fc",
+    "cmp r0, r6",
+    "common"
+   ],
+   [
+    "0x1b8d4",
+    "0x1b350",
+    "cmp r0, r8",
+    "common"
+   ],
+   [
+    "0x1bb7e",
+    "0x1b350",
+    "cmp r0, fp",
+    "common"
+   ],
+   [
+    "0x3f402",
+    "0x3f1ac",
+    "cmp r0, fp",
+    "board"
+   ],
+   [
+    "0x6b152",
+    "0x6b14c",
+    "cmp r3, r0",
+    "board"
+   ],
+   [
+    "0x6baaa",
+    "0x6b964",
+    "cmp r0, r3",
+    "board"
+   ]
+  ],
+  "add_timer": [
+   [
+    "0x6e66",
+    "0x6d94",
+    "variable",
+    "0x6e5a: str r3, [r4]"
+   ],
+   [
+    "0xbfc2",
+    "0xbf8c",
+    "variable",
+    "0xbfb4: str r0, [r4]"
+   ],
+   [
+    "0xc01a",
+    "0xbfe4",
+    "variable",
+    "0xc00c: str r0, [r4]"
+   ],
+   [
+    "0x1fb00",
+    "0x1fa98",
+    "from LCD open flow table (flow[i].delay)",
+    "0x1faf4: str r1, [r2, r3]"
+   ],
+   [
+    "0x6e9f8",
+    "0x6e9d0",
+    "variable",
+    "0x6e9e8: str r3, [r4]"
+   ],
+   [
+    "0x6ea7a",
+    "0x6ea0c",
+    "variable",
+    "0x6ea74: str r3, [r0]"
+   ],
+   [
+    "0x6eaf6",
+    "0x6eab0",
+    "variable",
+    "0x6eaf0: str r3, [r4]"
+   ]
+  ],
+  "udelay": "0x69a88",
+  "lcd_delay": [
+   "0x2621c"
+  ]
+ }
+}

@@ -1,0 +1,344 @@
+{
+  "dram_parameter_binding": [
+    "dram_clk",
+    "dram_type",
+    "dram_zq",
+    "dram_odt_en",
+    "dram_para1",
+    "dram_para2",
+    "dram_mr0",
+    "dram_mr1",
+    "dram_mr2",
+    "dram_mr3",
+    "dram_tpr0",
+    "dram_tpr1",
+    "dram_tpr2",
+    "dram_tpr3",
+    "dram_tpr4",
+    "dram_tpr5",
+    "dram_tpr6",
+    "dram_tpr7",
+    "dram_tpr8",
+    "dram_tpr9",
+    "dram_tpr10",
+    "dram_tpr11",
+    "dram_tpr12",
+    "dram_tpr13"
+  ],
+  "devices": [
+    {
+      "target": "rg34xxsp",
+      "serial": "1c00103dc2840671ed3",
+      "package_sha256": "008bf7aff32ef5d3b7ac4f3e170e47a40b4aa49c0272efae09fb5a038cce17d5",
+      "live_fdt_sha256": "7208de32e4ef95a8a3071d3fb0ab61085236e55ae18bb5758428077e3b726c7e",
+      "properties_before": 4911,
+      "properties_after": 4914,
+      "dram_bindings_exact": true,
+      "ram_bytes": 2147483648,
+      "bootargs": "earlyprintk=sunxi-uart,0x05000000 initcall_debug=0 console=ttyS0,115200 loglevel=4 root=/dev/mmcblk0p5 rootwait quiet splash init=/init partitions=special@mmcblk0p1:boot-resource@mmcblk0p2:env@mmcblk0p3:boot@mmcblk0p4:rootfs@mmcblk0p5:UDISK@mmcblk0p6:primary@mmcblk0p7 cma=64M snum=1c00103dc2840671ed3 mac_addr= wifi_mac= bt_mac= selinux=0 specialstr= gpt=1 androidboot.mode=normal androidboot.serialno=1c00103dc2840671ed3 androidboot.hardware=sun50iw9p1 boot_type=1 androidboot.boot_type=1 androidboot.secure_os_exist=0 gpt=1 uboot_message=2018.05(05/26/2026-15:48:53) disp_reserve=1382400,0xbbf24840 bootreason=unknow lcd_type=boe loglevel=1 rcupdate.rcu_expedited=1 rcupdate.rcu_normal_after_boot=1",
+      "changes": [
+        {
+          "path": "/chosen",
+          "property": "bootargs",
+          "before_hex": "6561726c797072696e746b3d73756e78692d756172742c30783035303030303030206c6f676c6576656c3d3820696e697463616c6c5f64656275673d3120636f6e736f6c653d747479533020696e69743d2f696e697400",
+          "after_hex": "6561726c797072696e746b3d73756e78692d756172742c3078303530303030303020696e697463616c6c5f64656275673d3020636f6e736f6c653d74747953302c313135323030206c6f676c6576656c3d3420726f6f743d2f6465762f6d6d63626c6b30703520726f6f74776169742071756965742073706c61736820696e69743d2f696e697420706172746974696f6e733d7370656369616c406d6d63626c6b3070313a626f6f742d7265736f75726365406d6d63626c6b3070323a656e76406d6d63626c6b3070333a626f6f74406d6d63626c6b3070343a726f6f746673406d6d63626c6b3070353a554449534b406d6d63626c6b3070363a7072696d617279406d6d63626c6b30703720636d613d36344d20736e756d3d31633030313033646332383430363731656433206d61635f616464723d20776966695f6d61633d2062745f6d61633d2073656c696e75783d30207370656369616c7374723d206770743d3120616e64726f6964626f6f742e6d6f64653d6e6f726d616c20616e64726f6964626f6f742e73657269616c6e6f3d3163303031303364633238343036373165643320616e64726f6964626f6f742e68617264776172653d73756e3530697739703120626f6f745f747970653d3120616e64726f6964626f6f742e626f6f745f747970653d3120616e64726f6964626f6f742e7365637572655f6f735f65786973743d30206770743d312075626f6f745f6d6573736167653d323031382e30352830352f32362f323032362d31353a34383a35332920646973705f726573657276653d313338323430302c3078626266323438343020626f6f74726561736f6e3d756e6b6e6f77206c63645f747970653d626f65206c6f676c6576656c3d312072637570646174652e7263755f6578706564697465643d312072637570646174652e7263755f6e6f726d616c5f61667465725f626f6f743d3100"
+        },
+        {
+          "path": "/chosen",
+          "property": "linux,initrd-end",
+          "before_hex": "0000000000000000",
+          "after_hex": "0000000042000200"
+        },
+        {
+          "path": "/chosen",
+          "property": "linux,initrd-start",
+          "before_hex": "0000000000000000",
+          "after_hex": "0000000042000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_mr0",
+          "before_hex": "00000000",
+          "after_hex": "0000310a"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_mr1",
+          "before_hex": "00000034",
+          "after_hex": "08000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_mr2",
+          "before_hex": "0000001b",
+          "after_hex": "00000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_mr3",
+          "before_hex": "00000033",
+          "after_hex": "00000034"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_odt_en",
+          "before_hex": "7887bbbb",
+          "after_hex": "0e0e0e0e"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_para1",
+          "before_hex": "0000310a",
+          "after_hex": "00000e0e"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_para2",
+          "before_hex": "00000000",
+          "after_hex": "7887bbbb"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr0",
+          "before_hex": "00000000",
+          "after_hex": "0000001b"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr1",
+          "before_hex": "00000000",
+          "after_hex": "00000033"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr10",
+          "before_hex": "402f6633",
+          "after_hex": "00000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr11",
+          "before_hex": "00000000",
+          "after_hex": "00000024"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr13",
+          "before_hex": "02008c60",
+          "after_hex": "00000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr2",
+          "before_hex": "00000001",
+          "after_hex": "00000003"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr5",
+          "before_hex": "00000000",
+          "after_hex": "00000004"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr6",
+          "before_hex": "40808080",
+          "after_hex": "00000072"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr8",
+          "before_hex": "00000000",
+          "after_hex": "00000009"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_zq",
+          "before_hex": "003f3fdd",
+          "after_hex": "08080808"
+        },
+        {
+          "path": "/memory@40000000",
+          "property": "reg",
+          "before_hex": "00000000400000000000000020000000",
+          "after_hex": "00000000400000000000000080000000"
+        },
+        {
+          "path": "/soc@03000000/disp@01000000",
+          "property": "boot_disp",
+          "before_hex": "00000000",
+          "after_hex": "00000100"
+        },
+        {
+          "path": "/soc@03000000/disp@01000000",
+          "property": "boot_disp1",
+          "before_hex": null,
+          "after_hex": "01040000"
+        },
+        {
+          "path": "/soc@03000000/disp@01000000",
+          "property": "boot_disp2",
+          "before_hex": null,
+          "after_hex": "00000004"
+        },
+        {
+          "path": "/soc@03000000/disp@01000000",
+          "property": "boot_fb0",
+          "before_hex": null,
+          "after_hex": "62626632343834302c3264302c3165302c32302c6234302c302c302c3264302c31653000"
+        }
+      ]
+    },
+    {
+      "target": "rg40xxv",
+      "serial": "5c001040f4438852493",
+      "package_sha256": "ea7031f8e64712d9c5a0d8530e4b5b588527f397ebda8239ac4c718c50cd886a",
+      "live_fdt_sha256": "b578f1d71e2b58c6d8eb8deb88d6ab45e7c3950fc8f8f564e6a04cfbc78a73e5",
+      "properties_before": 4920,
+      "properties_after": 4923,
+      "dram_bindings_exact": true,
+      "ram_bytes": 1073741824,
+      "bootargs": "earlyprintk=sunxi-uart,0x05000000 initcall_debug=0 console=ttyS0,115200 loglevel=4 root=/dev/mmcblk0p5 rootwait quiet splash init=/init partitions=special@mmcblk0p1:boot-resource@mmcblk0p2:env@mmcblk0p3:boot@mmcblk0p4:rootfs@mmcblk0p5:UDISK@mmcblk0p6:primary@mmcblk0p7 cma=64M snum=5c001040f4438852493 mac_addr= wifi_mac= bt_mac= selinux=0 specialstr= gpt=1 androidboot.mode=normal androidboot.serialno=5c001040f4438852493 androidboot.hardware=sun50iw9p1 boot_type=1 androidboot.boot_type=1 androidboot.secure_os_exist=0 gpt=1 uboot_message=2018.05(05/22/2026-16:12:10) disp_reserve=1228800,0x7bf22800 bootreason=button lcd_type=boe loglevel=1 rcupdate.rcu_expedited=1 rcupdate.rcu_normal_after_boot=1",
+      "changes": [
+        {
+          "path": "/chosen",
+          "property": "bootargs",
+          "before_hex": "6561726c797072696e746b3d73756e78692d756172742c30783035303030303030206c6f676c6576656c3d3820696e697463616c6c5f64656275673d3120636f6e736f6c653d747479533020696e69743d2f696e697400",
+          "after_hex": "6561726c797072696e746b3d73756e78692d756172742c3078303530303030303020696e697463616c6c5f64656275673d3020636f6e736f6c653d74747953302c313135323030206c6f676c6576656c3d3420726f6f743d2f6465762f6d6d63626c6b30703520726f6f74776169742071756965742073706c61736820696e69743d2f696e697420706172746974696f6e733d7370656369616c406d6d63626c6b3070313a626f6f742d7265736f75726365406d6d63626c6b3070323a656e76406d6d63626c6b3070333a626f6f74406d6d63626c6b3070343a726f6f746673406d6d63626c6b3070353a554449534b406d6d63626c6b3070363a7072696d617279406d6d63626c6b30703720636d613d36344d20736e756d3d35633030313034306634343338383532343933206d61635f616464723d20776966695f6d61633d2062745f6d61633d2073656c696e75783d30207370656369616c7374723d206770743d3120616e64726f6964626f6f742e6d6f64653d6e6f726d616c20616e64726f6964626f6f742e73657269616c6e6f3d3563303031303430663434333838353234393320616e64726f6964626f6f742e68617264776172653d73756e3530697739703120626f6f745f747970653d3120616e64726f6964626f6f742e626f6f745f747970653d3120616e64726f6964626f6f742e7365637572655f6f735f65786973743d30206770743d312075626f6f745f6d6573736167653d323031382e30352830352f32322f323032362d31363a31323a31302920646973705f726573657276653d313232383830302c3078376266323238303020626f6f74726561736f6e3d627574746f6e206c63645f747970653d626f65206c6f676c6576656c3d312072637570646174652e7263755f6578706564697465643d312072637570646174652e7263755f6e6f726d616c5f61667465725f626f6f743d3100"
+        },
+        {
+          "path": "/chosen",
+          "property": "linux,initrd-end",
+          "before_hex": "0000000000000000",
+          "after_hex": "0000000042000200"
+        },
+        {
+          "path": "/chosen",
+          "property": "linux,initrd-start",
+          "before_hex": "0000000000000000",
+          "after_hex": "0000000042000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_mr0",
+          "before_hex": "00000000",
+          "after_hex": "000030fa"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_mr1",
+          "before_hex": "00000034",
+          "after_hex": "04000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_mr2",
+          "before_hex": "0000001b",
+          "after_hex": "00000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_mr3",
+          "before_hex": "00000033",
+          "after_hex": "00000083"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_odt_en",
+          "before_hex": "7887bbbb",
+          "after_hex": "0d0d0d0d"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_para1",
+          "before_hex": "0000310a",
+          "after_hex": "00001919"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_para2",
+          "before_hex": "00000000",
+          "after_hex": "9988eeee"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr0",
+          "before_hex": "00000000",
+          "after_hex": "0000001c"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr1",
+          "before_hex": "00000000",
+          "after_hex": "00000001"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr10",
+          "before_hex": "402f6633",
+          "after_hex": "00000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr13",
+          "before_hex": "02000c60",
+          "after_hex": "00000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr2",
+          "before_hex": "00000001",
+          "after_hex": "00000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_tpr6",
+          "before_hex": "40808080",
+          "after_hex": "00000000"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_type",
+          "before_hex": "00000008",
+          "after_hex": "00000007"
+        },
+        {
+          "path": "/dram",
+          "property": "dram_zq",
+          "before_hex": "003f3fdd",
+          "after_hex": "06060606"
+        },
+        {
+          "path": "/memory@40000000",
+          "property": "reg",
+          "before_hex": "00000000400000000000000020000000",
+          "after_hex": "00000000400000000000000040000000"
+        },
+        {
+          "path": "/soc@03000000/disp@01000000",
+          "property": "boot_disp",
+          "before_hex": "00000000",
+          "after_hex": "00000100"
+        },
+        {
+          "path": "/soc@03000000/disp@01000000",
+          "property": "boot_disp1",
+          "before_hex": null,
+          "after_hex": "01040000"
+        },
+        {
+          "path": "/soc@03000000/disp@01000000",
+          "property": "boot_disp2",
+          "before_hex": null,
+          "after_hex": "00000004"
+        },
+        {
+          "path": "/soc@03000000/disp@01000000",
+          "property": "boot_fb0",
+          "before_hex": null,
+          "after_hex": "37626632323830302c3238302c3165302c32302c6130302c302c302c3238302c31653000"
+        }
+      ]
+    }
+  ]
+}

@@ -7,7 +7,7 @@ product
 ## Users
 
 Owners of Anbernic RG XX handhelds who want a small, dependable operating system that
-boots quickly into their chosen frontend. They encounter BaseOS primarily during the
+boots quickly into their chosen frontend. They see BaseOS mostly during the
 few seconds between power-on and frontend hand-off, or while resolving a missing-card
 or missing-frontend state on a compact embedded display.
 
@@ -38,12 +38,12 @@ when action is required, otherwise visually restrained and quick to disappear.
 3. Use concise, actionable language for states that require user intervention.
 4. Preserve one visual identity across bootloader, userspace boot, and hand-off.
 5. Design for the smallest supported display first, then verify every native geometry
-   **and orientation** — a panel's dimensions do not tell you which way it is mounted.
+   **and orientation**. A panel's dimensions do not tell you which way it is mounted.
 
 ## Accessibility & Inclusion
 
 Maintain readable contrast and sizing across 480×640, 640×480, 720×480, and
-720×720 panels, in the orientation the device is actually held — the 480×640
-RG28XX is a landscape device. Do not rely on color alone to communicate status; pair illumination
-with plain-language messages when user action is required. Avoid unnecessary motion
+720×720 panels, in the orientation the device is actually held. The 480×640
+RG28XX is a landscape device. Do not rely on color alone to communicate status. Pair
+illumination with plain-language messages when user action is required. Avoid unnecessary motion
 and flashing during boot.

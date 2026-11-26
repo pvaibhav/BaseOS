@@ -27,11 +27,13 @@ splash() { [ -x /usr/bin/baseos-splash ] && /usr/bin/baseos-splash --important "
 # exit 0 = grew (fresh card), 1 = already fills the disk, 2 = error. Only a
 # freshly-grown partition is (re)formatted, so a card that already fills the
 # disk — i.e. one the user has already set up — is left completely untouched.
-/usr/sbin/gptgrow "$DISK" >> "$LOG" 2>&1
+# The usual answer, already full, leaves nothing in the log: it is every boot.
+grow_output=$(/usr/sbin/gptgrow "$DISK" 2>&1)
 grew=$?
+[ "$grew" = 1 ] || [ -z "$grow_output" ] || printf '%s\n' "$grow_output" >> "$LOG" 2>/dev/null
 case "$grew" in
 	0) splash 45 "EXPANDING STORAGE" ;;
-	1) log "expand: p7 already fills the disk; leaving it untouched"; exit 0 ;;
+	1) exit 0 ;;
 	*) log "gptgrow failed (exit $grew); leaving p7 untouched"; exit 1 ;;
 esac
 partprobe "$DISK" >> "$LOG" 2>&1 || blockdev --rereadpt "$DISK" >> "$LOG" 2>&1 || true

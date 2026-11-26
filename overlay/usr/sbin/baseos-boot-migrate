@@ -1,6 +1,7 @@
 #!/bin/sh
-# One-time migration delivered inside an ordinary rootfs update. No updater
+# One-time migrations delivered inside an ordinary rootfs update. No updater
 # format change is needed. The caller does not execute us after completion.
+# Two steps: the boot pair (below) and then this model's native loader.
 # Shared boot sectors are not A/B protected: uninterrupted power is required.
 #
 # Installs the "fast" boot pair (TOC1 package + Android boot image) over either
@@ -16,6 +17,406 @@ ROOT=${BASEOS_BOOT_TEST_ROOT:-}
 if [ -n "$ROOT" ]; then
 	[ "${BASEOS_BOOT_TESTING:-}" = 1 ] && [ -f "$ROOT/.boot-migration-test" ] || exit 1
 fi
+# With no argument both steps run, each in its own shell: first the boot pair
+# ("pair", below), then the native loader ("native"). A nonzero status from
+# either means a boot area may be unverified, and stops the rest.
+case "${1:-}" in
+'')
+	/bin/sh "$0" pair || exit $?
+	exec /bin/sh "$0" native ;;
+pair|native) ;;
+*) exit 2 ;;
+esac
+
+# The native step installs this model's native loader from the running rootfs:
+#   capsule   128 KiB at sector 16. BootROM runs it; it starts the native SPL
+#             while the RTC pair GP14/GP15 is zero and the embedded stock
+#             boot0 whenever the pair is nonzero.
+#   firmware  monitor, loader and trees at boot partition + 40 MiB.
+#   image     kernel image the loader unpacks, at boot partition + 48 MiB.
+#   TOC       stock U-Boot package without its boot0 rewrite, at the package
+#             sector; with the 1.4.0 image at the start of the boot partition
+#             it is the stock fallback.
+# Order: hold the stock latch (pair nonzero), write firmware, image and TOC,
+# then the capsule body and last its header, read everything back, and only
+# then clear exactly the pair it holds. A reset at any point before the clear
+# starts stock: a nonzero pair selects it, and a header whose checksum does not
+# cover the body sends BootROM to the stock copy at the secondary sector. Any
+# failure before completion keeps the latch: the device keeps starting stock.
+# It writes only from stock Linux or a native boot of this same loader, never
+# while a computer owns USB storage, and keeps the first copy of every area it
+# replaces on userdata.
+native_step() {
+	NATIVE="$ROOT/usr/share/baseos/native"
+	[ -f "$NATIVE/manifest" ] || exit 0
+	NSTATE="$ROOT/data/boot-native-v1"
+	ASSETS="$ROOT/usr/share/baseos/boot-gzip"
+	DISK="$ROOT/dev/mmcblk0"
+	BOOT="$ROOT/dev/mmcblk0p4"
+	HEALTH="$ROOT/usr/sbin/native-health"
+	RUNNING="$ROOT/sys/firmware/devicetree/base/chosen/baseos,native-boot"
+	[ ! -s "$ROOT/run/usb-storage-device" ] || exit 0
+	if [ -z "$ROOT" ] && ! awk '
+	  $1 == "/dev/mmcblk0p6" && $2 == "/data" && $3 == "ext4" &&
+	  ("," $4 ",") ~ /,rw,/ { persistent = 1 }
+	  END { exit !persistent }
+	' /proc/mounts; then
+		exit 0
+	fi
+	. "$NATIVE/manifest"
+	case "${NATIVE_GENERATION:-}" in *[!0-9a-f]*|'') exit 0 ;; esac
+	[ "${#NATIVE_GENERATION}" -eq 64 ] || exit 0
+	DONE="$NSTATE/done-$NATIVE_GENERATION"
+	[ ! -e "$DONE" ] || exit 0
+	if ! mkdir -p "$NSTATE" 2>/dev/null || ! { printf '' >> "$NSTATE/install.log"; } 2>/dev/null; then
+		exit 0
+	fi
+	exec 3>>"$NSTATE/install.log"
+	WORK=
+	unverified=0
+	nlog() { { printf '%s\n' "native: $*" >&3; } 2>/dev/null || :; }
+	# nresult KIND TEXT: the outcome of this run in one line. It goes to
+	# /run for this boot's loader line, and, unless it is a plain wait, to the
+	# boot log frontend-session passes in BASEOS_BOOT_LOG. KIND is installed,
+	# in-place, failed, start-failed, skipped, gave-up or deferred.
+	defer_kind=deferred attempt_number=
+	nresult() {
+		result_kind=$1
+		shift
+		{ printf '%s %s\n' "$result_kind" "$*" > "$ROOT/run/baseos-native-result"; } 2>/dev/null || :
+		[ "$result_kind" != deferred ] && [ -n "${BASEOS_BOOT_LOG:-}" ] || return 0
+		[ ! -s "$ROOT/run/usb-storage-device" ] || return 0
+		up=
+		{ read -r up _ < /proc/uptime; } 2>/dev/null || up=
+		{ printf '%s Fast loader install: %s\n' "${up:-0}" "$*" >> "$BASEOS_BOOT_LOG"; } 2>/dev/null || :
+	}
+	nsplash() {
+		[ ! -x "$ROOT/usr/bin/baseos-splash" ] || "$ROOT/usr/bin/baseos-splash" --important -1 "$*" 2>/dev/null || :
+	}
+	nfinish() {
+		if [ "$unverified" = 1 ]; then
+			nlog "the stock U-Boot package is unverified; its previous contents are kept in $WORK"
+			nsplash 'BOOT UPDATE FAILED: KEEP POWER ON'
+			exit 1
+		fi
+		[ -z "$WORK" ] || rm -rf "$WORK"
+		exit 0
+	}
+	trap nfinish EXIT
+	trap 'exit 0' HUP INT TERM
+	# done RESULT: never again for this generation.
+	done_with() {
+		printf '%s\n' "$1" > "$DONE.tmp" && sync && mv "$DONE.tmp" "$DONE" && sync
+		nlog "$1"
+	}
+	ndefer() {
+		nlog "deferred; $*"
+		if [ "$defer_kind" = failed ]; then
+			nresult failed "$*${attempt_number:+ (try $attempt_number of 3)}; the stock loader stays in use and the next start tries again"
+		else
+			nresult deferred "$*"
+		fi
+		exit 0
+	}
+	nskip() { done_with "skipped: $*"; nresult skipped "not possible on this card: $*"; exit 0; }
+	nsha() { sha256sum "$1" 2>&3 | cut -d ' ' -f 1; }
+	nmatches() { [ "${#2}" -eq 64 ] && [ "$(nsha "$1")" = "$2" ]; }
+	# read_at DEVICE OFFSET BYTES FILE; write_at DEVICE OFFSET FILE. Direct I/O
+	# from a 1 MiB buffer, whole sectors only: the card's bytes, not the cache's,
+	# and no read-modify-write of a neighbouring sector.
+	read_at() {
+		dd if="$1" of="$4" bs=1M skip="$2" count="$3" iflag=direct,skip_bytes,count_bytes status=none 2>&3
+	}
+	write_at() {
+		dd if="$3" of="$1" bs=1M seek="$2" oflag=direct,seek_bytes conv=notrunc,fsync status=none 2>&3
+	}
+	# is_at DEVICE OFFSET BYTES SHA256
+	is_at() { read_at "$1" "$2" "$3" "$WORK/readback" && nmatches "$WORK/readback" "$4"; }
+	# put DEVICE OFFSET FILE BYTES SHA256 NAME: write, then judge by readback.
+	put() {
+		nlog "writing $6"
+		if write_at "$1" "$2" "$3" && is_at "$1" "$2" "$4" "$5"; then return 0; fi
+		nlog "$6 did not read back; writing it once more"
+		write_at "$1" "$2" "$3" && is_at "$1" "$2" "$4" "$5"
+	}
+	latch() { "$HEALTH" --stock-latch 2>&3 | { read -r _ _ state && printf '%s' "$state"; }; }
+	usb_free() { [ ! -s "$ROOT/run/usb-storage-device" ]; }
+	# A stock boot0: magic, length, the model's body and a checksum that
+	# reproduces (sum of words with word 3 counted as the stamp).
+	stock_boot0() {
+		[ "$(od -An -tx1 -j4 -N8 "$1" 2>&3 | tr -d ' \n')" = 65474f4e2e425430 ] || return 1
+		[ "$(od -An -tu4 -j16 -N4 "$1" 2>&3 | tr -d ' ')" = 65536 ] || return 1
+		[ "$(wc -c < "$1")" = 65536 ] || return 1
+		[ "$(tail -c +513 "$1" | sha256sum | cut -d ' ' -f 1)" = "$BOOT_BOOT0_BODY_SHA256" ] || return 1
+		od -An -v -tu4 "$1" 2>&3 | awk '
+			{ for (i = 1; i <= NF; i++) { if (n == 3) stored = $i; else total += $i; n++ } }
+			END { exit !(n == 16384 && (total + 1594518585) % 4294967296 == stored) }'
+	}
+	# An earlier BaseOS capsule: 128 KiB eGON image embedding this model's stock
+	# boot0 body at 4 KiB. Only its checksum-free shape is judged; it is replaced.
+	old_capsule() {
+		[ "$(od -An -tx1 -j4 -N8 "$1" 2>&3 | tr -d ' \n')" = 65474f4e2e425430 ] || return 1
+		[ "$(od -An -tu4 -j16 -N4 "$1" 2>&3 | tr -d ' ')" = 131072 ] || return 1
+		[ "$(dd if="$1" bs=512 skip=9 count=127 2>/dev/null | sha256sum | cut -d ' ' -f 1)" = "$BOOT_BOOT0_BODY_SHA256" ]
+	}
+	# Canonical sector-0 bytes with mutable fields masked: checksum (12..15),
+	# ROM media byte (40), and per-unit wake DRAM block (56..183).
+	capsule_sector0_fixed() {
+		head -c 512 "$1" | od -An -v -tu1 2>&3 | awk '
+			{ for (i = 1; i <= NF; i++) {
+				if ((n >= 12 && n < 16) || n == 40 || (n >= 56 && n < 184)) printf "0 "
+				else printf "%s ", $i
+				n++
+			} }
+			END { if (n != 512) exit 1 }'
+	}
+	# This generation's capsule, allowing per-unit wake DRAM stamping in sector 0.
+	this_capsule() {
+		if nmatches "$1" "$NATIVE_CAPSULE_SHA256"; then return 0; fi
+		[ "$(wc -c < "$1")" = "$NATIVE_CAPSULE_SIZE" ] || return 1
+		[ "$(od -An -tx1 -j4 -N8 "$1" 2>&3 | tr -d ' \n')" = 65474f4e2e425430 ] || return 1
+		[ "$(od -An -tu4 -j16 -N4 "$1" 2>&3 | tr -d ' ')" = "$NATIVE_CAPSULE_SIZE" ] || return 1
+		[ "$(tail -c +513 "$1" | sha256sum | cut -d ' ' -f 1)" = "$capsule_body_sha" ] || return 1
+		od -An -v -tu4 "$1" 2>&3 | awk -v want="$((NATIVE_CAPSULE_SIZE / 4))" '
+			{ for (i = 1; i <= NF; i++) { if (n == 3) stored = $i; else total += $i; n++ } }
+			END { exit !(n == want && (total + 1594518585) % 4294967296 == stored) }' || return 1
+		[ "$(capsule_sector0_fixed "$1")" = "$capsule_sector0_ref" ]
+	}
+
+	. "$ASSETS/manifest"
+	. "$ROOT/etc/baseos-release"
+	[ "${BASEOS_TARGET:-}" = "${NATIVE_TARGET:-unset}" ] || nskip 'target mismatch'
+	for key in CAPSULE_SECTOR CAPSULE_SIZE SECONDARY_SECTOR FIRMWARE_OFFSET FIRMWARE_SIZE IMAGE_OFFSET \
+		IMAGE_SIZE TOC_SECTOR TOC_SIZE; do
+		eval "value=\${NATIVE_$key:-}"
+		case "$value" in ''|*[!0-9]*|0?*) ndefer "manifest has no usable NATIVE_$key" ;; esac
+	done
+	for key in BOOT_START BOOT_SECTORS BOOT_IMAGE_SIZE PACKAGE_OFFSET PACKAGE_SIZE; do
+		eval "value=\${BOOT_$key:-}"
+		case "$value" in ''|*[!0-9]*|0?*) ndefer "boot manifest has no usable BOOT_$key" ;; esac
+	done
+	for value in "$NATIVE_CAPSULE_SHA256" "$NATIVE_FIRMWARE_SHA256" "$NATIVE_IMAGE_SHA256" \
+		"$NATIVE_TOC_SHA256" \
+		"${BOOT_BOOT0_BODY_SHA256:-}" "${BOOT_BOOT_IMAGE_SHA256:-}" "${BOOT_PACKAGE_SHA256:-}"; do
+		case "$value" in *[!0-9a-f]*) value= ;; esac
+		[ "${#value}" -eq 64 ] || ndefer 'manifest hashes are malformed'
+	done
+	capsule_at=$((NATIVE_CAPSULE_SECTOR * 512)) secondary_at=$((NATIVE_SECONDARY_SECTOR * 512))
+	toc_at=$((NATIVE_TOC_SECTOR * 512)) partition_bytes=$((BOOT_BOOT_SECTORS * 512))
+	# The layout must be the one the loader and BootROM expect, and must keep
+	# every area apart: the stock image stays usable as the fallback.
+	if [ "$NATIVE_CAPSULE_SIZE" -ne 131072 ] || [ $((capsule_at + NATIVE_CAPSULE_SIZE)) -gt "$secondary_at" ] \
+		|| [ $((secondary_at + 65536)) -gt "$toc_at" ] || [ "$toc_at" -ne "$BOOT_PACKAGE_OFFSET" ] \
+		|| [ "$NATIVE_TOC_SIZE" -ne "$BOOT_PACKAGE_SIZE" ] \
+		|| [ "$BOOT_BOOT_IMAGE_SIZE" -gt "$NATIVE_FIRMWARE_OFFSET" ] \
+		|| [ $((NATIVE_FIRMWARE_OFFSET + NATIVE_FIRMWARE_SIZE)) -gt "$NATIVE_IMAGE_OFFSET" ] \
+		|| [ $((NATIVE_IMAGE_OFFSET + NATIVE_IMAGE_SIZE)) -gt "$partition_bytes" ]; then
+		nskip 'native layout does not fit this card'
+	fi
+	for size in "$NATIVE_FIRMWARE_SIZE" "$NATIVE_IMAGE_SIZE" "$NATIVE_TOC_SIZE" "$capsule_at" \
+		"$NATIVE_FIRMWARE_OFFSET" "$NATIVE_IMAGE_OFFSET"; do
+		[ $((size % 512)) -eq 0 ] || nskip 'native layout is not sector aligned'
+	done
+	installed=$(od -An -v -tx1 "$ROOT/etc/baseos/native-generation" 2>/dev/null | tr -d ' \n')
+	[ "$installed" = "$NATIVE_GENERATION" ] || ndefer 'installed generation differs from the native files'
+	[ -x "$HEALTH" ] || ndefer 'native-health is unavailable'
+	if [ -z "$ROOT" ] && { [ ! -b "$DISK" ] || [ ! -b "$BOOT" ]; }; then ndefer 'boot block device unavailable'; fi
+	if [ "$(cat "$ROOT/sys/class/block/mmcblk0p4/start" 2>/dev/null)" != "$BOOT_BOOT_START" ] \
+		|| [ "$(cat "$ROOT/sys/class/block/mmcblk0p4/size" 2>/dev/null)" != "$BOOT_BOOT_SECTORS" ]; then
+		nskip 'unrecognized boot partition geometry'
+	fi
+	# The boot pair step decides first; it may still be waiting for power.
+	[ -e "$ROOT/data/boot-pair-v2/complete" ] || ndefer 'the boot pair step has not finished'
+	running=
+	if [ -e "$RUNNING" ] || [ -L "$RUNNING" ]; then
+		running=$(od -An -v -tx1 "$RUNNING" 2>/dev/null | tr -d ' \n')
+		# Health refuses another generation before startup gets here.
+		[ "$running" = "$NATIVE_GENERATION" ] || ndefer 'running a different native loader'
+	fi
+	# No battery check: the install takes a few seconds. Writes happen only
+	# while the stock latch is held, and a restart then starts stock: the
+	# firmware and kernel image sit where stock never reads, and the capsule
+	# body goes in before its header, so a half-written capsule fails BootROM's
+	# checksum and BootROM takes the stock copy at the secondary sector. The
+	# one exception is the U-Boot package, when it has to change (cards coming
+	# from 1.4.0 or older): it is the stock path's only copy, and power lost in
+	# the fraction of a second it takes to write leaves stock unable to start.
+	# Its previous contents stay in boot-native-v1/toc-before.bin.
+	nmatches "$NATIVE/capsule.bin" "$NATIVE_CAPSULE_SHA256" && nmatches "$NATIVE/firmware.bin" "$NATIVE_FIRMWARE_SHA256" \
+		&& nmatches "$NATIVE/image.bin" "$NATIVE_IMAGE_SHA256" && nmatches "$NATIVE/recovery-toc.bin" "$NATIVE_TOC_SHA256" \
+		&& [ "$(wc -c < "$NATIVE/capsule.bin")" -eq "$NATIVE_CAPSULE_SIZE" ] \
+		&& [ "$(wc -c < "$NATIVE/firmware.bin")" -eq "$NATIVE_FIRMWARE_SIZE" ] \
+		&& [ "$(wc -c < "$NATIVE/image.bin")" -eq "$NATIVE_IMAGE_SIZE" ] \
+		&& [ "$(wc -c < "$NATIVE/recovery-toc.bin")" -eq "$NATIVE_TOC_SIZE" ] \
+		|| nskip 'native files failed verification'
+
+	WORK=$(mktemp -d "$ROOT/tmp/boot-native.XXXXXX")
+	capsule_body_sha=$(tail -c +513 "$NATIVE/capsule.bin" | sha256sum | cut -d ' ' -f 1)
+	capsule_sector0_ref=$(capsule_sector0_fixed "$NATIVE/capsule.bin")
+	read_at "$DISK" "$capsule_at" "$NATIVE_CAPSULE_SIZE" "$WORK/primary.cur" \
+		&& read_at "$DISK" "$secondary_at" 65536 "$WORK/secondary.cur" \
+		&& read_at "$DISK" "$toc_at" "$NATIVE_TOC_SIZE" "$WORK/toc.cur" \
+		&& read_at "$BOOT" 0 "$BOOT_BOOT_IMAGE_SIZE" "$WORK/stock-image.cur" \
+		&& read_at "$BOOT" "$NATIVE_FIRMWARE_OFFSET" "$NATIVE_FIRMWARE_SIZE" "$WORK/firmware.cur" \
+		&& read_at "$BOOT" "$NATIVE_IMAGE_OFFSET" "$NATIVE_IMAGE_SIZE" "$WORK/image.cur" \
+		|| ndefer 'cannot read the boot areas'
+	# An install this step started and still holds the latch for may have
+	# stopped part way: whatever it left in sector 16 or the package is its own.
+	resuming=0
+	[ ! -r "$NSTATE/latch" ] || { read -r owner < "$NSTATE/latch" && [ "$owner" = "$NATIVE_GENERATION" ] && resuming=1; } || :
+	head -c 65536 "$WORK/primary.cur" > "$WORK/primary-stock.cur"
+	if this_capsule "$WORK/primary.cur"; then primary=this
+	elif stock_boot0 "$WORK/primary-stock.cur"; then primary=stock
+	elif old_capsule "$WORK/primary.cur"; then primary=earlier
+	elif [ "$resuming" = 1 ]; then primary=partial
+	else nskip 'sector 16 holds neither stock boot0 nor a BaseOS capsule'
+	fi
+	stock_boot0 "$WORK/secondary.cur" || nskip 'the secondary sector holds no stock boot0 to fall back on'
+	nmatches "$WORK/stock-image.cur" "$BOOT_BOOT_IMAGE_SHA256" || nskip 'the stock fallback image is not the 1.4.0 image'
+	toc_sha=$(nsha "$WORK/toc.cur")
+	case " $NATIVE_TOC_SHA256 " in *" $toc_sha "*) toc=this ;; *)
+		case " $BOOT_PACKAGE_SHA256 ${NATIVE_PREVIOUS_TOC_SHA256:-} " in
+		*" $toc_sha "*) toc=earlier ;;
+		*) [ "$resuming" = 1 ] || nskip 'the U-Boot package is not one this system installed'
+			toc=partial ;;
+		esac ;;
+	esac
+	nmatches "$WORK/firmware.cur" "$NATIVE_FIRMWARE_SHA256" && firmware=this || firmware=other
+	nmatches "$WORK/image.cur" "$NATIVE_IMAGE_SHA256" && image=this || image=other
+	# Battery and charger at the install, for the diagnostics only.
+	capacity=unknown charger=no
+	for supply in "$ROOT"/sys/class/power_supply/*; do
+		[ ! -r "$supply/online" ] || { read -r online < "$supply/online" || online=0; [ "$online" != 1 ] || charger=yes; }
+		[ ! -r "$supply/capacity" ] || read -r capacity < "$supply/capacity" || capacity=unknown
+	done
+	nlog "found primary $primary, package $toc, firmware $firmware, image $image, pair $(latch), battery $capacity%, charger $charger"
+
+	if [ "$primary/$toc/$firmware/$image" = this/this/this/this ]; then
+		state=$(latch)
+		if [ "$state" = held ] && [ ! -e "$NSTATE/latch" ]; then
+			# This loader's own attempt failed: its SPL latched the pair and
+			# the watchdog chose stock. Retrying would only fail again.
+			done_with 'native boot failed health; the device stays on stock startup'
+			nresult start-failed "the files are in place, but the fast loader's start failed; this version stays on the stock loader"
+			exit 0
+		fi
+		if [ "$state" != idle ]; then
+			usb_free || ndefer 'a computer owns USB storage'
+			printf '%s\n' "$NATIVE_GENERATION" > "$NSTATE/latch" && sync
+			defer_kind=failed
+			"$HEALTH" --hold-stock >&3 2>&3 && [ "$(latch)" = held ] \
+				&& "$HEALTH" --release-stock >&3 2>&3 && [ "$(latch)" = idle ] \
+				|| ndefer 'could not clear the stock latch'
+			defer_kind=deferred
+			rm -f "$NSTATE/latch" && sync
+			nlog 'stock latch cleared'
+		fi
+		done_with "installed${running:+; running}"
+		nresult in-place "the files were already in place${running:+ and running}"
+		exit 0
+	fi
+	[ -z "$running" ] || ndefer 'native files differ while their own loader is running'
+
+	attempts=0
+	[ ! -r "$NSTATE/attempts-$NATIVE_GENERATION" ] || read -r attempts < "$NSTATE/attempts-$NATIVE_GENERATION" || attempts=0
+	case "$attempts" in ''|*[!0-9]*) attempts=0 ;; esac
+	if [ "$attempts" -ge 3 ]; then
+		done_with 'gave up after 3 failed attempts; the device stays on stock startup'
+		nresult gave-up "gave up after 3 failed tries; this version stays on the stock loader"
+		exit 0
+	fi
+	# First copies only: the areas as they were before any native install.
+	need_kb=$(( (NATIVE_CAPSULE_SIZE + 65536 + NATIVE_TOC_SIZE + NATIVE_FIRMWARE_SIZE + NATIVE_IMAGE_SIZE) / 1024 + 4096 ))
+	free_kb=$(df -Pk "$NSTATE" | awk 'END { print $4 }')
+	case "$free_kb" in ''|*[!0-9]*) ndefer 'cannot determine backup space' ;; esac
+	[ "$free_kb" -ge "$need_kb" ] || ndefer 'insufficient userdata space for backups'
+	for area in primary secondary toc firmware image; do
+		[ ! -e "$NSTATE/$area-before.bin" ] || continue
+		cp "$WORK/$area.cur" "$NSTATE/$area-before.bin.tmp" && sync \
+			&& cmp -s "$WORK/$area.cur" "$NSTATE/$area-before.bin.tmp" \
+			&& mv "$NSTATE/$area-before.bin.tmp" "$NSTATE/$area-before.bin" && sync \
+			|| ndefer 'could not save and verify boot backups'
+	done
+	printf '%s\n' $((attempts + 1)) > "$NSTATE/attempts-$NATIVE_GENERATION" && sync
+	attempt_number=$((attempts + 1))
+	usb_free || ndefer 'a computer owns USB storage'
+	defer_kind=failed
+	nsplash 'SPEEDING UP BOOT'
+	trap '' HUP INT TERM
+	printf '%s\n' "$NATIVE_GENERATION" > "$NSTATE/latch" && sync
+	if ! "$HEALTH" --hold-stock >&3 2>&3 || [ "$(latch)" != held ]; then
+		ndefer 'could not hold the stock latch; nothing was written'
+	fi
+	nlog "stock latch held ($NATIVE_COOKIE 42535031)"
+	head -c 512 "$NATIVE/capsule.bin" > "$WORK/capsule-header.bin"
+	tail -c +513 "$NATIVE/capsule.bin" > "$WORK/capsule-body.bin"
+	body_sha=$(nsha "$WORK/capsule-body.bin")
+	failed=
+	if [ "$firmware" != this ] && ! put "$BOOT" "$NATIVE_FIRMWARE_OFFSET" "$NATIVE/firmware.bin" \
+		"$NATIVE_FIRMWARE_SIZE" "$NATIVE_FIRMWARE_SHA256" firmware; then failed=firmware
+	elif [ "$image" != this ] && ! put "$BOOT" "$NATIVE_IMAGE_OFFSET" "$NATIVE/image.bin" \
+		"$NATIVE_IMAGE_SIZE" "$NATIVE_IMAGE_SHA256" 'kernel image'; then failed='kernel image'
+	elif [ "$toc" != this ]; then
+		# The package is the stock fallback's only copy: never leave it unverified.
+		unverified=1
+		if put "$DISK" "$toc_at" "$NATIVE/recovery-toc.bin" "$NATIVE_TOC_SIZE" "$NATIVE_TOC_SHA256" 'U-Boot package'; then
+			unverified=0
+		else
+			failed='U-Boot package'
+			# A package this step left half written is no copy to go back to.
+			[ "$toc" != partial ] || exit 1
+			nlog 'restoring the previous U-Boot package'
+			write_at "$DISK" "$toc_at" "$WORK/toc.cur" || :
+			is_at "$DISK" "$toc_at" "$NATIVE_TOC_SIZE" "$toc_sha" || exit 1
+			unverified=0
+		fi
+	fi
+	if [ -z "$failed" ]; then
+		if ! usb_free; then failed='USB storage started'
+		elif [ "$(latch)" != held ]; then failed='the stock latch changed'
+		elif ! is_at "$DISK" "$secondary_at" 65536 "$(nsha "$WORK/secondary.cur")"; then failed='secondary changed'
+		elif ! put "$DISK" $((capsule_at + 512)) "$WORK/capsule-body.bin" $((NATIVE_CAPSULE_SIZE - 512)) \
+			"$body_sha" 'capsule body'; then failed='capsule body'
+		elif ! put "$DISK" "$capsule_at" "$WORK/capsule-header.bin" 512 \
+			"$(nsha "$WORK/capsule-header.bin")" 'capsule header'; then failed='capsule header'
+		fi
+	fi
+	if [ -z "$failed" ]; then
+		for check in "$DISK $capsule_at $NATIVE_CAPSULE_SIZE $NATIVE_CAPSULE_SHA256 capsule" \
+			"$DISK $secondary_at 65536 $(nsha "$WORK/secondary.cur") secondary" \
+			"$DISK $toc_at $NATIVE_TOC_SIZE $NATIVE_TOC_SHA256 package" \
+			"$BOOT 0 $BOOT_BOOT_IMAGE_SIZE $BOOT_BOOT_IMAGE_SHA256 stock-image" \
+			"$BOOT $NATIVE_FIRMWARE_OFFSET $NATIVE_FIRMWARE_SIZE $NATIVE_FIRMWARE_SHA256 firmware" \
+			"$BOOT $NATIVE_IMAGE_OFFSET $NATIVE_IMAGE_SIZE $NATIVE_IMAGE_SHA256 image"; do
+			set -- $check
+			is_at "$1" "$2" "$3" "$4" || { failed="final readback of $5"; break; }
+		done
+	fi
+	if [ -n "$failed" ]; then
+		nlog "FAILED at $failed; keeping the stock latch, so the device keeps starting stock"
+		nresult failed "failed at $failed (try $attempt_number of 3; the stock loader stays in use and the next start tries again)"
+		exit 0
+	fi
+	if ! "$HEALTH" --release-stock >&3 2>&3 || [ "$(latch)" != idle ]; then
+		nlog 'everything verified, but the stock latch did not clear; stock startup continues'
+		nresult failed "written and checked, but the stock latch did not clear (try $attempt_number of 3)"
+		exit 0
+	fi
+	rm -f "$NSTATE/latch" && sync
+	nlog 'stock latch cleared; the native loader starts at the next boot'
+	wake_seed="$WORK/secondary.cur"
+	[ "$primary" != stock ] || wake_seed="$WORK/primary-stock.cur"
+	"$HEALTH" --sync-wake-dram "$wake_seed" >&3 2>&3 || nlog 'wake DRAM sync deferred to next start'
+	done_with installed
+	nresult installed "installed and checked; it is used from the next start"
+	exit 0
+}
+if [ "$1" = native ]; then
+	native_step
+	exit 0
+fi
+
+# The boot pair step.
 STATE="$ROOT/data/boot-pair-v2"
 # The first migration's directory is only ever read here: it may hold the
 # user's sole durable copy of the original pair.
@@ -199,6 +600,18 @@ if ! read_direct "$DISK" "$BOOT_PACKAGE_OFFSET" "$BOOT_PACKAGE_SIZE" "$WORK/pack
 fi
 previous_package=$(sha "$WORK/package.cur")
 previous_image=$(sha "$WORK/image.cur")
+# A native install keeps the 1.4.0 image and replaces the package with its
+# own; the native step owns the boot areas from then on.
+if [ -f "$ROOT/usr/share/baseos/native/manifest" ]; then
+	NATIVE_TOC_SHA256= NATIVE_PREVIOUS_TOC_SHA256=
+	. "$ROOT/usr/share/baseos/native/manifest"
+	case " ${NATIVE_TOC_SHA256:-none} ${NATIVE_PREVIOUS_TOC_SHA256:-} " in
+	*" $previous_package "*)
+		log 'native boot files present; the native step owns the boot areas'
+		complete 'native boot files present'
+		exit 0 ;;
+	esac
+fi
 case "$previous_package" in
 "$BOOT_PACKAGE_SHA256") package_state=fast ;;
 "$BOOT_GZIP_PACKAGE_SHA256") package_state=gzip ;;

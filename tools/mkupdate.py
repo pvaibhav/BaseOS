@@ -14,13 +14,20 @@ secrets.
 Usage: mkupdate.py IMAGE TARGET VERSION BUILD OUTPUT
 """
 import gzip
+import argparse
 import hashlib
 import io
+import re
+import shutil
 import struct
+import subprocess
 import sys
 import tarfile
+import tempfile
 import uuid
 from pathlib import Path
+
+import boot_payload
 
 SECTOR = 512
 CHUNK = 4 * 1024 * 1024
@@ -49,17 +56,89 @@ def rootfs_extent(image: Path) -> tuple[int, int]:
     return start, end - start + 1
 
 
-def main() -> int:
-    if len(sys.argv) != 6:
-        die("usage: mkupdate.py IMAGE TARGET VERSION BUILD OUTPUT")
-    image, target, version, build, output = (
-        Path(sys.argv[1]),
-        sys.argv[2],
-        sys.argv[3],
-        sys.argv[4],
-        Path(sys.argv[5]),
-    )
+class RootPolicy:
+    """Read boot policy through ext4 inodes, never by searching image bytes."""
+    def __init__(self, slot):
+        self.slot = slot
+        self.debugfs = shutil.which("debugfs")
+        if not self.debugfs:
+            die("debugfs is required to inspect rootfs boot compatibility (use build-update.sh)")
 
+    def inode(self, path):
+        result = subprocess.run(
+            [self.debugfs, "-R", f"stat {path}", str(self.slot)], capture_output=True, check=False
+        )
+        output = result.stdout.decode("utf-8", "replace")
+        error = result.stderr.decode("utf-8", "replace")
+        if result.returncode:
+            die(f"cannot inspect rootfs {path}: {error.strip()}")
+        match = re.search(r"^Inode:\s+\d+\s+Type:\s+(\S+)\s+Mode:\s+([0-7]+)", output, re.M)
+        if not match:
+            if "File not found by ext2_lookup" in error:
+                return None
+            die(f"cannot inspect rootfs {path}: {error.strip() or output.strip()}")
+        size = re.search(r"^User:.*?\bSize:\s+(\d+)", output, re.M)
+        if not size:
+            die(f"cannot read rootfs inode size for {path}")
+        return match[1], int(match[2], 8), int(size[1])
+
+    def read(self, path, size=None):
+        record = self.inode(path)
+        if record is None:
+            return None
+        if record[0] != "regular" or (size is not None and record[2] != size):
+            die(f"rootfs {path} must be a regular " + (f"raw{size}-byte file" if size else "file"))
+        result = subprocess.run([self.debugfs, "-R", f"cat {path}", str(self.slot)], capture_output=True, check=False)
+        if result.returncode or len(result.stdout) != record[2]:
+            die(f"cannot read rootfs {path}")
+        return result.stdout
+
+    def helper(self):
+        for path in ("/usr", "/usr/sbin"):
+            record = self.inode(path)
+            if record is None or record[0] != "directory":
+                die(f"native helper path is not a directory: {path}")
+        helper = self.inode("/usr/sbin/native-health")
+        if helper is None or helper[0] != "regular" or not helper[1] & 0o111 or not helper[2]:
+            die("native rootfs must contain a regular executable /usr/sbin/native-health")
+
+
+def native_policy(slot: Path, target: str) -> dict:
+    policy = RootPolicy(slot)
+    with slot.open("rb") as stream:
+        stream.seek(boot_payload.TAIL_OFFSET)
+        has_tail = stream.read(len(boot_payload.MAGIC)) == boot_payload.MAGIC
+    for path in ("/etc", "/etc/baseos"):
+        record = policy.inode(path)
+        if record is None:
+            if has_tail: die("sequential tail has no rootfs boot policy")
+            return {}
+        if record[0] != "directory":
+            die(f"rootfs boot policy path is not a directory: {path}")
+    # The unfinished sequential (format2) prototype is not packaged.
+    if has_tail or any(policy.inode(path) is not None for path in
+                       ("/etc/baseos/native-abi", "/etc/baseos/boot-payload-id", "/etc/baseos/boot-payload-format")):
+        die("sequential (format2) rootfs boot policy is not supported")
+    marker = "/etc/baseos/native-generation"
+    record = policy.inode(marker)
+    if record is None:
+        return {}
+    if record[0] != "regular" or record[2] != 32:
+        die("rootfs native-generation must be a regular raw32-byte file")
+    generation = policy.read(marker, 32)
+    if generation is None:
+        die("cannot read the rootfs raw32-byte native generation")
+    policy.helper()
+    # Shipped beside the slot (after it, so every earlier updater, which reads
+    # only manifest and rootfs.img.gz, ignores it): a card whose installed
+    # updater refuses this payload can apply it with the updater it carries.
+    updater = policy.read("/usr/sbin/baseos-update")
+    if not updater:
+        die("native rootfs must contain /usr/sbin/baseos-update")
+    return {"native-generation": generation.hex(), "_updater": updater}
+
+
+def package_image(image, target, version, build):
     start, sectors = rootfs_extent(image)
     size = sectors * SECTOR
     print(f"rootfs slot at LBA {start}, {sectors} sectors ({size} bytes)")
@@ -77,23 +156,27 @@ def main() -> int:
     }
     window = max(len(stamp) for stamp in stamps)
     tail = b""
-    with image.open("rb") as handle, gzip.GzipFile(
-        fileobj=compressed, mode="wb", compresslevel=6, mtime=0
-    ) as gz:
-        handle.seek(start * SECTOR)
-        remaining = size
-        while remaining:
-            chunk = handle.read(min(CHUNK, remaining))
-            if not chunk:
-                die("image is shorter than the rootfs partition it declares")
-            remaining -= len(chunk)
-            digest.update(chunk)
-            gz.write(chunk)
-            haystack = tail + chunk
-            for stamp, seen in stamps.items():
-                if not seen and stamp in haystack:
-                    stamps[stamp] = True
-            tail = chunk[-window:]
+    with tempfile.NamedTemporaryFile(prefix="baseos-update-rootfs-") as slot:
+        with image.open("rb") as handle, gzip.GzipFile(
+            fileobj=compressed, mode="wb", compresslevel=6, mtime=0
+        ) as gz:
+            handle.seek(start * SECTOR)
+            remaining = size
+            while remaining:
+                chunk = handle.read(min(CHUNK, remaining))
+                if not chunk:
+                    die("image is shorter than the rootfs partition it declares")
+                remaining -= len(chunk)
+                digest.update(chunk)
+                gz.write(chunk)
+                slot.write(chunk)
+                haystack = tail + chunk
+                for stamp, seen in stamps.items():
+                    if not seen and stamp in haystack:
+                        stamps[stamp] = True
+                tail = chunk[-window:]
+        slot.flush()
+        policy = native_policy(Path(slot.name), target)
 
     for stamp, seen in stamps.items():
         if not seen:
@@ -110,12 +193,26 @@ def main() -> int:
             ("image-size", size),
             ("image-sha256", digest.hexdigest()),
         )
-    ).encode()
+    )
+    manifest += "".join(f"{key}={value}\n" for key, value in policy.items() if not key.startswith("_"))
+    manifest = manifest.encode()
+    return manifest, compressed.getvalue(), policy
 
-    payload = compressed.getvalue()
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("image", type=Path)
+    for name in ("target", "version", "build"): parser.add_argument(name)
+    parser.add_argument("output", type=Path)
+    args = parser.parse_args()
+    output = args.output
+    manifest, payload, policy = package_image(args.image, args.target, args.version, args.build)
+    members = [("manifest", manifest), ("rootfs.img.gz", payload)]
+    if "_updater" in policy:
+        members.append(("baseos-update", policy["_updater"]))
     output.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(output, "w", format=tarfile.USTAR_FORMAT) as archive:
-        for name, blob in (("manifest", manifest), ("rootfs.img.gz", payload)):
+        for name, blob in members:
             info = tarfile.TarInfo(name)
             info.size = len(blob)
             info.mtime = 0
@@ -124,9 +221,13 @@ def main() -> int:
             archive.addfile(info, io.BytesIO(blob))
 
     print(f"payload:  {output} ({output.stat().st_size} bytes)")
-    print(f"target:   {target}")
-    print(f"version:  {version} ({build})")
-    print(f"sha256:   {digest.hexdigest()}    (publish this next to the download)")
+    print(f"target:   {args.target}")
+    print(f"version:  {args.version} ({args.build})")
+    for name, blob in members:
+        if name == "manifest" or name.startswith("manifest-"):
+            metadata = dict(line.split("=", 1) for line in blob.decode().splitlines())
+            if "image-sha256" in metadata:
+                print(f"sha256:   {metadata['image-sha256']}    ({name}; decompressed whole slot)")
     return 0
 
 

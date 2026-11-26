@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "models": {
+    "rg28xx": {
+      "package_sha256": "ffabd96eae65a94b0a0dc6ce33db7314688b3ead6169d09553b463a8e58fd490",
+      "vendor_uboot_sha256": "677f5631837d00c333efe59d34d2b591f85c7b9bd15e3408ef313bc3785b6116",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rg34xx": {
+      "package_sha256": "56371d984e29e74db63009ce27f829eb0a55ce9007ee5e40c52479b22418af3d",
+      "vendor_uboot_sha256": "0edfa88f7ef990ea4a423a2bbd4c0280006625b8c0cc5438cd2715527e891573",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rg34xxsp": {
+      "package_sha256": "32f92785f3e0819acbd60776e2ef839c1fd1924b31960b98363a93c85300db7e",
+      "vendor_uboot_sha256": "cf493bb84c40c13a5ddbb65faa20744ad74dc160ac26a537cd99989f671f8e4a",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rg35xxh": {
+      "package_sha256": "7d4648c429ca5c21b084bb40147b3ababbd0d200bb5a2c2c05beef26902c0c55",
+      "vendor_uboot_sha256": "f36d9e44ee000880f9da389eb9e082e8078e1c7b24a421e4f1fb529f1a19324f",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rg35xxplus": {
+      "package_sha256": "b3cc7ea963177fb9110e26e7772847b0da084fb275d6e955c1bc7c9103ced8be",
+      "vendor_uboot_sha256": "7564f2d95f2398e81224c1a5f740278982df7003124c8a6296bd815fced1b166",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rg35xxpro": {
+      "package_sha256": "04d64e1772066fdd11e05727e89576b783340dd2b5a1238e9248c5be41a1d605",
+      "vendor_uboot_sha256": "a157998eceb44a5d8c5b9042b04cdd7ce507449af098174d466f546336372199",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rg35xxsp": {
+      "package_sha256": "de38acd6633b7012498c121686f93956fbf625b879fffcea5e85ba5e08dd850c",
+      "vendor_uboot_sha256": "cd6665954631edf4e3471120091f0e47eaa9e1da1e6a653bb60b7e1639355b41",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rg40xxh": {
+      "package_sha256": "d022ec52d5cd91aee7b9336d45dc7c9f6825573793e6e6175902af37b695aa80",
+      "vendor_uboot_sha256": "89065b15a67cd6b4e151d3843f9dd6ce793eb32ba02e01d333e6d75c57585220",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rg40xxv": {
+      "package_sha256": "ea7031f8e64712d9c5a0d8530e4b5b588527f397ebda8239ac4c718c50cd886a",
+      "vendor_uboot_sha256": "4358634965f5853a85c45efbd59bedf527384652665b163b086d50378b1f032a",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rgcubexx": {
+      "package_sha256": "dcd1998046d5174d1f9ffb4e20cbe10fd0e32ce111ef880d9a6d5c9ba6a1e972",
+      "vendor_uboot_sha256": "be8cf8f3f4a3a56c6358fe13e103f2b97aee474d06ac0d0ea1bf27f7472f92c6",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    },
+    "rgsp": {
+      "package_sha256": "f6664df7c8960297f2e690c10345220471f37282eb564355df1872fcd855cd15",
+      "vendor_uboot_sha256": "b33ecbf8f9be8acb50ba87e99357e93450c4825e02d15d1f359beda4a3233d26",
+      "boot_disp": 256,
+      "boot_disp1": 17039360,
+      "boot_disp2": 4
+    }
+  }
+}

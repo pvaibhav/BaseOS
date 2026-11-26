@@ -1,0 +1,170 @@
+rgsp: string '--allen--PE_data' at 0x4a07732e; references at ['0x26418']
+--- code around 0x26418
+  0x262d8: bx       lr
+  0x262da: nop      
+  0x262dc: subs     r5, #0x48
+  0x262de: ldr      r2, [pc, #0x3c]
+  0x262e0: bx       lr
+  0x262e2: movs     r0, r0
+  0x262e4: push     {r3, r4, r5, lr}
+  0x262e6: ldr      r5, [pc, #0x10c]
+  0x262e8: ldr      r3, [r5]
+  0x262ea: cbnz     r3, #0x4a026302
+  0x262ec: ldr      r2, [pc, #0x108]
+  0x262ee: movs     r3, #1
+  0x262f0: str      r3, [r5]
+  0x262f2: ldr      r1, [r2]
+  0x262f4: dmb      sy
+  0x262f8: ldr      r3, [pc, #0x100]
+  0x262fa: orrs     r3, r1
+  0x262fc: dmb      sy
+  0x26300: str      r3, [r2]
+  0x26302: ldr      r4, [pc, #0xfc]
+  0x26304: ldr      r3, [r4]
+  0x26306: dmb      sy
+  0x2630a: orr      r3, r3, #0x4000
+  0x2630e: dmb      sy
+  0x26312: movs     r0, #0xf
+  0x26314: str      r3, [r4]
+  0x26316: bl       #0x4a02621c
+  0x2631a: ldr      r3, [r5]
+  0x2631c: cbnz     r3, #0x4a026334
+  0x2631e: ldr      r2, [pc, #0xd8]
+  0x26320: movs     r3, #1
+  0x26322: str      r3, [r5]
+  0x26324: ldr      r1, [r2]
+  0x26326: dmb      sy
+  0x2632a: ldr      r3, [pc, #0xd0]
+  0x2632c: orrs     r3, r1
+  0x2632e: dmb      sy
+  0x26332: str      r3, [r2]
+  0x26334: ldr      r3, [r4]
+  0x26336: dmb      sy
+  0x2633a: bic      r3, r3, #0x4000
+  0x2633e: dmb      sy
+  0x26342: movs     r0, #0x32
+  0x26344: str      r3, [r4]
+  0x26346: bl       #0x4a02621c
+  0x2634a: ldr      r3, [r5]
+  0x2634c: cbnz     r3, #0x4a026364
+  0x2634e: ldr      r2, [pc, #0xa8]
+  0x26350: movs     r3, #1
+  0x26352: str      r3, [r5]
+  0x26354: ldr      r1, [r2]
+  0x26356: dmb      sy
+  0x2635a: ldr      r3, [pc, #0xa0]
+  0x2635c: orrs     r3, r1
+  0x2635e: dmb      sy
+  0x26362: str      r3, [r2]
+  0x26364: ldr      r3, [r4]
+  0x26366: dmb      sy
+  0x2636a: orr      r3, r3, #0x4000
+  0x2636e: dmb      sy
+  0x26372: movs     r0, #0x64
+  0x26374: str      r3, [r4]
+  0x26376: bl       #0x4a02621c
+  0x2637a: ldr      r2, [pc, #0x88]
+  0x2637c: ldr      r3, [r2]
+  0x2637e: dmb      sy
+  0x26382: bic      r3, r3, #0xf000000
+  0x26386: orr      r3, r3, #0x6000000
+  0x2638a: dmb      sy
+  0x2638e: str      r3, [r2]
+  0x26390: ldr      r3, [r2]
+  0x26392: dmb      sy
+  0x26396: ldr      r5, [pc, #0x70]
+  0x26398: ldr      r4, [r5]
+  0x2639a: dmb      sy
+  0x2639e: ldr      r0, [pc, #0x6c]
+  0x263a0: mov      r1, r4
+  0x263a2: bic      r4, r4, #0x3000
+  0x263a6: bl       #0x4a06a7bc
+  0x263aa: orr      r4, r4, #0x1000
+  0x263ae: dmb      sy
+  0x263b2: str      r4, [r5]
+  0x263b4: ldr      r1, [r5]
+  0x263b6: dmb      sy
+  0x263ba: ldr      r0, [pc, #0x50]
+  0x263bc: bl       #0x4a06a7bc
+  0x263c0: ldr      r3, [pc, #0x4c]
+  0x263c2: ldr      r1, [r3]
+  0x263c4: dmb      sy
+  0x263c8: ldr      r4, [pc, #0x48]
+  0x263ca: eor      r3, r1, #0x40
+  0x263ce: ubfx     r3, r3, #6, #1
+  0x263d2: ldr      r0, [pc, #0x44]
+  0x263d4: str      r3, [r4]
+  0x263d6: bl       #0x4a06a7bc
+  0x263da: ldr      r3, [r4]
+  0x263dc: mov.w    r2, #0x112
+  0x263e0: ldr      r1, [pc, #0x38]
+  0x263e2: ldr      r0, [pc, #0x3c]
+  0x263e4: bl       #0x4a06a7bc
+  0x263e8: ldr      r5, [r4]
+  0x263ea: cmp      r5, #1
+  0x263ec: bne.w    #0x4a026b18
+  0x263f0: b        #0x4a026424
+  0x263f2: nop      
+  0x263f4: subs     r5, #0xb0
+  0x263f6: ldr      r2, [pc, #0x3c]
+  0x263f8: cbz      r4, #0x4a026404
+  0x263fa: lsls     r0, r0, #0xc
+  0x263fc: lsls     r1, r2, #4
+  0x263fe: asrs     r0, r0, #4
+  0x26400: cbz      r0, #0x4a026410
+  0x26402: lsls     r0, r0, #0xc
+  0x26404: sub      sp, #0x40
+  0x26406: lsls     r0, r0, #0xc
+  0x26408: sub      sp, #0xb0
+  0x2640a: lsls     r0, r0, #0xc
+  0x2640c: strb     r6, [r1, #0xc]
+  0x2640e: ldr      r2, [pc, #0x1c]
+  0x26410: sub      sp, #0x80
+  0x26412: lsls     r0, r0, #0xc
+  0x26414: subs     r5, #0xac
+  0x26416: ldr      r2, [pc, #0x3c]
+  0x26418: strb     r6, [r5, #0xc]  <== ref
+  0x2641a: ldr      r2, [pc, #0x1c]
+  0x2641c: str      r1, [sp, #0x26c]
+  0x2641e: ldr      r2, [pc, #0x1c]
+  0x26420: strb     r6, [r1, #0xd]
+  0x26422: ldr      r2, [pc, #0x1c]
+  0x26424: movs     r0, #0xff
+  0x26426: bl       #0x4a027e3c
+  0x2642a: movs     r0, #0x30
+  0x2642c: bl       #0x4a027fcc
+  0x26430: movs     r0, #0xff
+  0x26432: bl       #0x4a027e3c
+  0x26436: movs     r0, #0x52
+  0x26438: bl       #0x4a027fcc
+  0x2643c: movs     r0, #0xff
+  0x2643e: bl       #0x4a027e3c
+  0x26442: mov      r0, r5
+  0x26444: bl       #0x4a027fcc
+  0x26448: movs     r0, #0xe3
+  0x2644a: bl       #0x4a027e3c
+  0x2644e: mov      r0, r5
+  0x26450: bl       #0x4a027fcc
+  0x26454: movs     r0, #0xa
+  0x26456: bl       #0x4a027e3c
+  0x2645a: movs     r0, #0xfd
+  0x2645c: bl       #0x4a027fcc
+  0x26460: movs     r0, #0x23
+  0x26462: bl       #0x4a027e3c
+  0x26466: movs     r0, #0xa2
+  0x26468: bl       #0x4a027fcc
+  0x2646c: movs     r0, #0x25
+  0x2646e: bl       #0x4a027e3c
+  0x26472: movs     r0, #0x14
+  0x26474: bl       #0x4a027fcc
+  0x26478: movs     r0, #0x29
+  0x2647a: bl       #0x4a027e3c
+  0x2647e: mov      r0, r5
+  0x26480: bl       #0x4a027fcc
+  0x26484: movs     r0, #0x2a
+  0x26486: bl       #0x4a027e3c
+  0x2648a: movs     r0, #0xdf
+  0x2648c: bl       #0x4a027fcc
+  0x26490: movs     r0, #0x38
+  0x26492: bl       #0x4a027e3c
+  0x26496: movs     r0, #0xbc

@@ -256,13 +256,6 @@ do_setup() {
 		sleep 0.25 2>/dev/null || sleep 1
 		n=$((n + 1))
 	done
-	if [ -z "$TEST_MODE" ] && [ -n "$adb_enabled" ] && [ -n "$bound" ] \
-		&& [ ! -e /run/baseos-adb-logged ]; then
-		. /usr/share/baseos/boot-log.sh
-		select_boot_log
-		log "adb gadget ready"
-		: > /run/baseos-adb-logged
-	fi
 	if [ -n "$storage_requested" ]; then
 		if [ -n "$storage_device" ] && [ -n "$bound" ]; then
 			storage_status ready

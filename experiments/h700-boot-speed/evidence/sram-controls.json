@@ -1,0 +1,97 @@
+[
+  {
+    "artifact": "sram-control",
+    "boot_id": "5b331f05-4399-404b-b5dc-904250a90ea5",
+    "operation": 0,
+    "stage": 0,
+    "passed": false,
+    "restart_host_elapsed_s": 15.883340915897861,
+    "normal_environment_exact": true,
+    "health": [
+      "GPU_OK",
+      "WIFI_OK",
+      "FB_OK",
+      "6",
+      "3",
+      "6",
+      "100",
+      "1"
+    ]
+  },
+  {
+    "artifact": "sram-control-v2",
+    "boot_id": "9dd7856e-3ff8-4523-ad5e-bcc36d09f92c",
+    "operation": 0,
+    "stage": 10,
+    "passed": false,
+    "restart_host_elapsed_s": 16.040150083019398,
+    "normal_environment_exact": true,
+    "health": [
+      "GPU_OK",
+      "WIFI_OK",
+      "FB_OK",
+      "6",
+      "3",
+      "6",
+      "100",
+      "1"
+    ]
+  },
+  {
+    "artifact": "sram-control-v3",
+    "boot_id": "ed1a612c-d2f2-4913-b057-17f3b46f0848",
+    "operation": 0,
+    "stage": 10,
+    "passed": false,
+    "restart_host_elapsed_s": 16.588619625079446,
+    "normal_environment_exact": true,
+    "health": [
+      "GPU_OK",
+      "WIFI_OK",
+      "FB_OK",
+      "6",
+      "3",
+      "6",
+      "100",
+      "1"
+    ]
+  },
+  {
+    "artifact": "sram-permissions",
+    "boot_id": "6c42d5c6-cdda-4b99-ae2d-0627c57d1b5a",
+    "operation": 0,
+    "stage": 10,
+    "passed": false,
+    "restart_host_elapsed_s": 15.47749824996572,
+    "normal_environment_exact": true,
+    "health": [
+      "GPU_OK",
+      "WIFI_OK",
+      "FB_OK",
+      "6",
+      "3",
+      "6",
+      "100",
+      "1"
+    ]
+  },
+  {
+    "artifact": "sram-control-v4",
+    "boot_id": "bbca8947-6351-4774-a0dd-60b61a253573",
+    "operation": 0,
+    "stage": 2,
+    "passed": true,
+    "restart_host_elapsed_s": 18.155331749934703,
+    "normal_environment_exact": true,
+    "health": [
+      "GPU_OK",
+      "WIFI_OK",
+      "FB_OK",
+      "6",
+      "3",
+      "6",
+      "100",
+      "1"
+    ]
+  }
+]

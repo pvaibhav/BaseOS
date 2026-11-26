@@ -88,6 +88,13 @@ case "$boot_mode" in
 		;;
 esac
 if [ "$boot_mode" = 1 ]; then
+	# Native loader acceptance precedes charger waits and intentional poweroff.
+	# A failed check leaves its pending attempt/watchdog for stock recovery.
+	if [ -e /sys/firmware/devicetree/base/chosen/baseos,native-boot ]; then
+		if ! /usr/sbin/native-health --accept-charger; then
+			while :; do /bin/sleep 60; done
+		fi
+	fi
 	# This blocks rcS (and therefore init's respawns) until explicit boot
 	# intent. No GPU, network, card mount or update-trial work has begun.
 	while ! /usr/sbin/baseos-charger; do /bin/sleep 60; done
@@ -115,6 +122,29 @@ if ! /bin/mount -t ext4 -o rw,noatime /dev/mmcblk0p6 /data 2>/dev/null; then
 fi
 /bin/mkdir -p /data/bluetooth /data/bluealsa /data/dropbear
 /bin/ln -sfn /data/bluetooth /var/lib/bluetooth
+
+# Native loader health is independent of root-slot trial confirmation. Finish
+# it before either updater command can reboot; USB/no-frontend boots qualify.
+# A refusal still ends in the watchdog's restart into stock, exactly as before;
+# its reason goes onto /data first, where the next start's log and
+# diagnostics pick it up. Only this failure path writes anything.
+if [ -e /sys/firmware/devicetree/base/chosen/baseos,native-boot ]; then
+	if ! native_health=$(/usr/sbin/native-health --accept 2>&1); then
+		native_health=$(printf '%s' "$native_health" | tr '\n' ' ')
+		native_health=${native_health% }
+		case "$native_health" in *'mismatched generation'*)
+			native_health="$native_health (expected on the first start after an update: the fast loader on the card is the earlier version's; the stock start that follows installs the new one)" ;;
+		esac
+		read -r native_up _ < /proc/uptime 2>/dev/null || native_up=0
+		[ ! -d /data/boot-native-v1 ] \
+			|| printf 'native: a fast start reached Linux but failed its health check (%s s): %s\n' \
+				"$native_up" "$native_health" >> /data/boot-native-v1/install.log 2>/dev/null
+		printf '%s An earlier start with the fast loader reached Linux but failed its health check: %s\n' \
+			"$native_up" "$native_health" >> /data/baseos-boot.log 2>/dev/null
+		sync
+		while :; do /bin/sleep 60; done
+	fi
+fi
 
 # A freshly updated slot is on trial until a frontend session starts. Count the
 # boots that never got that far and restore the previous slot if this one
@@ -306,14 +336,13 @@ fi
 # Older rootfs images may lack the alias baked into current builds.
 [ "$(readlink /mnt/SDCARD)" = /mnt/sdcard ] || /bin/ln -sfn /mnt/sdcard /mnt/SDCARD
 
+# One header per boot. Everything else in the log belongs to the boot above it.
 . /usr/share/baseos/boot-log.sh
 select_boot_log
 read -r boot_id < /proc/sys/kernel/random/boot_id
-log "=== BaseOS boot $(date '+%Y-%m-%d %H:%M:%S') ($boot_id) ==="
+[ ! -r /etc/baseos-release ] || . /etc/baseos-release
+log "=== BaseOS boot $(date '+%Y-%m-%d %H:%M:%S'), BaseOS ${BASEOS_VERSION:-?} for ${BASEOS_TARGET:-?}, boot ${boot_id%%-*} ==="
 flush_early_boot_log
-if [ "$LOG" = /mnt/sdcard/baseos-boot.log ]; then
-	log "rcS reached card mount"
-fi
 
 # BaseOS settings always come from TF1, even when TF2 holds the frontend. Reuse
 # TF1 at /mnt/sdcard, or briefly mount it read-only for config and update scans.
@@ -340,6 +369,12 @@ fi
 # boot after the user ejects and restarts without MENU.
 if [ "$USB_STORAGE_MODE" -eq 0 ]; then
 	[ -x /usr/sbin/baseos-update ] && /usr/sbin/baseos-update apply
+fi
+if [ "$USB_STORAGE_MODE" -eq 0 ] && [ -f /usr/share/baseos/native/capsule.bin ] \
+	&& [ -x /usr/sbin/native-health ]; then
+	if ! wake_sync=$(/usr/sbin/native-health --sync-wake-dram 2>&1); then
+		log "wake DRAM sync failed${wake_sync:+: $wake_sync}"
+	fi
 fi
 # Unmounting waits for the kernel's next quiet point, about 60 ms. Nothing
 # below needs TF1 gone first, so let it finish beside the rest.

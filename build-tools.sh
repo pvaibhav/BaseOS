@@ -10,6 +10,8 @@
 #   work/tools/gptslot        (A/B root-slot geometry + flip for updates)
 #   work/tools/charger-wait   (blocking charger recovery input)
 #   work/tools/boot-clock     (H700 hardware-counter boot-stage timing)
+#   work/tools/native-health  (native boot health acceptance)
+#   work/tools/baseos-regs    (read-only register view for baseos-diag)
 #   work/tools/axp-off        (cut power at the PMIC; rcK's last step)
 #   work/tools/sftp-server    (OpenSSH sftp subsystem child for dropbear)
 #   work/tools/e2fsck         (root filesystem repair, run only when flagged)
@@ -92,14 +94,16 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   strip /out/gptslot
 '
 
-# PMIC shutdown and the blocking POWER-key fallback for charger-only boots.
+# Early boot helpers: PMIC shutdown, charger input, timing and native acceptance.
 docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   -v "$TOOLS":/out -v "$HERE/src":/src:ro alpine:3.20 sh -euc '
   apk add -q build-base linux-headers
   gcc -static -O2 -Wall -Wextra -o /out/axp-off /src/axp-off.c
   gcc -static -O2 -Wall -Wextra -o /out/charger-wait /src/charger-wait.c
   gcc -static -O2 -Wall -Wextra -o /out/boot-clock /src/boot-clock.c
-  strip /out/axp-off /out/charger-wait /out/boot-clock
+  gcc -std=c11 -static -O2 -Wall -Wextra -Werror -o /out/native-health /src/native-health.c
+  gcc -std=c11 -static -O2 -Wall -Wextra -Werror -o /out/baseos-regs /src/baseos-regs.c
+  strip /out/axp-off /out/charger-wait /out/boot-clock /out/native-health /out/baseos-regs
 '
 
 # e2fsck: the vendor initramfs used to check the root filesystem on every boot.
@@ -237,6 +241,9 @@ file "$TOOLS/busybox" "$TOOLS/dropbearmulti" "$TOOLS/curl" \
 [ -x "$TOOLS/gptslot" ] || { echo "gptslot build did not produce an executable" >&2; exit 1; }
 [ -x "$TOOLS/charger-wait" ] || { echo "charger-wait build did not produce an executable" >&2; exit 1; }
 [ -x "$TOOLS/axp-off" ] || { echo "axp-off build did not produce an executable" >&2; exit 1; }
+[ -x "$TOOLS/native-health" ] || { echo "native-health build did not produce an executable" >&2; exit 1; }
+file "$TOOLS/native-health" | grep -q "statically linked" \
+  || { echo "native-health build is not static" >&2; exit 1; }
 [ -x "$TOOLS/curl" ] || { echo "curl build did not produce an executable" >&2; exit 1; }
 file "$TOOLS/curl" | grep -q "statically linked" \
   || { echo "curl build is not static" >&2; exit 1; }

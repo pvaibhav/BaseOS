@@ -44,6 +44,7 @@ if [ ! -x "$HERE/work/tools/busybox" ] \
   || [ ! -x "$HERE/work/tools/adbd" ] \
   || [ ! -x "$HERE/work/tools/avahi-daemon" ] \
   || [ ! -x "$HERE/work/tools/boot-clock" ] \
+  || [ ! -x "$HERE/work/tools/baseos-regs" ] \
   || [ ! -x "$HERE/work/tools/e2fsck" ] \
   || ! "$HERE/tools/tools-stamp.sh" | cmp -s - "$HERE/work/tools/.stamp"; then
 	"$HERE/build-tools.sh"

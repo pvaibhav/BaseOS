@@ -33,6 +33,7 @@ import struct
 import subprocess
 import sys
 import time
+import zlib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -55,7 +56,7 @@ REGIONS = {
     "boot": ("/dev/mmcblk0p4", 0, 64 * 1024 * 1024),
     "env": ("/dev/mmcblk0p3", 0, 16 * 1024 * 1024),
 }
-WRITABLE = ("boot0", "toc1", "boot")
+WRITABLE = ("boot0", "toc1", "boot", "env")
 PINNED = ("toc1", "boot")
 EMPTY_CPIO = (b"070701" + b"%08X" * 13 % (0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 11, 0)
               + b"TRAILER!!!\0").ljust(512, b"\0")
@@ -77,13 +78,21 @@ def raw_shell(command: str, timeout: float):
 def sh(command: str, timeout: float = 30) -> str:
     # This adbd ends the session, killing the command, as soon as nothing holds
     # its terminal open: BusyBox dd with if=/of= and a redirected stderr is cut
-    # off after a few sectors. A trailing echo keeps the shell attached, and its
-    # marker proves the command ran to the end.
-    p = raw_shell(command + "\necho __LAB_END__", timeout)
+    # off after a few sectors. The trailing marker keeps the parent attached;
+    # a subshell lets it report the command's status even after an explicit exit.
+    marker = "__LAB_END__" + os.urandom(16).hex()
+    wrapped = ("(\n" + command + "\n)\nlab_shell_status=$?\n"
+               + "printf '\\n" + marker + ":%s\\n' \"$lab_shell_status\"")
+    p = raw_shell(wrapped, timeout)
     out = p.stdout.replace("\r", "")
-    if p.returncode or not out.rstrip().endswith("__LAB_END__"):
+    completion = re.search(r"\n" + marker + r":([0-9]{1,3})\n\Z", out)
+    if p.returncode or not completion or int(completion[1]) > 255:
         raise RuntimeError(f"device command did not finish: {command[:80]!r}: {p.stderr or out[-200:]}")
-    return out.rstrip()[:-len("__LAB_END__")].strip()
+    output = out[:completion.start()].strip()
+    if int(completion[1]):
+        raise RuntimeError(f"device command exited with status {completion[1]}: {command[:80]!r}:"
+                           f" {p.stderr or output[-200:]}")
+    return output
 
 
 def identity() -> None:
@@ -92,8 +101,10 @@ def identity() -> None:
     require(out == ["1", "1", "303104", "131072"], f"not the expected {TARGET} device and layout: {out}")
 
 
-def read_region(name: str) -> bytes:
-    device, sector, size = REGIONS[name]
+def read_region(name: str, size: int | None = None) -> bytes:
+    device, sector, limit = REGIONS[name]
+    size = limit if size is None else size
+    require(0 < size <= limit and size % 512 == 0, "invalid read extent")
     sh(f"dd if={device} of=/tmp/lab-read.bin bs=512 skip={sector} count={size // 512} iflag=direct 2>/dev/null", 120)
     local = WORK / "tmp-read.bin"
     subprocess.run(ADB + ["pull", "/tmp/lab-read.bin", str(local)], check=True, capture_output=True, timeout=300)
@@ -104,15 +115,28 @@ def read_region(name: str) -> bytes:
     return blob
 
 
-def device_sha(name: str, size: int) -> str:
-    device, sector, _ = REGIONS[name]
-    require(size % 512 == 0, "unaligned region")
+def device_sha(name: str, size: int, offset: int = 0) -> str:
+    device, sector, limit = REGIONS[name]
+    require(size % 512 == 0 and offset % 512 == 0 and 0 <= offset <= limit - size, "unaligned/out-of-range region")
+    sector += offset // 512
     return sh(f"dd if={device} bs=512 skip={sector} count={size // 512} iflag=direct 2>/dev/null | sha256sum", 120).split()[0]
 
 
-def write_region(name: str, blob: bytes) -> None:
+def write_region(name: str, blob: bytes, offset: int = 0, *, env_image: bytes | None = None) -> None:
     device, sector, limit = REGIONS[name]
-    require(name in WRITABLE and len(blob) % 512 == 0 and len(blob) <= limit, f"refusing write to {name}")
+    require(name in WRITABLE and len(blob) % 512 == 0 and offset % 512 == 0
+            and 0 <= offset <= limit - len(blob), f"refusing write to {name}")
+    if name == "env":
+        whole = blob if env_image is None else env_image
+        require(offset == 0 and len(whole) == 0x20000 and word(whole, 0) == zlib.crc32(whole[4:]),
+                "refusing an invalid environment image")
+        if env_image is None:
+            require(len(blob) == 0x20000, "refusing an unproved partial environment write")
+        else:
+            require(len(blob) == 512 and blob == whole[:512]
+                    and read_region("env", 0x20000)[512:] == whole[512:],
+                    "environment tail differs; refusing partial write")
+    sector += offset // 512
     local = WORK / "tmp-write.bin"
     local.write_bytes(blob)
     subprocess.run(ADB + ["push", str(local), "/tmp/lab-write.bin"], check=True, capture_output=True, timeout=300)
@@ -120,7 +144,9 @@ def write_region(name: str, blob: bytes) -> None:
     require(sh("sha256sum /tmp/lab-write.bin").split()[0] == sha(blob), f"{name}: staged copy differs")
     sh(f"dd if=/tmp/lab-write.bin of={device} bs=512 seek={sector} conv=notrunc,fsync 2>/dev/null; sync", 180)
     sh("rm -f /tmp/lab-write.bin")
-    require(device_sha(name, len(blob)) == sha(blob), f"{name}: readback differs — DO NOT RESTART, restore first")
+    require(device_sha(name, len(blob), offset) == sha(blob), f"{name}: readback differs — DO NOT RESTART, restore first")
+    if env_image is not None:
+        require(device_sha("env", len(env_image)) == sha(env_image), "full environment readback differs")
     print(f"  wrote and verified {name}: {len(blob)} bytes {sha(blob)[:16]}")
 
 
@@ -338,26 +364,50 @@ def deploy(args) -> None:
     boot_critical_ok()
 
 
-def reboot() -> None:
+def _restart_shell(restart_command: str | None = None) -> str:
+    """Quiesce only writable mounted filesystems; undo our changes on refusal."""
+    command = r"""cd /;
+mount_mode() { awk -v target="$1" '$2 == target { n=split($4, opts, ","); for (i=1; i<=n; i++) if (opts[i] == "rw" || opts[i] == "ro") { print opts[i]; exit } }' /proc/mounts; };
+root_mode=$(mount_mode /); data_mode=$(mount_mode /data); card_mode=$(mount_mode /mnt/sdcard);
+case "$root_mode:$data_mode:$card_mode" in rw:rw:|rw:ro:|ro:rw:|ro:ro:|rw:rw:rw|rw:rw:ro|rw:ro:rw|rw:ro:ro|ro:rw:rw|ro:rw:ro|ro:ro:rw|ro:ro:ro) ;; *) echo RESTART_FAILED_MOUNT_STATE; exit 1;; esac;
+root_changed=0; data_changed=0; card_changed=0;
+paused=$(ps | grep -E '[S]ystem/slot|[n]extui.elf|[m]inarch.elf' | awk '{print $1}');
+resume() { for pid in $paused; do kill -CONT "$pid" 2>/dev/null; done; };
+restore_mounts() {
+    if test "$root_changed" = 1; then /bin/mount -o remount,rw / || echo RESTART_FAILED_RESTORE_ROOT; fi;
+    if test "$data_changed" = 1; then /bin/mount -o remount,rw /data || echo RESTART_FAILED_RESTORE_DATA; fi;
+    if test "$card_changed" = 1; then /bin/mount -o remount,rw /mnt/sdcard || echo RESTART_FAILED_RESTORE_CARD; fi;
+};
+failed() { restore_mounts; resume; echo "RESTART_FAILED_$1"; exit 1; };
+quiesce() {
+    test "$2" = rw || return 0;
+    /bin/mount -o remount,ro "$1"; mount_status=$?;
+    current_mode=$(mount_mode "$1");
+    if test "$current_mode" = ro; then
+        case "$1" in /) root_changed=1;; /data) data_changed=1;; /mnt/sdcard) card_changed=1;; esac;
+    fi;
+    test "$mount_status" = 0 && test "$current_mode" = ro;
+};
+for pid in $paused; do kill -STOP "$pid" 2>/dev/null; done;
+if test "$data_mode" = rw; then /bin/dd if=/dev/urandom of=/data/random-seed bs=512 count=1 2>/dev/null || failed SEED; fi;
+/bin/sync || failed SYNC;
+quiesce /mnt/sdcard "$card_mode" || failed CARD;
+quiesce /data "$data_mode" || failed DATA;
+quiesce / "$root_mode" || failed ROOT;
+unset SHARED_USERDATA_PATH;
+LD_LIBRARY_PATH=/usr/lib:/usr/lib/aarch64-linux-gnu /tmp/reboot_next;
+failed COMMAND_RETURNED"""
+    if restart_command is not None:
+        command = command.replace("/tmp/reboot_next;", restart_command + ";")
+    return command
+
+
+def reboot(restart_command: str | None = None, *, require_frontend=True) -> None:
     boot_critical_ok()
     old = sh("cat /proc/sys/kernel/random/boot_id")
     subprocess.run(ADB + ["push", str(WORK / "backup/reboot_next"), "/tmp/reboot_next"], check=True, capture_output=True)
     require(sh("chmod 755 /tmp/reboot_next; sha256sum /tmp/reboot_next").split()[0] == REBOOT_NEXT_SHA, "reboot_next differs")
-    # Pause the frontend first so nothing is still writing to the card when it
-    # is detached. Paused, never killed: init would respawn it.
-    # A restart that does not go through resumes the frontend: left paused, it
-    # is a frozen screen that only a manual restart clears.
-    command = """cd /;
-paused=$(ps | grep -E '[S]ystem/slot|[n]extui.elf|[m]inarch.elf' | awk '{print $1}');
-resume() { for pid in $paused; do kill -CONT "$pid" 2>/dev/null; done; };
-for pid in $paused; do kill -STOP "$pid" 2>/dev/null; done;
-/bin/dd if=/dev/urandom of=/data/random-seed bs=512 count=1 2>/dev/null || { resume; exit 1; };
-/bin/sync;
-if ! /bin/mount -o remount,ro /data; then resume; echo RESTART_FAILED_DATA; exit 1; fi;
-if ! /bin/mount -o remount,ro /; then /bin/mount -o remount,rw /data; resume; echo RESTART_FAILED_ROOT; exit 1; fi;
-unset SHARED_USERDATA_PATH;
-LD_LIBRARY_PATH=/usr/lib:/usr/lib/aarch64-linux-gnu /tmp/reboot_next;
-/bin/mount -o remount,rw /data; resume; echo RESTART_FAILED"""
+    command = _restart_shell(restart_command)
     try:
         result = raw_shell(command, 15).stdout
         require("RESTART_FAILED" not in result and "every shutdown method failed" not in result, result)
@@ -366,13 +416,15 @@ LD_LIBRARY_PATH=/usr/lib:/usr/lib/aarch64-linux-gnu /tmp/reboot_next;
     deadline = time.monotonic() + 150
     while time.monotonic() < deadline:
         try:
-            state = sh("cat /proc/sys/kernel/random/boot_id; cat /run/boot-frontend-exec", 4).split()
-            if len(state) == 2 and state[0] != old and float(state[1]) > 0:
+            check = ("cat /run/boot-frontend-exec" if require_frontend else
+                     "test -e /dev/mali0 && test -e /dev/fb0 && test -d /sys/class/net/wlan0 && echo ready")
+            state = sh("cat /proc/sys/kernel/random/boot_id; " + check, 4).split()
+            if len(state) == 2 and state[0] != old and (float(state[1]) > 0 if require_frontend else state[1] == "ready"):
                 return
         except (RuntimeError, ValueError, subprocess.TimeoutExpired):
             pass
         time.sleep(0.5)
-    raise SystemExit("lab: no fresh boot with a frontend handoff after 150 s; stopping")
+    raise SystemExit("lab: no fresh boot with the required readiness after 150 s; stopping")
 
 
 def bootevent(text: str) -> dict:
@@ -387,12 +439,12 @@ def bootevent(text: str) -> dict:
     return rows
 
 
-def collect(label: str) -> dict:
+def collect(label: str, *, require_frontend=True) -> dict:
     early = sh("cat /proc/uptime; dmesg -r", 20)
     while float(sh("cat /proc/uptime").split()[0]) < 14:
         time.sleep(1)
-    handoff = list(map(float, sh("cat /run/boot-clock-handoff 2>/dev/null").split()))
-    if not handoff:
+    handoff = list(map(float, sh("cat /run/boot-clock-handoff 2>/dev/null || true").split()))
+    if not handoff and require_frontend:
         # Releases before 1.3.0 have no boot-clock. Its pre-kernel figure, the
         # hardware counter minus the kernel's raw uptime, is the same at any
         # moment of a boot, so run the tool now and add the handoff uptime.
@@ -400,15 +452,17 @@ def collect(label: str) -> dict:
         legacy = float(sh("cat /run/boot-frontend-exec"))
         pre = float(sh("chmod 755 /tmp/boot-clock; /tmp/boot-clock").split()[1])
         handoff = [legacy, pre, legacy, round(pre + legacy, 3)]
+    if not handoff and not require_frontend: handoff = [None] * 4
     require(len(handoff) == 4, "no boot-clock record")
     events = sh("cat /proc/bootevent")
     health = sh("test -e /dev/mali0 && echo GPU_OK; test -d /sys/class/net/wlan0 && echo WIFI_OK;"
                 " test -e /dev/fb0 && echo FB_OK; grep -c . /proc/asound/cards; ls /dev/input | grep -c event;"
                 " ls /sys/bus/usb/devices | grep -c '^usb'; cat /sys/class/power_supply/axp2202-battery/capacity;"
-                " ps | grep -c '[S]ystem/slot$'")
+                " ps | grep -c -E '[S]ystem/slot$|[n]extui.elf$' || true")
     data = {
         "label": label, "installed": (WORK / "installed").read_text().strip() if (WORK / "installed").exists() else "backup",
         "boot_id": sh("cat /proc/sys/kernel/random/boot_id"),
+        "frontend_required": require_frontend,
         "legacy_handoff_s": handoff[0], "pre_kernel_s": handoff[1], "post_kernel_s": handoff[2], "combined_s": handoff[3],
         "cmdline": sh("cat /proc/cmdline"), "root_mount": sh("grep ' / ' /proc/mounts"),
         # Which card became the frontend card: a faster boot can reach the card
@@ -425,7 +479,9 @@ def collect(label: str) -> dict:
     (runs / f"{label}-{n}.json").write_text(json.dumps(data, indent=2) + "\n")
     (runs / f"{label}-{n}.dmesg").write_text(early + "\n")
     (runs / f"{label}-{n}.bootevent").write_text(events + "\n")
-    print(f"  {label}-{n}: pre {handoff[1]:.3f}  post {handoff[2]:.3f}  combined {handoff[3]:.3f}"
+    timing = (f"pre {handoff[1]:.3f}  post {handoff[2]:.3f}  combined {handoff[3]:.3f}"
+              if handoff[1] is not None else "OS control; no frontend benchmark")
+    print(f"  {label}-{n}: {timing}"
           f"  kernel {data['initcalls_ms'].get('Kernel_init_done', 0) / 1000:.3f}  card {data['frontend_card']}"
           f"  health {' '.join(data['health'])}", flush=True)
     return data

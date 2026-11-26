@@ -1,0 +1,107 @@
+{
+  "scope": "Per-card persistent native boot-chain qualification on two lab devices; RGSP installation pending. No all-eleven-model hardware, physical-panel, cold-button or arbitrary torn-sector guarantee.",
+  "required_reports": 8,
+  "passed_reports": [
+    {
+      "model": "rg34xxsp",
+      "kind": "noack-health-decline",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg34xxsp/noack-health-decline/run.json",
+      "sha256": "d8dd21dc184782f65981050191084158e111b45627789acba034c2a1f3c61080",
+      "passed": true
+    },
+    {
+      "model": "rg34xxsp",
+      "kind": "native-cycle-1-v2",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg34xxsp/native-cycle-1-v2/run.json",
+      "sha256": "9478c357173dad99e75ba9ea84d39829423915d756fc11fd64ed342f609717fa",
+      "passed": true
+    },
+    {
+      "model": "rg34xxsp",
+      "kind": "native-cycle-2",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg34xxsp/native-cycle-2/run.json",
+      "sha256": "b3a2028e3b1db0cf34139c6d6a10ee31d07c21e1ba4796fc1b8f37fd3aa7e0cc",
+      "passed": true
+    },
+    {
+      "model": "rg34xxsp",
+      "kind": "sleep",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg34xxsp/sleep/run.json",
+      "sha256": "e9175cf0dce724be108200dcb62be7a39d4515e49f12388ae41f9cce37c64167",
+      "passed": true
+    },
+    {
+      "model": "rg34xxsp",
+      "kind": "native-after-sleep",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg34xxsp/native-after-sleep/run.json",
+      "sha256": "b7433e7f15c1d982d607f3fc3f38a690c8c9d7e620e9e27be6a80c70ec6a9e99",
+      "passed": true
+    },
+    {
+      "model": "rg40xxv",
+      "kind": "noack-v2",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg40xxv/noack-v2/run.json",
+      "sha256": "12d241cad16b9ced06b81a77dee4bc57917787a2f984143521363cb1295b66ec",
+      "passed": true
+    },
+    {
+      "model": "rg40xxv",
+      "kind": "native-cycle-1",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg40xxv/native-cycle-1/run.json",
+      "sha256": "1f84c36a22f0a3fb65a05f5a703b5cc8b09c05873fa0229168ecb1812fbaf4ca",
+      "passed": true
+    },
+    {
+      "model": "rg40xxv",
+      "kind": "native-cycle-2",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg40xxv/native-cycle-2/run.json",
+      "sha256": "dd15b2a508e9ea16f13f8da93a384d5eb312f1d1d3d35475302268bd54d968dd",
+      "passed": true
+    },
+    {
+      "model": "rg40xxv",
+      "kind": "sleep",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg40xxv/sleep/run.json",
+      "sha256": "43b57f90d96f53ba039bb2f52a4e64a2191f95672136e7f6940ef3bc5cf27fd6",
+      "passed": true
+    },
+    {
+      "model": "rg40xxv",
+      "kind": "native-after-sleep",
+      "path": "work/h700-loader/raw-persistent-hardware-v1/rg40xxv/native-after-sleep/run.json",
+      "sha256": "02a4691859ba8e6a95c021f4e24aaa7174e65f30ff563128b8a64ff79923c00f",
+      "passed": true
+    }
+  ],
+  "artifacts": "work/h700-loader/raw-release-artifacts-v1",
+  "installer": {
+    "path": "work/h700-loader/install-rgsp-release.py",
+    "sha256": "414b410bab525634fc58dd77250efdea525340bdf77791e0a47be9228abe4f98",
+    "host_cases": 84,
+    "report": "work/h700-loader/rgsp-user-install/installer-host-v2/host-report.json"
+  },
+  "benchmarks": {
+    "scope": "Five alternating warm pairs per device, clean restore-first native path, counter-origin times, correct DE writeback on all 20 boots; not repeated persistent timings.",
+    "rg34xxsp": {
+      "frontend_exec_baseline_s": 5.811,
+      "frontend_exec_native_s": 2.913,
+      "settled_baseline_s": 8.701,
+      "settled_native_s": 5.723,
+      "evidence": "work/h700-loader/display-clean-matched-v1/comparison.json"
+    },
+    "rg40xxv": {
+      "frontend_exec_baseline_s": 4.181,
+      "frontend_exec_native_s": 2.765,
+      "settled_baseline_s": 5.632,
+      "settled_native_s": 4.211,
+      "evidence": "work/h700-loader/rg40xxv/display-clean-matched-v1/comparison.json"
+    }
+  },
+  "open_gates": [
+    "Generic prepared-SP LPDDR4 training",
+    "Physical cold-power and charger coverage",
+    "All-eleven-model hardware acceptance and generic image assembly",
+    "Repeated persistent-release benchmark",
+    "Step 2 sequential kernel and library payload plus boot-image A/B"
+  ]
+}
