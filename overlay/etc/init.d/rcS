@@ -113,6 +113,7 @@ fi
 # This module starts them now, beside the rest of startup. On boot files that
 # hold nothing back it finds nothing to do.
 [ ! -f /lib/modules/h700_late_usb.ko ] || /sbin/insmod /lib/modules/h700_late_usb.ko 2>/dev/null &
+[ ! -f /lib/modules/h700_rumble_pwm.ko ] || /sbin/insmod /lib/modules/h700_rumble_pwm.ko 2>/dev/null
 
 # Persistent state partition (p6, label "userdata"). It survives system
 # updates: an A/B slot flip only moves the rootfs partition.

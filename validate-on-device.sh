@@ -68,6 +68,7 @@ chk "battery sysfs (AXP2202)"          "test -r /sys/class/power_supply/axp2202-
 chk "thermal zones"                    "test -r /sys/class/thermal/thermal_zone0/temp"
 chk "deep sleep available (mem)"       "grep -q mem /sys/power/state"
 chk "rumble sysfs (moto)"              "test -w /sys/class/power_supply/axp2202-battery/moto"
+chk "rumble PWM module loaded (h700_rumble_pwm)" "grep -q h700_rumble_pwm /proc/modules"
 if [ "$BASEOS_EXPECTED_WIFI" = 1 ]; then
 	chk "wifi module loaded (8821cs)"  "grep -q 8821cs /proc/modules"
 	chk "wifi interface (wlan0)"       "test -d /sys/class/net/wlan0"

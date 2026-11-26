@@ -92,6 +92,8 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   install -m 644 /work/audio-module/h700_speaker_amp.ko "$R/usr/lib/modules/h700_speaker_amp.ko"
   # Starts the USB host controllers that the boot files hold back; see rcS.
   install -m 644 /work/audio-module/h700_late_usb.ko "$R/usr/lib/modules/h700_late_usb.ko"
+  # Software PWM wrapper for the AXP2202 boolean moto rumble node; see rcS.
+  install -m 644 /work/audio-module/h700_rumble_pwm.ko "$R/usr/lib/modules/h700_rumble_pwm.ko"
 
   # flat module paths used by rcS / setBluetooth.sh
   [ ! -f "$R/usr/lib/modules/4.9.170/kernel/drivers/net/wireless/rtl8821cs/8821cs.ko" ] \
