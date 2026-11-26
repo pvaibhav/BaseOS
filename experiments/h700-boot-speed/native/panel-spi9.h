@@ -20,9 +20,9 @@ static inline void baseos_panel_spi9_update(struct baseos_panel_spi9 *port,
                                            uint32_t address, uint32_t mask, uint32_t bits)
 {
     uint32_t value = port->io.read(port->io.context, address);
-    port->io.barrier(port->io.context);
+    (port->io.barrier)(port->io.context);
     value = (value & ~mask) | bits;
-    port->io.barrier(port->io.context);
+    (port->io.barrier)(port->io.context);
     port->io.write(port->io.context, address, value);
 }
 
