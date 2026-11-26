@@ -88,18 +88,31 @@ static int device_open(const char *name, int flags, ...)
 {
     if (startup_fixture && (!strcmp(name, FDT_GENERATION) || !strcmp(name, INSTALLED_GENERATION) ||
                             !strcmp(name, BOOT_MODE) || !strcmp(name, CMDLINE) ||
-                            !strcmp(name, BOOT_DISPLAY))) return open(name, flags);
+                            !strcmp(name, BOOT_DISPLAY) || !strcmp(name, FDT_DRAM_PARA) ||
+                            !strcmp(name, NATIVE_CAPSULE) || !strcmp(name, USB_STORAGE_FLAG) ||
+                            !strcmp(name, MMC_DISK) ||
+                            !strncmp(name, FDT_DRAM_DIR "/", sizeof(FDT_DRAM_DIR)))) return open(name, flags);
     if (!strcmp(name, "/dev/mem")) { memory_opens++; return 1000; }
     if (!strcmp(name, "/dev/mali0")) { probes++; return gpu_missing ? -1 : 1001; }
     if (!strcmp(name, "/dev/fb0")) return 1002;
     if (!strcmp(name, "/dev/input/event0")) return 1003;
     const char *redirect = NULL;
+    char dram_redirect[256];
     if (!strcmp(name, FDT_GENERATION)) redirect = file_path("fdt");
     else if (!strcmp(name, INSTALLED_GENERATION)) redirect = file_path("installed");
     else if (!strcmp(name, BOOT_MODE)) redirect = file_path("boot-mode");
     else if (!strcmp(name, CMDLINE)) redirect = file_path("cmdline");
     else if (!strcmp(name, BOOT_DISPLAY)) redirect = file_path("display-record");
     else if (!strcmp(name, ACK_LOCK)) redirect = file_path("lock");
+    else if (!strcmp(name, FDT_DRAM_PARA)) redirect = file_path("dram-para");
+    else if (!strcmp(name, NATIVE_CAPSULE)) redirect = file_path("capsule.bin");
+    else if (!strcmp(name, USB_STORAGE_FLAG)) redirect = file_path("usb-storage-device");
+    else if (!strcmp(name, MMC_DISK)) redirect = file_path("mmcblk0");
+    else if (!strncmp(name, FDT_DRAM_DIR "/", sizeof(FDT_DRAM_DIR))) {
+        assert(snprintf(dram_redirect, sizeof(dram_redirect), "%s/dram-%s",
+                        directory, name + sizeof(FDT_DRAM_DIR)) > 0);
+        redirect = dram_redirect;
+    } else if (!strncmp(name, directory, strlen(directory))) redirect = name;
     else assert(!"unexpected path, network or frontend dependency");
     if (flags & O_CREAT) return open(redirect, flags, 0600);
     return open(redirect, flags);
@@ -297,7 +310,256 @@ static void cleanup(void)
     assert(!unlink(file_path("boot-mode")) && !unlink(file_path("cmdline")));
     unlink(file_path("display-record"));
     unlink(file_path("lock"));
+    unlink(file_path("dram-para"));
+    unlink(file_path("capsule.bin"));
+    unlink(file_path("usb-storage-device"));
+    unlink(file_path("mmcblk0"));
+    unlink(file_path("seed-boot0"));
+    for (unsigned i = 0; i < 24; i++) {
+        char name[64];
+        assert(snprintf(name, sizeof(name), "dram-%s", dram_prop_names[i]) > 0);
+        unlink(file_path(name));
+    }
     assert(!rmdir(directory));
+}
+
+static void write_words_le(uint8_t *dst, const uint32_t words[32])
+{
+    for (unsigned i = 0; i < 32; i++) put_le32(dst + i * 4, words[i]);
+}
+
+static void put_live_dram(const uint32_t words[24])
+{
+    for (unsigned i = 0; i < 24; i++) {
+        char name[64];
+        uint8_t cell[4] = {words[i] >> 24, words[i] >> 16, words[i] >> 8, words[i]};
+        assert(snprintf(name, sizeof(name), "dram-%s", dram_prop_names[i]) > 0);
+        put_file(name, cell, 4);
+    }
+}
+
+static void make_test_capsule(uint8_t *cap, const uint32_t primary[32],
+                              const uint32_t bank1_ddr3[32],
+                              const uint32_t bank14_lpddr3[32],
+                              const uint32_t bank15_lpddr4[32])
+{
+    memset(cap, 0, CAPSULE_BYTES);
+    uint8_t *stock = cap + 0x1000;
+    put_le32(stock, 0xea000016u);
+    memcpy(stock + 4, "eGON.BT0", 8);
+    put_le32(stock + 16, STOCK_BYTES);
+    write_words_le(stock + 0x38, primary);
+    for (unsigned k = 0; k < 13; k++) write_words_le(stock + 0x374 + k * 0x80, bank1_ddr3);
+    write_words_le(stock + 0x9f4, bank14_lpddr3);
+    write_words_le(stock + 0xa74, bank15_lpddr4);
+    stock[0x2000] = 0x42;
+    put_le32(stock + 12, egon_checksum(stock, STOCK_BYTES));
+
+    memcpy(cap, stock, 0x400);
+    put_le32(cap, 0xea0000feu);
+    put_le32(cap + 16, CAPSULE_BYTES);
+    put_le32(cap + 12, egon_checksum(cap, CAPSULE_BYTES));
+}
+
+static int run_sync(const char *seed)
+{
+    char *args[] = {"native-health", "--sync-wake-dram", (char *)seed, NULL};
+    return native_health_main(seed ? 3 : 2, args);
+}
+
+static void test_sync_wake_dram(void)
+{
+    uint32_t primary[32] = {672, 7, 0x06060606, 0x0d0d0d0d, 0x1919, 0x9988eeee, 0x30ea, 0x04001000};
+    primary[24] = 1; primary[26] = 0x2fb08080; primary[27] = 0x402f4489;
+    primary[28] = 0x0c0f0c0b; primary[29] = 0x0c0d0c0d; primary[30] = 0x8c60;
+
+    uint32_t ddr3[32] = {792, 3, 0x08080808, 0x0e0e0e0e, 0x0e0e, 1, 0x30fa, 0x1000};
+    ddr3[26] = 0x33808080; ddr3[27] = 0x00f83438; ddr3[30] = 0x40;
+
+    uint32_t lpddr3_alt[32] = {672, 7, 0x06060606, 0x0d0d0d0d, 0x1919, 0x9988eeee, 0x30fa, 0x1000};
+    lpddr3_alt[24] = 1; lpddr3_alt[26] = 0x2fb08080; lpddr3_alt[27] = 0x402f4489;
+    lpddr3_alt[28] = 0x0e0e0f0e; lpddr3_alt[29] = 0x0f10110f; lpddr3_alt[30] = 0x8c60;
+
+    uint32_t lpddr4_alt[32] = {672, 8, 0x08080808, 0x0e0e0e0e, 0x0e0e, 0x7887bbbb, 0x310a, 0};
+    lpddr4_alt[24] = 1; lpddr4_alt[26] = 0x40808080; lpddr4_alt[27] = 0x402f6633;
+    lpddr4_alt[28] = 0; lpddr4_alt[29] = 0; lpddr4_alt[30] = 0x02008c60;
+
+    uint32_t cubexx_spl[32];
+    memcpy(cubexx_spl, lpddr4_alt, sizeof(cubexx_spl));
+    cubexx_spl[6] = 0x30fa; cubexx_spl[7] = 0x04000000;
+    cubexx_spl[28] = LPDDR4_DEFAULT_TPR11; cubexx_spl[29] = LPDDR4_DEFAULT_TPR12;
+
+    uint8_t *ref = malloc(CAPSULE_BYTES);
+    uint8_t *disk = malloc(CAPSULE_OFFSET + CAPSULE_BYTES);
+    assert(ref && disk);
+    make_test_capsule(ref, primary, ddr3, lpddr3_alt, lpddr4_alt);
+    memset(disk, 0xaa, CAPSULE_OFFSET);
+    memcpy(disk + CAPSULE_OFFSET, ref, CAPSULE_BYTES);
+
+    initialize();
+    put_file("capsule.bin", ref, CAPSULE_BYTES);
+    put_file("mmcblk0", disk, CAPSULE_OFFSET + CAPSULE_BYTES);
+    uint8_t para_bytes[128];
+    write_words_le(para_bytes, cubexx_spl);
+    put_file("dram-para", para_bytes, sizeof(para_bytes));
+    assert(run_sync(NULL) == 0);
+    uint8_t *after = malloc(CAPSULE_OFFSET + CAPSULE_BYTES);
+    assert(after && read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(!memcmp(after + CAPSULE_OFFSET + 0x38, para_bytes, 128));
+    assert(egon_valid(after + CAPSULE_OFFSET, CAPSULE_BYTES));
+    assert(!memcmp(after + CAPSULE_OFFSET + SECTOR_BYTES, ref + SECTOR_BYTES, CAPSULE_BYTES - SECTOR_BYTES));
+    assert(!memcmp(after, disk, CAPSULE_OFFSET));
+
+    assert(run_sync(NULL) == 0);
+    uint8_t *after2 = malloc(CAPSULE_OFFSET + CAPSULE_BYTES);
+    assert(after2 && read_exact_file(file_path("mmcblk0"), after2, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(!memcmp(after, after2, CAPSULE_OFFSET + CAPSULE_BYTES));
+
+    uint32_t rg40_1rank[32];
+    memcpy(rg40_1rank, primary, sizeof(rg40_1rank));
+    rg40_1rank[6] = 0x30fa; rg40_1rank[7] = 0x04000000;
+    write_words_le(para_bytes, rg40_1rank);
+    put_file("dram-para", para_bytes, sizeof(para_bytes));
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(!memcmp(after + CAPSULE_OFFSET + 0x38, para_bytes, 128));
+    assert(egon_valid(after + CAPSULE_OFFSET, CAPSULE_BYTES));
+
+    unlink(file_path("dram-para"));
+    put_file("mmcblk0", disk, CAPSULE_OFFSET + CAPSULE_BYTES);
+    uint32_t live_lpddr4[24];
+    memcpy(live_lpddr4, cubexx_spl, sizeof(live_lpddr4));
+    live_lpddr4[23] = 0x80000000u;
+    put_live_dram(live_lpddr4);
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    write_words_le(para_bytes, cubexx_spl);
+    assert(!memcmp(after + CAPSULE_OFFSET + 0x38, para_bytes, 128));
+    assert(egon_valid(after + CAPSULE_OFFSET, CAPSULE_BYTES));
+
+    put_file("mmcblk0", disk, CAPSULE_OFFSET + CAPSULE_BYTES);
+    uint8_t *seed = malloc(STOCK_BYTES);
+    assert(seed);
+    memcpy(seed, ref + 0x1000, STOCK_BYTES);
+    uint32_t vendor_cube[32];
+    memcpy(vendor_cube, cubexx_spl, sizeof(vendor_cube));
+    vendor_cube[28] = 0x22252420u; vendor_cube[29] = 0x07070707u;
+    write_words_le(seed + 0x38, vendor_cube);
+    put_le32(seed + 12, egon_checksum(seed, STOCK_BYTES));
+    put_file("seed-boot0", seed, STOCK_BYTES);
+    char seed_file[256];
+    assert(snprintf(seed_file, sizeof(seed_file), "%s/seed-boot0", directory) > 0);
+    assert(run_sync(seed_file) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    write_words_le(para_bytes, vendor_cube);
+    assert(!memcmp(after + CAPSULE_OFFSET + 0x38, para_bytes, 128));
+
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after2, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(!memcmp(after2 + CAPSULE_OFFSET + 0x38, para_bytes, 128));
+    assert(!memcmp(after, after2, CAPSULE_OFFSET + CAPSULE_BYTES));
+
+    uint32_t bad_seed_words[32];
+    memcpy(bad_seed_words, vendor_cube, sizeof(bad_seed_words));
+    bad_seed_words[2] ^= 1;
+    write_words_le(seed + 0x38, bad_seed_words);
+    put_le32(seed + 12, egon_checksum(seed, STOCK_BYTES));
+    put_file("seed-boot0", seed, STOCK_BYTES);
+    put_file("mmcblk0", disk, CAPSULE_OFFSET + CAPSULE_BYTES);
+    assert(run_sync(seed_file) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    write_words_le(para_bytes, cubexx_spl);
+    assert(!memcmp(after + CAPSULE_OFFSET + 0x38, para_bytes, 128));
+
+    uint8_t *torn = malloc(SECONDARY_OFFSET + STOCK_BYTES);
+    assert(torn);
+    memset(torn, 0, SECONDARY_OFFSET + STOCK_BYTES);
+    memcpy(torn + CAPSULE_OFFSET, ref, CAPSULE_BYTES);
+    write_words_le(torn + CAPSULE_OFFSET + 0x38, cubexx_spl);
+    assert(!egon_valid(torn + CAPSULE_OFFSET, CAPSULE_BYTES));
+    write_words_le(seed + 0x38, vendor_cube);
+    put_le32(seed + 12, egon_checksum(seed, STOCK_BYTES));
+    memcpy(torn + SECONDARY_OFFSET, seed, STOCK_BYTES);
+    put_file("mmcblk0", torn, SECONDARY_OFFSET + STOCK_BYTES);
+    assert(run_sync(NULL) == 0);
+    uint8_t *repaired = malloc(SECONDARY_OFFSET + STOCK_BYTES);
+    assert(repaired && read_exact_file(file_path("mmcblk0"), repaired, SECONDARY_OFFSET + STOCK_BYTES, NULL));
+    assert(egon_valid(repaired + CAPSULE_OFFSET, CAPSULE_BYTES));
+    write_words_le(para_bytes, vendor_cube);
+    assert(!memcmp(repaired + CAPSULE_OFFSET + 0x38, para_bytes, 128));
+
+    memset(torn, 0, SECONDARY_OFFSET + STOCK_BYTES);
+    memcpy(torn + CAPSULE_OFFSET, ref, CAPSULE_BYTES);
+    torn[CAPSULE_OFFSET + 12] ^= 1;
+    assert(!egon_valid(torn + CAPSULE_OFFSET, CAPSULE_BYTES));
+    put_file("mmcblk0", torn, SECONDARY_OFFSET + STOCK_BYTES);
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), repaired, SECONDARY_OFFSET + STOCK_BYTES, NULL));
+    assert(egon_valid(repaired + CAPSULE_OFFSET, CAPSULE_BYTES));
+    write_words_le(para_bytes, cubexx_spl);
+    assert(!memcmp(repaired + CAPSULE_OFFSET + 0x38, para_bytes, 128));
+    free(repaired);
+    free(torn);
+
+    put_file("mmcblk0", disk, CAPSULE_OFFSET + CAPSULE_BYTES);
+    uint32_t live_ddr3[24];
+    memcpy(live_ddr3, ddr3, sizeof(live_ddr3));
+    live_ddr3[6] = 0x30fa; live_ddr3[7] = 0x04001000;
+    put_live_dram(live_ddr3);
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(le32(after + CAPSULE_OFFSET + 0x38 + 4) == 3);
+    assert(le32(after + CAPSULE_OFFSET + 0x38 + 30 * 4) == 0x6041u);
+    assert(egon_valid(after + CAPSULE_OFFSET, CAPSULE_BYTES));
+
+    put_file("mmcblk0", disk, CAPSULE_OFFSET + CAPSULE_BYTES);
+    write_words_le(para_bytes, cubexx_spl);
+    put_file("dram-para", para_bytes, sizeof(para_bytes));
+    put_file("usb-storage-device", "/dev/mmcblk0p7\n", 15);
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(!memcmp(after, disk, CAPSULE_OFFSET + CAPSULE_BYTES));
+    unlink(file_path("usb-storage-device"));
+
+    uint32_t bad_para[32];
+    memcpy(bad_para, cubexx_spl, sizeof(bad_para));
+    bad_para[1] = 99;
+    write_words_le(para_bytes, bad_para);
+    put_file("dram-para", para_bytes, sizeof(para_bytes));
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(!memcmp(after, disk, CAPSULE_OFFSET + CAPSULE_BYTES));
+    put_file("dram-para", para_bytes, 64);
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(!memcmp(after, disk, CAPSULE_OFFSET + CAPSULE_BYTES));
+    write_words_le(para_bytes, cubexx_spl);
+    put_file("dram-para", para_bytes, sizeof(para_bytes));
+
+    uint8_t *foreign = malloc(CAPSULE_OFFSET + CAPSULE_BYTES);
+    assert(foreign);
+    memcpy(foreign, disk, CAPSULE_OFFSET + CAPSULE_BYTES);
+    foreign[CAPSULE_OFFSET + 0x500] ^= 1;
+    put_le32(foreign + CAPSULE_OFFSET + 12, egon_checksum(foreign + CAPSULE_OFFSET, CAPSULE_BYTES));
+    put_file("mmcblk0", foreign, CAPSULE_OFFSET + CAPSULE_BYTES);
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(!memcmp(after, foreign, CAPSULE_OFFSET + CAPSULE_BYTES));
+
+    memcpy(foreign, disk, CAPSULE_OFFSET + CAPSULE_BYTES);
+    memcpy(foreign + CAPSULE_OFFSET, ref + 0x1000, STOCK_BYTES);
+    put_file("mmcblk0", foreign, CAPSULE_OFFSET + CAPSULE_BYTES);
+    assert(run_sync(NULL) == 0);
+    assert(read_exact_file(file_path("mmcblk0"), after, CAPSULE_OFFSET + CAPSULE_BYTES, NULL));
+    assert(!memcmp(after, foreign, CAPSULE_OFFSET + CAPSULE_BYTES));
+
+    put_file("mmcblk0", disk, CAPSULE_OFFSET + CAPSULE_BYTES);
+    busy = 1;
+    assert(run_sync(NULL) == 4);
+    busy = 0;
+
+    free(foreign); free(seed); free(after2); free(after); free(disk); free(ref);
+    puts("native-health wake DRAM sync passed");
 }
 
 int main(int argc, char **argv)
@@ -305,7 +567,7 @@ int main(int argc, char **argv)
     char temporary[] = "/tmp/baseos-native-health.XXXXXX";
     assert(mkdtemp(temporary));
     assert(snprintf(directory, sizeof(directory), "%s", temporary) > 0);
-    if (argc == 2) {
+    if (argc == 2 || argc == 3) {
         /* The staged rcS runs the real CLI with raw files and fake hardware. */
         startup_fixture = 1;
         initialize();
@@ -314,8 +576,8 @@ int main(int argc, char **argv)
             memset(display, 0, sizeof(display));
             display[0xc / 4] = 0xc;
         }
-        int result = run(argv[1]);
-        if (result || !strcmp(argv[1], "--check")) unchanged();
+        int result = !strcmp(argv[1], "--sync-wake-dram") ? run_sync(argc == 3 ? argv[2] : NULL) : run(argv[1]);
+        if (result || !strcmp(argv[1], "--check") || !strcmp(argv[1], "--sync-wake-dram")) unchanged();
         else assert(change_count == 3 && !rtc[0x138 / 4] && !rtc[0x13c / 4] && !timer[WDT_MODE]);
         cleanup();
         return result;
@@ -503,6 +765,7 @@ int main(int argc, char **argv)
     assert(run("--hold-stock") == 3 && !memory_opens); put_file("installed", generation, 32);
     initialize(); assert(run("--bogus") == 2 && !memory_opens);
     puts("native-health stock latch passed: exact pair, never zero while held");
+    test_sync_wake_dram();
     cleanup();
     puts("native-health behavior passed: file/MMIO model only; no devices");
     return 0;

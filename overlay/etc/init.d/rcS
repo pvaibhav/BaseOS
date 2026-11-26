@@ -370,6 +370,12 @@ fi
 if [ "$USB_STORAGE_MODE" -eq 0 ]; then
 	[ -x /usr/sbin/baseos-update ] && /usr/sbin/baseos-update apply
 fi
+if [ "$USB_STORAGE_MODE" -eq 0 ] && [ -f /usr/share/baseos/native/capsule.bin ] \
+	&& [ -x /usr/sbin/native-health ]; then
+	if ! wake_sync=$(/usr/sbin/native-health --sync-wake-dram 2>&1); then
+		log "wake DRAM sync failed${wake_sync:+: $wake_sync}"
+	fi
+fi
 # Unmounting waits for the kernel's next quiet point, about 60 ms. Nothing
 # below needs TF1 gone first, so let it finish beside the rest.
 [ "$TF1_CONFIG_MOUNTED" -eq 0 ] || /bin/umount /mnt/system &

@@ -159,6 +159,29 @@ native_step() {
 		[ "$(od -An -tu4 -j16 -N4 "$1" 2>&3 | tr -d ' ')" = 131072 ] || return 1
 		[ "$(dd if="$1" bs=512 skip=9 count=127 2>/dev/null | sha256sum | cut -d ' ' -f 1)" = "$BOOT_BOOT0_BODY_SHA256" ]
 	}
+	# Canonical sector-0 bytes with mutable fields masked: checksum (12..15),
+	# ROM media byte (40), and per-unit wake DRAM block (56..183).
+	capsule_sector0_fixed() {
+		head -c 512 "$1" | od -An -v -tu1 2>&3 | awk '
+			{ for (i = 1; i <= NF; i++) {
+				if ((n >= 12 && n < 16) || n == 40 || (n >= 56 && n < 184)) printf "0 "
+				else printf "%s ", $i
+				n++
+			} }
+			END { if (n != 512) exit 1 }'
+	}
+	# This generation's capsule, allowing per-unit wake DRAM stamping in sector 0.
+	this_capsule() {
+		if nmatches "$1" "$NATIVE_CAPSULE_SHA256"; then return 0; fi
+		[ "$(wc -c < "$1")" = "$NATIVE_CAPSULE_SIZE" ] || return 1
+		[ "$(od -An -tx1 -j4 -N8 "$1" 2>&3 | tr -d ' \n')" = 65474f4e2e425430 ] || return 1
+		[ "$(od -An -tu4 -j16 -N4 "$1" 2>&3 | tr -d ' ')" = "$NATIVE_CAPSULE_SIZE" ] || return 1
+		[ "$(tail -c +513 "$1" | sha256sum | cut -d ' ' -f 1)" = "$capsule_body_sha" ] || return 1
+		od -An -v -tu4 "$1" 2>&3 | awk -v want="$((NATIVE_CAPSULE_SIZE / 4))" '
+			{ for (i = 1; i <= NF; i++) { if (n == 3) stored = $i; else total += $i; n++ } }
+			END { exit !(n == want && (total + 1594518585) % 4294967296 == stored) }' || return 1
+		[ "$(capsule_sector0_fixed "$1")" = "$capsule_sector0_ref" ]
+	}
 
 	. "$ASSETS/manifest"
 	. "$ROOT/etc/baseos-release"
@@ -228,6 +251,8 @@ native_step() {
 		|| nskip 'native files failed verification'
 
 	WORK=$(mktemp -d "$ROOT/tmp/boot-native.XXXXXX")
+	capsule_body_sha=$(tail -c +513 "$NATIVE/capsule.bin" | sha256sum | cut -d ' ' -f 1)
+	capsule_sector0_ref=$(capsule_sector0_fixed "$NATIVE/capsule.bin")
 	read_at "$DISK" "$capsule_at" "$NATIVE_CAPSULE_SIZE" "$WORK/primary.cur" \
 		&& read_at "$DISK" "$secondary_at" 65536 "$WORK/secondary.cur" \
 		&& read_at "$DISK" "$toc_at" "$NATIVE_TOC_SIZE" "$WORK/toc.cur" \
@@ -240,7 +265,7 @@ native_step() {
 	resuming=0
 	[ ! -r "$NSTATE/latch" ] || { read -r owner < "$NSTATE/latch" && [ "$owner" = "$NATIVE_GENERATION" ] && resuming=1; } || :
 	head -c 65536 "$WORK/primary.cur" > "$WORK/primary-stock.cur"
-	if nmatches "$WORK/primary.cur" "$NATIVE_CAPSULE_SHA256"; then primary=this
+	if this_capsule "$WORK/primary.cur"; then primary=this
 	elif stock_boot0 "$WORK/primary-stock.cur"; then primary=stock
 	elif old_capsule "$WORK/primary.cur"; then primary=earlier
 	elif [ "$resuming" = 1 ]; then primary=partial
@@ -379,6 +404,9 @@ native_step() {
 	fi
 	rm -f "$NSTATE/latch" && sync
 	nlog 'stock latch cleared; the native loader starts at the next boot'
+	wake_seed="$WORK/secondary.cur"
+	[ "$primary" != stock ] || wake_seed="$WORK/primary-stock.cur"
+	"$HEALTH" --sync-wake-dram "$wake_seed" >&3 2>&3 || nlog 'wake DRAM sync deferred to next start'
 	done_with installed
 	nresult installed "installed and checked; it is used from the next start"
 	exit 0

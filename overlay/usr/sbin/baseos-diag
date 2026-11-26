@@ -295,6 +295,36 @@ stock_boot0() {
 		|| { echo "not this model's vendor loader"; return 1; }
 }
 
+# Canonical sector-0 bytes with mutable fields masked: checksum (12..15),
+# ROM media byte (40), and per-unit wake DRAM block (56..183).
+capsule_sector0_fixed() {
+	head -c 512 "$1" | od -An -v -tu1 2>/dev/null | awk '
+		{ for (i = 1; i <= NF; i++) {
+			if ((n >= 12 && n < 16) || n == 40 || (n >= 56 && n < 184)) printf "0 "
+			else printf "%s ", $i
+			n++
+		} }
+		END { if (n != 512) exit 1 }'
+}
+
+# this_capsule FILE: matches this BaseOS's capsule, allowing per-unit wake DRAM
+# header bytes in sector 0 while keeping the eGON checksum and body exact.
+this_capsule() {
+	[ "$HAVE_NATIVE" = 1 ] || return 1
+	if [ "$(sha_of "$1")" = "${NATIVE_CAPSULE_SHA256:-}" ]; then return 0; fi
+	[ "$2" = eGON ] && [ "$3" = "$capsule_size" ] && [ "$4" = yes ] || return 1
+	ref="$ROOT/usr/share/baseos/native/capsule.bin"
+	want_body=${NATIVE_CAPSULE_BODY_SHA256:-}
+	if [ -z "$want_body" ] && [ -r "$ref" ]; then
+		want_body=$(tail -c +513 "$ref" | sha256sum | cut -d ' ' -f 1)
+	fi
+	[ -n "$want_body" ] || return 1
+	[ "$(tail -c +513 "$1" | sha256sum | cut -d ' ' -f 1)" = "$want_body" ] || return 1
+	if [ -r "$ref" ]; then
+		[ "$(capsule_sector0_fixed "$1")" = "$(capsule_sector0_fixed "$ref")" ] || return 1
+	fi
+}
+
 # The unit's memory settings in a boot0 header: words 0x38..0xc4.
 dram_words() { od -An -v -tx4 -j 56 -N 144 "$1" 2>/dev/null | tr -s ' \n' ' ' | sed 's/^ //; s/ $//'; }
 describe_dram_words() {
@@ -323,7 +353,7 @@ boot_areas() {
 		# shellcheck disable=SC2046
 		set -- $(egon "$WORK/primary")
 		header="$1 header, $2 bytes, checksum $( [ "$3" = yes ] && echo ok || echo bad)"
-		if [ "$HAVE_NATIVE" = 1 ] && [ "$(sha_of "$WORK/primary")" = "${NATIVE_CAPSULE_SHA256:-}" ]; then
+		if this_capsule "$WORK/primary" "$1" "$2" "$3"; then
 			primary=fast text="fast loader of this BaseOS"
 		elif why=$(stock_boot0 "$WORK/primary64"); then
 			primary=stock text="vendor loader"
@@ -379,6 +409,9 @@ boot_areas() {
 		[ "$firmware/$image" != ok/ok ] || AREA_VERDICT="stock vendor loader (the fast loader's other files are in place)"
 	else
 		AREA_VERDICT="mismatch (sector $capsule_sector $primary, sector $secondary_sector $secondary, package $toc, firmware $firmware, kernel $image, stock kernel $stock_image)"
+	fi
+	if [ -s "$WORK/primary" ] && [ "$primary" = fast ]; then
+		echo "  wake memory settings in the fast loader header: $(describe_dram_words "$WORK/primary")"
 	fi
 	if [ -s "$WORK/secondary" ] && [ "$secondary" = ok ]; then
 		echo "  factory memory settings in the fallback copy: $(describe_dram_words "$WORK/secondary")"

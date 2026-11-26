@@ -135,6 +135,7 @@ class Diagnostics(unittest.TestCase):
         native = dict(
             FORMAT=1, TARGET=TARGET, GENERATION=GENERATION.hex(), COOKIE=COOKIE,
             CAPSULE_SECTOR=CAPSULE_SECTOR, CAPSULE_SIZE=CAPSULE_SIZE, CAPSULE_SHA256=sha(self.capsule),
+            CAPSULE_BODY_SHA256=sha(self.capsule[512:]),
             SECONDARY_SECTOR=SECONDARY_SECTOR, STOCK_SHA256=sha(self.stock),
             FIRMWARE_OFFSET=FIRMWARE_OFFSET, FIRMWARE_SIZE=FIRMWARE_SIZE, FIRMWARE_SHA256=sha(self.firmware),
             IMAGE_OFFSET=IMAGE_OFFSET, IMAGE_SIZE=IMAGE_SIZE, IMAGE_SHA256=sha(self.image),
@@ -643,6 +644,20 @@ class Diagnostics(unittest.TestCase):
         self.boot()
         self.assertIn("(the loader line changed) ---", self.this_boot())
         self.sample("update")
+
+    def test_stamped_wake_capsule_recognised_and_reported(self):
+        (self.root / "usr/share/baseos/native/capsule.bin").write_bytes(self.capsule)
+        self.flash()
+        disk = bytearray((self.root / "dev/mmcblk0").read_bytes())
+        cap = bytearray(self.capsule)
+        cap[56:184] = struct.pack("<32I", *TRAINED[:32])
+        struct.pack_into("<I", cap, 12, checksum(cap))
+        disk[CAPSULE_SECTOR * 512:CAPSULE_SECTOR * 512 + CAPSULE_SIZE] = cap
+        (self.root / "dev/mmcblk0").write_bytes(bytes(disk))
+        report, _ = self.run_diag()
+        self.assertIn("sector 16: fast loader of this BaseOS (eGON header, 131072 bytes, checksum ok)", report)
+        self.assertIn("wake memory settings in the fast loader header: LPDDR4 at 672 MHz", report)
+        self.assertIn("matches the BaseOS 1.5.2 fast loader", report)
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

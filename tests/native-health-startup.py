@@ -219,6 +219,48 @@ def main():
         boot.close()
     print("PASS: generation mismatch blocks updater commands")
 
+    boot = boot_fixture(args, mode="0")
+    try:
+        boot.write("usr/share/baseos/native/capsule.bin", b"placeholder")
+        boot.start()
+        assert boot.proc.wait(timeout=4) == 0, boot.calls()
+        calls = boot.calls()
+        assert calls.count("usr/sbin/native-health --accept\n") == 1, calls
+        assert calls.count("usr/sbin/native-health --sync-wake-dram\n") == 1, calls
+        assert calls.index("usr/sbin/native-health --accept\n") < calls.index("usr/sbin/native-health --sync-wake-dram\n"), calls
+    finally:
+        boot.close()
+    print("PASS: wake DRAM sync runs after acceptance when capsule is present")
+
+    boot = boot_fixture(args, mode="0")
+    try:
+        boot.write("usr/share/baseos/native/capsule.bin", b"placeholder")
+        boot.write("run/boot-menu-held", b"1\n")
+        boot.stub("usr/sbin/usb-storage-mode", 'printf "/dev/mmcblk0p7\\n" > /run/usb-storage-device\nexit 0')
+        boot.start()
+        assert boot.proc.wait(timeout=4) == 0, boot.calls()
+        assert "usr/sbin/native-health --sync-wake-dram\n" not in boot.calls(), boot.calls()
+    finally:
+        boot.close()
+    print("PASS: wake DRAM sync skipped in USB storage mode")
+
+    boot = boot_fixture(args, mode="0")
+    try:
+        boot.write("usr/share/baseos/native/capsule.bin", b"placeholder")
+        boot.stub(
+            "usr/sbin/native-health",
+            'printf "%s %s\\n" "usr/sbin/native-health" "$*" >> /calls\n'
+            'if [ "$1" = "--sync-wake-dram" ]; then echo "readback mismatch" >&2; exit 1; fi\n'
+            'exit 0',
+        )
+        boot.start()
+        assert boot.proc.wait(timeout=4) == 0, boot.calls()
+        log_text = boot.read("tmp/baseos-boot.log")
+        assert "wake DRAM sync failed: readback mismatch" in log_text, log_text
+    finally:
+        boot.close()
+    print("PASS: failed wake DRAM sync logs to boot log without blocking boot")
+
 
 if __name__ == "__main__":
     main()

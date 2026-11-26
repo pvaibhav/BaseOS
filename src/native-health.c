@@ -10,16 +10,31 @@
 #include <linux/input.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 #include "native-attempt.h"
 
 #define FDT_GENERATION "/sys/firmware/devicetree/base/chosen/baseos,native-boot"
+#define FDT_DRAM_PARA "/sys/firmware/devicetree/base/chosen/baseos,dram-para"
+#define FDT_DRAM_DIR "/sys/firmware/devicetree/base/dram"
 #define INSTALLED_GENERATION "/etc/baseos/native-generation"
+#define NATIVE_CAPSULE "/usr/share/baseos/native/capsule.bin"
+#define USB_STORAGE_FLAG "/run/usb-storage-device"
+#define MMC_DISK "/dev/mmcblk0"
+#define CAPSULE_OFFSET 8192
+#define SECONDARY_OFFSET 262144
+#define CAPSULE_BYTES 131072
+#define STOCK_BYTES 65536
+#define SECTOR_BYTES 512
+#define EGON_STAMP UINT32_C(0x5f0a6c39)
+#define LPDDR4_DEFAULT_TPR11 UINT32_C(0x1b1f1e1c)
+#define LPDDR4_DEFAULT_TPR12 UINT32_C(0x06060606)
 #define BOOT_DISPLAY "/sys/firmware/devicetree/base/chosen/baseos,boot-display"
 #define DISPLAY_MAGIC UINT32_C(0x31505344)
 #define DISPLAY_BYTES 80
@@ -112,6 +127,19 @@ static int read_text(const char *path, char *buffer, size_t capacity)
 static uint32_t le32(const uint8_t *bytes)
 {
     return bytes[0] | (uint32_t)bytes[1] << 8 | (uint32_t)bytes[2] << 16 | (uint32_t)bytes[3] << 24;
+}
+
+static uint32_t be32(const uint8_t *bytes)
+{
+    return (uint32_t)bytes[0] << 24 | (uint32_t)bytes[1] << 16 | (uint32_t)bytes[2] << 8 | bytes[3];
+}
+
+static void put_le32(uint8_t *bytes, uint32_t value)
+{
+    bytes[0] = value & 0xffu;
+    bytes[1] = (value >> 8) & 0xffu;
+    bytes[2] = (value >> 16) & 0xffu;
+    bytes[3] = (value >> 24) & 0xffu;
 }
 
 /* The panel the loader drove this boot, from its display record (the A32
@@ -413,8 +441,309 @@ done:
     return result;
 }
 
+static const char *const dram_prop_names[24] = {
+    "dram_clk", "dram_type", "dram_zq", "dram_odt_en", "dram_para1", "dram_para2",
+    "dram_mr0", "dram_mr1", "dram_mr2", "dram_mr3",
+    "dram_tpr0", "dram_tpr1", "dram_tpr2", "dram_tpr3", "dram_tpr4", "dram_tpr5",
+    "dram_tpr6", "dram_tpr7", "dram_tpr8", "dram_tpr9", "dram_tpr10", "dram_tpr11",
+    "dram_tpr12", "dram_tpr13"
+};
+
+static uint32_t egon_checksum(const uint8_t *blob, size_t length)
+{
+    uint32_t sum = EGON_STAMP;
+    for (size_t off = 0; off < length; off += 4)
+        if (off != 12) sum += le32(blob + off);
+    return sum;
+}
+
+static int egon_valid(const uint8_t *blob, size_t expected_length)
+{
+    return !memcmp(blob + 4, "eGON.BT0", 8) && le32(blob + 16) == expected_length &&
+           le32(blob + 12) == egon_checksum(blob, expected_length);
+}
+
+static int read_exact_file(const char *path, uint8_t *buffer, size_t expected, int *missing)
+{
+    if (missing) *missing = 0;
+    int fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) {
+        if (missing && errno == ENOENT) *missing = 1;
+        return 0;
+    }
+    size_t used = 0;
+    while (used < expected) {
+        ssize_t n = read(fd, buffer + used, expected - used);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) { close(fd); return 0; }
+        used += (size_t)n;
+    }
+    uint8_t extra;
+    ssize_t tail;
+    do { tail = read(fd, &extra, 1); } while (tail < 0 && errno == EINTR);
+    close(fd);
+    return tail == 0;
+}
+
+static int pread_all(int fd, uint8_t *buffer, size_t length, off_t offset)
+{
+    size_t done = 0;
+    while (done < length) {
+        ssize_t n = pread(fd, buffer + done, length - done, offset + (off_t)done);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return 0;
+        done += (size_t)n;
+    }
+    return 1;
+}
+
+static int pwrite_all(int fd, const uint8_t *buffer, size_t length, off_t offset)
+{
+    size_t done = 0;
+    while (done < length) {
+        ssize_t n = pwrite(fd, buffer + done, length - done, offset + (off_t)done);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return 0;
+        done += (size_t)n;
+    }
+    return 1;
+}
+
+static int usb_storage_active(void)
+{
+    int fd = open(USB_STORAGE_FLAG, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) return 0;
+    struct stat st;
+    int active = !fstat(fd, &st) && st.st_size > 0;
+    close(fd);
+    return active;
+}
+
+static int open_disk(int writable)
+{
+    int flags = (writable ? O_RDWR : O_RDONLY) | O_CLOEXEC | O_NOFOLLOW;
+    int fd = open(MMC_DISK, flags | O_DIRECT);
+    if (fd >= 0 || errno != EINVAL) return fd;
+    /* Regular-file test fixtures on tmpfs reject O_DIRECT; block devices never fall back. */
+    fd = open(MMC_DISK, flags);
+    if (fd < 0) return -1;
+    struct stat st;
+    if (fstat(fd, &st) || S_ISBLK(st.st_mode)) {
+        close(fd);
+        errno = EINVAL;
+        return -1;
+    }
+    return fd;
+}
+
+static int bank_type_allowed(const uint8_t *ref, uint32_t type)
+{
+    if (type == le32(ref + 0x1038 + 4)) return 1;
+    for (unsigned k = 0; k < 15; k++)
+        if (type == le32(ref + 0x1374 + k * 0x80 + 4)) return 1;
+    return 0;
+}
+
+static int dram_block_valid(const uint8_t *ref, const uint32_t words[32])
+{
+    return words[0] && bank_type_allowed(ref, words[1]) && words[6] && words[7] &&
+           (words[30] & UINT32_C(0x801)) && (words[1] != 8 || words[28] || words[29]);
+}
+
+static int capsule_fixed_matches_ref(const uint8_t *disk, const uint8_t *ref)
+{
+    return egon_valid(ref, CAPSULE_BYTES) &&
+           !memcmp(disk, ref, 12) && !memcmp(disk + 16, ref + 16, 24) &&
+           !memcmp(disk + 41, ref + 41, 15) &&
+           !memcmp(disk + 184, ref + 184, CAPSULE_BYTES - 184);
+}
+
+static int dram_words_match_live(const uint32_t cand[32], const uint32_t live[24])
+{
+    for (unsigned i = 0; i < 23; i++)
+        if (cand[i] != live[i]) return 0;
+    return (cand[23] & ~UINT32_C(0x80000000)) == (live[23] & ~UINT32_C(0x80000000));
+}
+
+static int seed_from_stock(const uint8_t *ref, const uint8_t *seed,
+                           const uint32_t live[24], uint32_t out[32])
+{
+    if (!egon_valid(seed, STOCK_BYTES) ||
+        memcmp(seed + SECTOR_BYTES, ref + 0x1000 + SECTOR_BYTES, STOCK_BYTES - SECTOR_BYTES))
+        return 0;
+    uint32_t cand[32];
+    for (unsigned i = 0; i < 32; i++) cand[i] = le32(seed + 0x38 + i * 4);
+    cand[23] &= ~UINT32_C(0x80000000);
+    if (!(cand[30] & UINT32_C(0x801))) cand[30] |= UINT32_C(0x6001);
+    if (!dram_words_match_live(cand, live) || !dram_block_valid(ref, cand)) return 0;
+    memcpy(out, cand, 32 * sizeof(uint32_t));
+    return 1;
+}
+
+static int read_live_dram(uint32_t live[24])
+{
+    for (unsigned i = 0; i < 24; i++) {
+        char prop_path[96];
+        uint8_t cell[4];
+        if (snprintf(prop_path, sizeof(prop_path), "%s/%s", FDT_DRAM_DIR, dram_prop_names[i]) >= (int)sizeof(prop_path) ||
+            !read_exact_file(prop_path, cell, sizeof(cell), NULL)) return 0;
+        live[i] = be32(cell);
+    }
+    return 1;
+}
+
+static int synthesize_from_live(const uint8_t *ref, const uint32_t live[24], uint32_t out[32])
+{
+    size_t offsets[18];
+    offsets[0] = 0x1038;
+    offsets[1] = 0x19f4;
+    offsets[2] = 0x1a74;
+    for (unsigned k = 0; k < 15; k++) offsets[3 + k] = 0x1374 + k * 0x80;
+    const uint8_t *matched = NULL;
+    for (unsigned pass = 0; pass < 2 && !matched; pass++) {
+        for (unsigned i = 0; i < 18; i++) {
+            const uint8_t *bank = ref + offsets[i];
+            if (le32(bank) == live[0] && le32(bank + 4) == live[1] &&
+                (pass || (le32(bank + 28) & UINT32_C(0x1000)) == (live[7] & UINT32_C(0x1000)))) {
+                matched = bank;
+                break;
+            }
+        }
+    }
+    if (!matched) return 0;
+    for (unsigned i = 0; i < 24; i++) out[i] = live[i];
+    out[23] &= ~UINT32_C(0x80000000);
+    for (unsigned i = 24; i < 32; i++) out[i] = le32(matched + i * 4);
+    if (out[1] == 8 && !out[28] && !out[29]) {
+        out[28] = LPDDR4_DEFAULT_TPR11;
+        out[29] = LPDDR4_DEFAULT_TPR12;
+    }
+    if (!(out[30] & UINT32_C(0x801))) out[30] |= UINT32_C(0x6001);
+    return dram_block_valid(ref, out);
+}
+
+static int sync_wake_dram(const char *seed_path)
+{
+    if (usb_storage_active()) return 0;
+    void *ref_raw = NULL, *disk_raw = NULL, *verify_raw = NULL;
+    if (posix_memalign(&ref_raw, 4096, CAPSULE_BYTES) ||
+        posix_memalign(&disk_raw, 4096, CAPSULE_BYTES) ||
+        posix_memalign(&verify_raw, 4096, CAPSULE_BYTES)) {
+        free(ref_raw); free(disk_raw); free(verify_raw);
+        return 1;
+    }
+    uint8_t *ref = ref_raw, *disk = disk_raw, *verify = verify_raw;
+    int result = 0, missing = 0;
+    if (!read_exact_file(NATIVE_CAPSULE, ref, CAPSULE_BYTES, &missing) ||
+        !egon_valid(ref, CAPSULE_BYTES) || !egon_valid(ref + 0x1000, STOCK_BYTES))
+        goto out;
+
+    uint32_t desired[32];
+    uint8_t raw_para[128], desired_bytes[128];
+    int native_boot = 0;
+    if (read_exact_file(FDT_DRAM_PARA, raw_para, sizeof(raw_para), &missing)) {
+        for (unsigned i = 0; i < 32; i++) desired[i] = le32(raw_para + i * 4);
+        if (!dram_block_valid(ref, desired)) {
+            fprintf(stderr, "native-health: invalid baseos,dram-para\n");
+            goto out;
+        }
+        native_boot = 1;
+    } else if (!missing) {
+        fprintf(stderr, "native-health: unreadable baseos,dram-para\n");
+        goto out;
+    }
+
+    int rfd = open_disk(0);
+    if (rfd < 0) goto out;
+    if (native_boot) {
+        for (unsigned i = 0; i < 32; i++) put_le32(desired_bytes + i * 4, desired[i]);
+        if (!pread_all(rfd, disk, SECTOR_BYTES, CAPSULE_OFFSET) ||
+            memcmp(disk + 4, "eGON.BT0", 8) || le32(disk + 16) != CAPSULE_BYTES ||
+            !memcmp(disk + 0x38, desired_bytes, sizeof(desired_bytes))) {
+            close(rfd);
+            goto out;
+        }
+        int got_full = pread_all(rfd, disk, CAPSULE_BYTES, CAPSULE_OFFSET);
+        close(rfd);
+        if (!got_full || !capsule_fixed_matches_ref(disk, ref) || usb_storage_active()) goto out;
+    } else {
+        int got_full = pread_all(rfd, disk, CAPSULE_BYTES, CAPSULE_OFFSET);
+        if (!got_full || !capsule_fixed_matches_ref(disk, ref)) {
+            close(rfd);
+            goto out;
+        }
+        uint32_t live[24];
+        if (!read_live_dram(live)) {
+            close(rfd);
+            fprintf(stderr, "native-health: could not read live /dram parameters\n");
+            result = 1;
+            goto out;
+        }
+        int disk_intact = egon_valid(disk, CAPSULE_BYTES);
+        int selected = 0;
+        if (seed_path && *seed_path &&
+            read_exact_file(seed_path, verify, STOCK_BYTES, NULL) &&
+            seed_from_stock(ref, verify, live, desired)) {
+            selected = 1;
+        } else if (!seed_path && disk_intact) {
+            uint32_t existing[32];
+            for (unsigned i = 0; i < 32; i++) existing[i] = le32(disk + 0x38 + i * 4);
+            if (dram_words_match_live(existing, live) && dram_block_valid(ref, existing)) {
+                close(rfd);
+                goto out;
+            }
+        }
+        if (!selected &&
+            pread_all(rfd, verify, STOCK_BYTES, SECONDARY_OFFSET) &&
+            seed_from_stock(ref, verify, live, desired)) {
+            selected = 1;
+        }
+        close(rfd);
+        if (!selected && !synthesize_from_live(ref, live, desired)) {
+            fprintf(stderr, "native-health: could not match live /dram to a capsule bank\n");
+            result = 1;
+            goto out;
+        }
+        for (unsigned i = 0; i < 32; i++) put_le32(desired_bytes + i * 4, desired[i]);
+        if (disk_intact && !memcmp(disk + 0x38, desired_bytes, sizeof(desired_bytes))) goto out;
+        if (usb_storage_active()) goto out;
+    }
+
+    memcpy(disk, ref, SECTOR_BYTES);
+    memcpy(disk + 0x38, desired_bytes, sizeof(desired_bytes));
+    put_le32(disk + 12, egon_checksum(disk, CAPSULE_BYTES));
+    int wfd = open_disk(1);
+    if (wfd < 0) {
+        if (errno != EROFS && errno != EACCES) result = 1;
+        goto out;
+    }
+    int wrote = pwrite_all(wfd, disk, SECTOR_BYTES, CAPSULE_OFFSET) && !fsync(wfd);
+    if (close(wfd) || !wrote) {
+        fprintf(stderr, "native-health: failed to write wake DRAM header\n");
+        result = 1;
+        goto out;
+    }
+    int vfd = open_disk(0);
+    int verified = vfd >= 0 && pread_all(vfd, verify, CAPSULE_BYTES, CAPSULE_OFFSET) &&
+                   !memcmp(verify, disk, CAPSULE_BYTES) && egon_valid(verify, CAPSULE_BYTES);
+    if (vfd >= 0) close(vfd);
+    if (!verified) {
+        fprintf(stderr, "native-health: wake DRAM header readback mismatch\n");
+        result = 1;
+        goto out;
+    }
+    printf("native-health: synced wake DRAM header (type %u, %u MHz, layout %04x/%08x)\n",
+           (unsigned)desired[1], (unsigned)desired[0], (unsigned)desired[6], (unsigned)desired[7]);
+out:
+    free(ref);
+    free(disk);
+    free(verify);
+    return result;
+}
+
 int main(int argc, char **argv)
 {
+    int sync_wake = (argc == 2 || argc == 3) && !strcmp(argv[1], "--sync-wake-dram");
     int charger = argc == 2 && !strcmp(argv[1], "--accept-charger");
     int write_ack = charger || (argc == 2 && !strcmp(argv[1], "--accept"));
     int check = argc == 2 && !strcmp(argv[1], "--check");
@@ -422,10 +751,21 @@ int main(int argc, char **argv)
     int latching = argc == 2 && (!strcmp(argv[1], "--stock-latch") ||
         (!strcmp(argv[1], "--hold-stock") && (latch = LATCH_HOLD)) ||
         (!strcmp(argv[1], "--release-stock") && (latch = LATCH_RELEASE)));
-    if (!write_ack && !check && !latching) {
+    if (!write_ack && !check && !latching && !sync_wake) {
         fprintf(stderr, "usage: native-health --check|--accept|--accept-charger|"
-                        "--stock-latch|--hold-stock|--release-stock\n");
+                        "--stock-latch|--hold-stock|--release-stock|"
+                        "--sync-wake-dram [seed-boot0]\n");
         return 2;
+    }
+    if (sync_wake) {
+        int lock = open(ACK_LOCK, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0600);
+        if (lock < 0 || flock(lock, LOCK_EX | LOCK_NB)) {
+            if (lock >= 0) close(lock);
+            return 4;
+        }
+        int result = sync_wake_dram(argc == 3 ? argv[2] : NULL);
+        close(lock);
+        return result;
     }
     if (latching) {
         int lock = open(ACK_LOCK, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0600);

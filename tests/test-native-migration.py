@@ -86,6 +86,8 @@ case "$1" in
 	[ "$c $m" = "$C 42535031" ] || exit 5
 	note release
 	put 00000000 42535031; put 00000000 00000000 ;;
+--sync-wake-dram)
+	printf '%s\n' "${2:-none}" > "$R/wake-sync.log" ;;
 *) exit 2 ;;
 esac
 '''
@@ -598,6 +600,53 @@ class NativeMigration(unittest.TestCase):
         self.assertEqual(self.boot_log_lines(),
                          ["Fast loader install: not possible on this card: native files failed verification"])
         self.assertEqual(self.writes(), [])
+
+    def test_stamped_wake_capsule_recognised_as_this_generation(self):
+        self.flash(primary="this", package="this")
+        disk = bytearray(self.disk.read_bytes())
+        cap = bytearray(self.capsule)
+        cap[56:184] = bytes(range(128))
+        struct.pack_into("<I", cap, 12, checksum(cap))
+        disk[BOOT0_OFFSET:BOOT0_OFFSET + CAPSULE_SIZE] = cap
+        self.disk.write_bytes(bytes(disk))
+        boot = bytearray(self.boot.read_bytes())
+        boot[FIRMWARE_OFFSET:FIRMWARE_OFFSET + FIRMWARE_SIZE] = self.firmware
+        boot[IMAGE_OFFSET:IMAGE_OFFSET + IMAGE_SIZE] = self.image
+        self.boot.write_bytes(bytes(boot))
+        chosen = self.root / "sys/firmware/devicetree/base/chosen"
+        chosen.mkdir(parents=True, exist_ok=True)
+        (chosen / "baseos,native-boot").write_bytes(GENERATION)
+        self.run_migration()
+        self.assertEqual(self.writes(), [])
+        self.assertEqual(self.done(), "installed; running")
+
+    def test_corrupted_stamped_capsule_not_recognised_as_this(self):
+        self.flash(primary="this", package="this")
+        disk = bytearray(self.disk.read_bytes())
+        cap = bytearray(self.capsule)
+        cap[56:184] = bytes(range(128))
+        cap[200] ^= 1
+        struct.pack_into("<I", cap, 12, checksum(cap))
+        disk[BOOT0_OFFSET:BOOT0_OFFSET + CAPSULE_SIZE] = cap
+        self.disk.write_bytes(bytes(disk))
+        boot = bytearray(self.boot.read_bytes())
+        boot[FIRMWARE_OFFSET:FIRMWARE_OFFSET + FIRMWARE_SIZE] = self.firmware
+        boot[IMAGE_OFFSET:IMAGE_OFFSET + IMAGE_SIZE] = self.image
+        self.boot.write_bytes(bytes(boot))
+        self.run_migration()
+        self.assertIn("write capsule header", self.writes())
+        self.assertEqual(self.done(), "installed")
+
+    def test_install_runs_wake_dram_sync_after_release(self):
+        self.flash(primary="stock")
+        self.run_migration()
+        self.assert_installed_in_order()
+        self.assertTrue((self.root / "wake-sync.log").read_text().strip().endswith("/primary-stock.cur"))
+        self.build()
+        self.flash(primary="old")
+        self.run_migration()
+        self.assert_installed_in_order()
+        self.assertTrue((self.root / "wake-sync.log").read_text().strip().endswith("/secondary.cur"))
 
 
 if __name__ == "__main__":
