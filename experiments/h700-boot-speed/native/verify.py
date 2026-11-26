@@ -684,11 +684,13 @@ def verify(directory, inventory, spl=None, prepared_source=False):
     source_properties = {(path, name): value for path, name, _, value in fdt.walk(parts[4])}
     allowed = {(path, name) for path, name in properties if path == "/dram"}
     allowed |= {("/chosen", name) for name in ("bootargs", "linux,initrd-start", "linux,initrd-end",
-                                               "baseos,native-boot", "baseos,native-timing", "baseos,boot-display")}
+                                               "baseos,native-boot", "baseos,native-timing",
+                                               "baseos,boot-display", "baseos,dram-para")}
     allowed |= {("/memory@40000000", "reg")}
     allowed |= {("/soc@03000000/disp@01000000", n) for n in ("boot_disp", "boot_disp1", "boot_disp2")}
     changed = {key for key in source_properties.keys() | properties.keys() if source_properties.get(key) != properties.get(key)}
     assert changed <= allowed, changed - allowed
+    assert properties["/chosen", "baseos,dram-para"] == struct.pack("<32I", *words)
     assert all(properties["/soc@03000000/disp@01000000", n] == struct.pack(">I", v) for n, v in manifest["early_display"]["handoff"].items())
     if not prepared_source:
         live_properties = {(path, name): value for path, name, _, value in fdt.walk((inventory / "live.dtb").read_bytes())}

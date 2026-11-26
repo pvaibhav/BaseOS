@@ -53,7 +53,9 @@ def verify(directory, boot0_paths):
                         size = (1 << (cols + rows + 3)) * (4 if full else 2) * ranks
                         assert encode(cols, rows, ranks, full, size, bank) == 0
                         words = struct.unpack("<32I", native.mem_read(symbols["trained_vendor_params"], 128))
-                        assert all(words[i] == banks[bank][i] for i in range(32) if i not in (6, 7))
+                        assert all(words[i] == banks[bank][i] for i in range(32) if i not in (6, 7, 30))
+                        expected_tpr13 = banks[bank][30] if (banks[bank][30] & 0x801) else (banks[bank][30] | 0x6001)
+                        assert words[30] == expected_tpr13
                         assert words[6] == 0x3000 | rows << 4 | cols
                         assert words[7] == (size >> 20 << 16) | ((ranks - 1) << 12) | (1 - full)
                         for path, stock, m in vendors:

@@ -221,7 +221,7 @@ __attribute__((noinline)) int baseos_prepare_logo(void *tree)
 static int append_chosen(void *tree, const char *name, const void *value, int bytes)
 {
     int chosen = fdt_path_offset(tree, "/chosen");
-    if (chosen < 0 || fdt_getprop(tree, chosen, name, NULL) || bytes > 80 ||
+    if (chosen < 0 || fdt_getprop(tree, chosen, name, NULL) || bytes > 128 ||
         fdt_setprop(tree, chosen, name, value, bytes)) return -1;
     int first = fdt_first_property_offset(tree, chosen), last = first, next, length;
     if (first < 0) return -1;
@@ -229,7 +229,7 @@ static int append_chosen(void *tree, const char *name, const void *value, int by
     if (next != -FDT_ERR_NOTFOUND || !fdt_getprop_by_offset(tree, last, NULL, &length)) return -1;
     unsigned size = 12u + (((unsigned)bytes + 3u) & ~3u);
     unsigned end = (unsigned)last + 12u + (((unsigned)length + 3u) & ~3u);
-    unsigned char property[92];
+    unsigned char property[140];
     unsigned char *start = (unsigned char *)tree + fdt_off_dt_struct(tree) + first;
     memcpy(property, start, size);
     memmove(start, start + size, end - (unsigned)first - size);
@@ -318,7 +318,9 @@ int baseos_prepare_kernel(void)
     if (append_chosen(tree, "baseos,native-boot", record->generation, 32) ||
         append_chosen(tree, "baseos,native-timing", stamps, sizeof(stamps)) ||
         append_chosen(tree, "baseos,boot-display", (void *)BASEOS_NATIVE_DISPLAY_ADDRESS,
-                      sizeof(struct baseos_native_display))) return 11;
+                      sizeof(struct baseos_native_display)) ||
+        append_chosen(tree, "baseos,dram-para", record->dram_words,
+                      sizeof(record->dram_words))) return 11;
 #ifdef BASEOS_NATIVE_DIAGNOSTIC
     volatile uint32_t *proof = (void *)0x4a300100;
     proof[0] = fdt_totalsize(tree);

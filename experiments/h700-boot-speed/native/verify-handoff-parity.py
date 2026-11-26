@@ -54,7 +54,7 @@ MODES = ("early-lit", "no-logo")
 # No unequal hardware values are acceptable when the hardware inputs are equal.
 # Add an entry only with an exact scope, an owner's accepted reason and a test.
 ACCEPTED_DIFFERENCES = {name: "Owner-approved native startup health property, appended after the complete stock tree"
-                        for name in ("baseos,native-boot", "baseos,native-timing", "baseos,boot-display")}
+                        for name in ("baseos,native-boot", "baseos,native-timing", "baseos,boot-display", "baseos,dram-para")}
 
 
 def module(name, path):
@@ -428,7 +428,7 @@ def without_native_metadata(blob):
             pos = (pos + 8 + size + 3) & ~3
             if name in ACCEPTED_DIFFERENCES:
                 assert stack == ["", "chosen"] and not chosen_closed
-                assert size == {"baseos,native-boot": 32, "baseos,native-timing": 56, "baseos,boot-display": 80}[name]
+                assert size == {"baseos,native-boot": 32, "baseos,native-timing": 56, "baseos,boot-display": 80, "baseos,dram-para": 128}[name]
                 assert not any(blob[at + 12 + size:pos])
                 additions.append((at, pos, name, offset))
             elif additions and not chosen_closed:

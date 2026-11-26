@@ -154,6 +154,7 @@ def package(target, out):
         "NATIVE_CAPSULE_SECTOR": CAPSULE_SECTOR,
         "NATIVE_CAPSULE_SIZE": len(capsule),
         "NATIVE_CAPSULE_SHA256": sha(capsule),
+        "NATIVE_CAPSULE_BODY_SHA256": sha(capsule[512:]),
         "NATIVE_SECONDARY_SECTOR": 512,
         "NATIVE_STOCK_SHA256": sha(stock),
         "NATIVE_FIRMWARE_OFFSET": FIRMWARE_OFFSET,

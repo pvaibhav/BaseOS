@@ -45,6 +45,30 @@ static int header_valid(void)
     return 1;
 }
 
+/* On standby wake, stock boot0 skips bank selection and delay training and
+ * reinitializes DRAM straight from header 0x38..0xb7. Hand over the outer
+ * header's 32-word block after STOCK_FNV passes, unless its clock is zero or
+ * its memory type is absent from every bank of the built-in boot0. */
+#define OUTER_DRAM ((const uint32_t *)UINT32_C(0x20038))
+#define STOCK_DRAM ((uint32_t *)UINT32_C(0x21038))
+#define STOCK_BANKS ((const uint32_t *)UINT32_C(0x21374))
+
+static int outer_is_dram_block(void)
+{
+    if (!OUTER_DRAM[0]) return 0;
+    if (OUTER_DRAM[1] == STOCK_DRAM[1]) return 1;
+    for (uint32_t k = 0; k < 15; k++)
+        if (OUTER_DRAM[1] == STOCK_BANKS[32 * k + 1]) return 1;
+    return 0;
+}
+
+static const uint8_t *stock_for_wake(void)
+{
+    if (outer_is_dram_block())
+        for (uint32_t i = 0; i < 32; i++) STOCK_DRAM[i] = OUTER_DRAM[i];
+    return STOCK;
+}
+
 static uint32_t prepare_copy(const uint8_t *source)
 {
     volatile uint8_t *stub = (void *)UINT32_C(0x50000);
@@ -80,7 +104,7 @@ uint32_t capsule_main(void)
 {
     if (!header_valid()) return 0;
     int resume = !!(read32(RETENTION) & UINT32_C(0x10000));
-    if (resume) return fnv(STOCK, UINT32_C(0x10000)) == STOCK_FNV ? prepare_copy(STOCK) : 0;
+    if (resume) return fnv(STOCK, UINT32_C(0x10000)) == STOCK_FNV ? prepare_copy(stock_for_wake()) : 0;
     struct attempt_pair pair = pair_read(&io);
     if (boot_plan(pair, 0, CAPSULE_COOKIE) != NATIVE_ATTEMPT)
         return fnv(STOCK, UINT32_C(0x10000)) == STOCK_FNV ? prepare_copy(STOCK) : 0;

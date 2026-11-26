@@ -37,6 +37,8 @@ int baseos_normalize_vendor_params(const struct dram_config *config,
     trained_vendor_params[7] = (size >> 20 << 16) |
                               (config->ranks == 2 ? 0x1000u : 0u) |
                               (config->bus_full_width ? 0u : 1u);
+    if (!(trained_vendor_params[30] & 0x801u))
+        trained_vendor_params[30] |= 0x6001u;
     return 0;
 }
 #endif

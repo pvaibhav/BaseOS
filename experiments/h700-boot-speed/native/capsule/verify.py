@@ -7,17 +7,21 @@ from unicorn import arm_const as a
 DIRECTORY=None;REGS=[getattr(a,'UC_ARM_REG_R'+str(i)) for i in range(13)]+[a.UC_ARM_REG_SP,a.UC_ARM_REG_LR]
 RTC=0x07000000;GP=[RTC+0x100+4*i for i in range(16)];COOKIE,MARKER=GP[14:16];RET=RTC+0x1f8;WDT=0x03009000;CFG=WDT+0xb4;MODE=WDT+0xb8;CTRL=WDT+0xb0
 sha=lambda b:hashlib.sha256(b).hexdigest();inputs={}
-def symbols(e):
- shoff=struct.unpack_from('<I',e,32)[0];entsz,count,_=struct.unpack_from('<3H',e,46);ss=[struct.unpack_from('<10I',e,shoff+i*entsz) for i in range(count)];out={}
+def wake_block(outer,stock):
+ o=struct.unpack('<32I',outer);types={struct.unpack_from('<I',stock,at+4)[0] for at in [0x38]+[0x374+k*0x80 for k in range(15)]}
+ return ('outer',bytes(outer)) if o[0] and o[1] in types else ('built-in',bytes(stock[0x38:0xb8]))
+def symbols(e,mapping=False):
+ shoff=struct.unpack_from('<I',e,32)[0];entsz,count,_=struct.unpack_from('<3H',e,46);ss=[struct.unpack_from('<10I',e,shoff+i*entsz) for i in range(count)];out={};marks=[]
  for h in ss:
   if h[1]!=2:continue
   st=ss[h[6]];names=e[st[4]:st[4]+st[5]]
   for at in range(h[4],h[4]+h[5],h[9]):
    n,v,sz,info,other,sec=struct.unpack_from('<IIIBBH',e,at)
    if n:out[names[n:].split(b'\0')[0].decode()]=v
- return out
+   if n and names[n:n+2] in (b'$a',b'$d'):marks.append((v,chr(names[n+1])))
+ return sorted(marks) if mapping else out
 
-def run(variant,name,route='native',pair=(0,0),seed=1,media=0,mutation=None,sctlr=0x30c50030,mode=0x13,fault=None,initial_wdt=0xb0):
+def run(variant,name,route='native',pair=(0,0),seed=1,media=0,mutation=None,sctlr=0x30c50030,mode=0x13,fault=None,initial_wdt=0xb0,retention=None):
  B=DIRECTORY;blob=(B/'capsule.egon.bin').read_bytes();manifest=json.loads((B/'manifest.json').read_text());syms=symbols((B/'capsule.elf').read_bytes());assert sha(blob)==manifest['raw_image_sha256'];assert len(blob)==0x20000 and syms['entry']==0x20400
  h=bytearray(blob);struct.pack_into('<I',h,12,0x5f0a6c39);assert sum(struct.unpack('<32768I',h))&0xffffffff==struct.unpack_from('<I',blob,12)[0]
  assert blob[0x1000:0x11000]==inputs['stock'] and blob[0x11000:0x1d000]==inputs['native']
@@ -30,13 +34,16 @@ def run(variant,name,route='native',pair=(0,0),seed=1,media=0,mutation=None,sctl
  cpsr=m.reg_read(a.UC_ARM_REG_CPSR)
  def put(at,v):m.mem_write(at,struct.pack('<I',v&0xffffffff))
  def get(at):return struct.unpack('<I',m.mem_read(at,4))[0]
- regs={at:rng.getrandbits(32) for at in GP+[RTC+0x1f4,RET,RTC+0x1fc]};regs.update({COOKIE:pair[0],MARKER:pair[1],RET:0x10000 if route=='resume' else 0,CFG:1,MODE:initial_wdt,CTRL:0})
+ regs={at:rng.getrandbits(32) for at in GP+[RTC+0x1f4,RET,RTC+0x1fc]};regs.update({COOKIE:pair[0],MARKER:pair[1],RET:retention if retention is not None else 0x10000 if route=='resume' else 0,CFG:1,MODE:initial_wdt,CTRL:0})
  if fault=='drop-config':regs[CFG]=0
  for at,v in regs.items():put(at,v)
  m.mem_write(0x20028,bytes([media]))
  if mutation:mutation(m,syms)
+ outer_dram=bytes(m.mem_read(0x20038,128))
  md=capstone.Cs(capstone.CS_ARCH_ARM,capstone.CS_MODE_ARM);barriers=[];priv=[]
- for ad in list(range(syms['entry'],syms['copy_end'],4)):
+ marks=symbols((B/'capsule.elf').read_bytes(),mapping=True)
+ code_word=lambda ad:[k for v,k in marks if v<=ad][-1:]==['a']
+ for ad in [ad for ad in range(syms['entry'],syms['copy_end'],4) if code_word(ad)]:
   ins=next(md.disasm(bytes(m.mem_read(ad,4)),ad),None)
   if ins and ins.mnemonic in ['dsb','isb']:barriers.append(ad)
   if ins and ins.mnemonic in ['mcr','mcrr','smc','hvc']:raise AssertionError('forbidden architectural write/transition in outer')
@@ -71,6 +78,7 @@ def run(variant,name,route='native',pair=(0,0),seed=1,media=0,mutation=None,sctl
   elif 0x50000<=at and at+size<=0x50000+stub_size:region='copy-stub'
   elif 0x52000<=at and at+size<=0x52048:region='copy-context'
   elif copied[0] and 0x20000<=at and at+size<=0x30000:region='selected-output'
+  elif route=='resume' and not copied[0] and 0x21038<=at and at+size<=0x210b8:region='wake-dram-block'
   else:raise AssertionError(('out-of-bounds SRAM store',hex(at),hex(mc.reg_read(a.UC_ARM_REG_PC)),size,name))
   lo,hi=state['write_ranges'].get(region,(at,at+size));state['write_ranges'][region]=(min(lo,at),max(hi,at+size))
  def invalid(mc,access,at,size,value,data):raise AssertionError(('unmapped access',hex(at),hex(mc.reg_read(a.UC_ARM_REG_PC)),name))
@@ -85,6 +93,7 @@ def run(variant,name,route='native',pair=(0,0),seed=1,media=0,mutation=None,sctl
  if route=='resume' or any(pair):assert not state['mmio_writes'],('stock route wrote MMIO',name)
  if state['outcome']=='inner-entry':
   selected='native' if bytes(m.mem_read(0x20000,4))==inputs['native'][:4] else 'stock';wanted=bytearray(inputs[selected]);wanted[0x28]=media
+  if route=='resume':state['wake_block'],wanted[0x38:0xb8]=wake_block(outer_dram,inputs['stock'])
   assert bytes(m.mem_read(0x20000,len(wanted)))==wanted,('selected output differs',name)
   assert [m.reg_read(r) for r in REGS]==initial,('registers changed',name)
   assert m.reg_read(a.UC_ARM_REG_CPSR)==cpsr,('CPSR changed',name)
