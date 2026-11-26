@@ -4,15 +4,15 @@
 
 | Branch | What it holds | Send pull requests here for |
 |---|---|---|
-| `main` | Development: the 1.5.x line and all new work | New features and most fixes |
-| `stable` | The 1.4.x release line | Fixes for people on 1.4.x |
+| `main` | Development: the 1.6.x line and all new work | New features and most fixes |
+| `stable` | The 1.5.x release line | Fixes for people on 1.5.x |
 | `feature/mainline-kernel` | BaseOS 2 on mainline Linux, experimental | BaseOS 2 work only |
 
 Start your branch from the branch you will send it to. A branch started from
 another one carries commits that are not yours into the pull request.
 
-If a fix is needed in both 1.5.x and 1.4.x, send it to `main` and say in the
-description that 1.4.x needs it too. A maintainer copies it to `stable` after
+If a fix is needed in both 1.6.x and 1.5.x, send it to `main` and say in the
+description that 1.5.x needs it too. A maintainer copies it to `stable` after
 merging.
 
 The release marked Latest on the Releases page is built from `stable`.
