@@ -22,6 +22,13 @@ suspend. This value stops the USB host controllers and removes the hall sensor
 from the wake set, so POWER wakes the device but opening the lid alone does
 not. Non-SP kernels do not expose `os_sleep` and use the full USB-stop path.
 
+When the fast native loader is installed, `rcS` (and `baseos-boot-migrate`
+after installing it) runs `native-health --sync-wake-dram` so the capsule's
+sector-16 header holds this unit's own memory settings. On standby wake, the
+capsule hands that block to the embedded vendor `boot0` before resume. Already
+synced cards exit after a single direct-I/O sector read; moving a card to a
+different unit updates the header on its next boot.
+
 ## 3. Wi-Fi
 
 BaseOS owns interface startup. Like stock, `rcS` loads `rtl_btlpm.ko` during
