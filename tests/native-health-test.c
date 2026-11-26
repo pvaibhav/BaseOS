@@ -195,8 +195,8 @@ static int modeled_clock(clockid_t clock, struct timespec *value)
 }
 static int modeled_sleep(const struct timespec *delay, struct timespec *remaining)
 {
-    assert(delay->tv_sec == 0 && delay->tv_nsec == 100000000 && !remaining);
-    now_ms += 100;
+    assert(delay->tv_sec == 0 && delay->tv_nsec == 5000000 && !remaining);
+    now_ms += 5;
     if (watchdog_changes_at >= 0 && now_ms >= watchdog_changes_at) timer[WDT_MODE] = 0x91;
     return 0;
 }

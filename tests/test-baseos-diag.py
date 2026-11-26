@@ -179,7 +179,8 @@ class Diagnostics(unittest.TestCase):
             "[    1.500000] unrelated line\n")
         self.set_regs()
         self.flash()
-        self.env = dict(os.environ, BASEOS_DIAG_TESTING="1", BASEOS_DIAG_ROOT=str(root), BASEOS_DIAG_DELAY="0",
+        self.env = dict(os.environ, BASEOS_DIAG_TESTING="1", BASEOS_DIAG_ROOT=str(root),
+                        BASEOS_DIAG_DELAY="0", BASEOS_DIAG_BOOT_DELAY="0",
                         PATH=f"{root}/bin:/usr/sbin:/usr/bin:/sbin:/bin")
         self.log = root / "mnt/sdcard/baseos-boot.log"
 

@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / 'src/h700-speaker-amp'
 LATE_USB = ROOT / 'src/h700-late-usb'
 # The first name is the audio module; every name is built, checked and shipped.
-MODULES = ('h700_speaker_amp', 'h700_late_usb')
+MODULES = ('h700_speaker_amp', 'h700_late_usb', 'h700_late_sdc1')
 
 
 def digest(blob):
@@ -79,8 +79,9 @@ def prepare(target, output):
     module_dir.mkdir(exist_ok=True)
     for name in ['Makefile', 'h700_speaker_amp.c']:
         shutil.copyfile(SOURCE / name, module_dir / name)
-    # One kbuild directory and one prepared kernel tree serve both modules.
+    # One kbuild directory and one prepared kernel tree serve all modules.
     shutil.copyfile(LATE_USB / 'h700_late_usb.c', module_dir / 'h700_late_usb.c')
+    shutil.copyfile(LATE_USB / 'h700_late_sdc1.c', module_dir / 'h700_late_sdc1.c')
     with (module_dir / 'Makefile').open('a') as makefile:
         makefile.write((LATE_USB / 'Makefile').read_text())
     start = kernel.index(b'Linux version ')

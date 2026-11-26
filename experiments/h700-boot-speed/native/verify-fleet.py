@@ -28,7 +28,7 @@ FIRMWARE_INPUTS = [
     HERE.parent / "spl" / name for name in
     ("native-handoff.h", "native-logo.h", "native-display.h", "native-panel.h", "native-boot.c", "native-cache.c",
      "native-cache-off.S", "dram-select.c")
-] + [ROOT / "devices.json", ROOT / "tools/device_profile.py"]
+] + [ROOT / "devices.json", ROOT / "tools/device_profile.py", ROOT / "tools/fdt_edit.py"]
 
 
 def sha(data):
@@ -236,10 +236,15 @@ def check_artifact(target, inventory, directory, contract, panel):
     assert sha(firmware) == manifest["firmware_sha256"]
     assert [(r["name"], r["destination"]) for r in manifest["firmware_regions"]] == [
         ("monitor", 0x48000000), ("dtbo", 0x4a100000), ("dtb", 0x4a200000),
-        ("loader", 0x4a000000)]
+        ("loader", 0x4a000000), ("panel-streams", 0x4a302000)]
     offset = 0
     for region in manifest["firmware_regions"]:
-        payload = (directory / "loader.bin").read_bytes() if region["name"] == "loader" else toc[region["name"]]
+        if region["name"] == "loader":
+            payload = (directory / "loader.bin").read_bytes()
+        elif region["name"] == "panel-streams":
+            payload = (directory / "panel-streams.bin").read_bytes()
+        else:
+            payload = toc[region["name"]]
         assert region["offset"] == offset
         assert len(payload) == region["bytes"]
         assert firmware[region["offset"]:region["offset"] + region["bytes"]] == payload

@@ -90,8 +90,9 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_AARCH64" \
   rm -f "$R"/usr/lib/aarch64-linux-gnu/alsa-lib/*.a "$R"/usr/lib/aarch64-linux-gnu/alsa-lib/*.la
   # The build is mandatory: do not silently ship only its userspace loader.
   install -m 644 /work/audio-module/h700_speaker_amp.ko "$R/usr/lib/modules/h700_speaker_amp.ko"
-  # Starts the USB host controllers that the boot files hold back; see rcS.
+  # Starts the USB host controllers and deferred sdc1 SDIO controller; see rcS.
   install -m 644 /work/audio-module/h700_late_usb.ko "$R/usr/lib/modules/h700_late_usb.ko"
+  install -m 644 /work/audio-module/h700_late_sdc1.ko "$R/usr/lib/modules/h700_late_sdc1.ko"
 
   # flat module paths used by rcS / setBluetooth.sh
   [ ! -f "$R/usr/lib/modules/4.9.170/kernel/drivers/net/wireless/rtl8821cs/8821cs.ko" ] \

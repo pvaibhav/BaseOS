@@ -22,7 +22,7 @@ SCRIPT = rcs[start:end] + '\necho ready > /run/frontend-handoff\n'
 
 class Radio:
     def __init__(self, power=None, stale=False, fail_first=False, slow_marker=False,
-                 uptime='2.40', wlan0=True):
+                 uptime='3.90', wlan0=True):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.process = None
@@ -181,9 +181,21 @@ try:
     r.wait(lambda: 'ip link set wlan0 up' in r.events(), timeout=5)
     events = r.events()
     assert [e.split()[0] for e in events] == ['btlpm', 'wifi-driver', 'rfkill', 'ip'], events
-    assert 2.25 <= uptime_of(events[1]) <= 2.60, events[1]
+    assert 3.80 <= uptime_of(events[1]) <= 4.15, events[1]
     assert not r.marker()
     print('PASS: an early start holds the first load until uptime %.2f s' % uptime_of(events[1]))
+finally:
+    r.close()
+
+# Targets without Wi-Fi (e.g. rg28xx, BASEOS_WIFI=0) skip radio loading.
+r = Radio(power=0, stale=False, wlan0=False)
+try:
+    r.write('test.sh', 'export BASEOS_WIFI=0 BASEOS_BLUETOOTH=0\n' + SCRIPT)
+    r.run()
+    assert r.process.wait(timeout=0.5) == 0
+    time.sleep(0.05)
+    assert not r.events()
+    print('PASS: disabled radio skips rtl_btlpm and 8821cs completely')
 finally:
     r.close()
 

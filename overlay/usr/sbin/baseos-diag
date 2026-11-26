@@ -673,6 +673,9 @@ case "$MODE" in
 	LOG=${BASEOS_BOOT_LOG:-$CARD_LOG}
 	[ -n "$ROOT" ] || [ "$LOG" = /mnt/sdcard/baseos-boot.log ] || [ "$LOG" = /tmp/baseos-boot.log ] || exit 1
 	LOG_FOR_HISTORY=$LOG
+	if [ "${BASEOS_DIAG_BOOT_DELAY:-3}" -gt 0 ] 2>/dev/null; then
+		sleep "${BASEOS_DIAG_BOOT_DELAY:-3}"
+	fi
 	take_turn
 	[ "$LOG" != "$CARD_LOG" ] || card_usable || exit 0
 	[ "$LOG" != "$CARD_LOG" ] || trim_log

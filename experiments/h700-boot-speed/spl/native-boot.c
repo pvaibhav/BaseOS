@@ -11,6 +11,7 @@
 #include "native-display.h"
 #include "native-panel.h"
 #include "boot-logo-file.h"
+#include "panel-spi9.h"
 #ifdef BASEOS_RAW_CAPSULE
 #include "raw-capsule-generated.h"
 #endif
@@ -73,13 +74,42 @@ static u32 fnv(const u8 *bytes, unsigned int size)
     return hash;
 }
 
-/* Vendor panel power-on (PI15), reset pulse (PI14) and PE6 strap. GPIO only: the SPL
- * still owns SRAM C, so SYSCTRL and the display engine stay with the A32 loader. */
+/* Vendor panel power-on (PI15), reset pulse (PI14), PE6 strap and SPI9 init
+ * stream. GPIO only: the SPL still owns SRAM C, so SYSCTRL and the display
+ * engine stay with the A32 loader. */
 static struct {
     unsigned int step; /* 0 idle, 1..4 waiting before step N, 5 done */
     unsigned int panel;
     u64 ticks[5];
+    unsigned int streams_staged;
+    unsigned int stream_state;   /* BASEOS_PANEL_STREAM_* */
+    unsigned int stream_next;
+    unsigned int stream_fnv;
+    unsigned int stream_wait_ms;
+    unsigned int stream_waiting;
+    unsigned int stream_count;
+    const u16 *stream_ops;
+    u64 stream_ticks;
+    struct baseos_panel_spi9 spi9;
 } panel_sequence;
+
+static uint32_t panel_spi9_read(void *context, uint32_t address)
+{
+    (void)context;
+    return readl((void *)(uintptr_t)address);
+}
+
+static void panel_spi9_write(void *context, uint32_t address, uint32_t value)
+{
+    (void)context;
+    writel(value, (void *)(uintptr_t)address);
+}
+
+static void panel_spi9_barrier(void *context)
+{
+    (void)context;
+    asm volatile("dmb sy" ::: "memory");
+}
 
 static void panel_update(ulong address, u32 mask, u32 bits)
 {
@@ -104,7 +134,15 @@ static void panel_start(void)
     panel_sequence.step = 1;
 }
 
-/* Take every step whose minimum wait has passed. Waits only ever get longer. */
+static void panel_stream_stage(void)
+{
+    const struct baseos_panel_streams *hdr = (const void *)(uintptr_t)BASEOS_PANEL_STREAMS_ADDRESS;
+    if (hdr->magic == BASEOS_PANEL_STREAMS_MAGIC && hdr->version == 1u)
+        panel_sequence.streams_staged = 1;
+}
+
+/* Advance panel power/reset/strap steps and any ready SPI9 stream chunks
+ * without blocking on delays. Waits only ever grow longer than minimums. */
 static void panel_advance(void)
 {
     static const u32 wait_ms[4] = BASEOS_PANEL_WAITS_MS;
@@ -129,6 +167,62 @@ static void panel_advance(void)
         panel_sequence.ticks[step] = panel_mark();
         panel_sequence.step = step + 1;
     }
+    if (panel_sequence.step != 5 || !panel_sequence.streams_staged ||
+        panel_sequence.stream_state == BASEOS_PANEL_STREAM_DONE)
+        return;
+    if (panel_sequence.stream_state == BASEOS_PANEL_STREAM_NONE) {
+        const struct baseos_panel_streams *hdr = (const void *)(uintptr_t)BASEOS_PANEL_STREAMS_ADDRESS;
+        u32 off = panel_sequence.panel ? hdr->boe_offset : hdr->old_offset;
+        u32 cnt = panel_sequence.panel ? hdr->boe_count : hdr->old_count;
+        u32 want_fnv = panel_sequence.panel ? hdr->boe_fnv : hdr->old_fnv;
+        if (hdr->magic != BASEOS_PANEL_STREAMS_MAGIC || hdr->version != 1u ||
+            off < sizeof(*hdr) || (off & 1u) || !cnt || cnt > 2048u ||
+            off > BASEOS_PANEL_STREAMS_CAPACITY - cnt * 2u) {
+            panel_sequence.streams_staged = 0;
+            return;
+        }
+        panel_sequence.stream_ops = (const u16 *)((const u8 *)hdr + off);
+        panel_sequence.stream_count = cnt;
+        panel_sequence.stream_fnv = want_fnv;
+        panel_sequence.stream_next = 0;
+        panel_sequence.stream_wait_ms = 0;
+        panel_sequence.stream_waiting = 0;
+        panel_sequence.stream_state = BASEOS_PANEL_STREAM_PARTIAL;
+        panel_sequence.spi9 = (struct baseos_panel_spi9){
+            {NULL, panel_spi9_read, panel_spi9_write, panel_spi9_barrier}, 0};
+    }
+    while (panel_sequence.stream_state == BASEOS_PANEL_STREAM_PARTIAL) {
+        if (panel_sequence.stream_waiting) {
+            u64 now;
+            asm volatile("isb; mrs %0, cntpct_el0" : "=r"(now));
+            if (now - panel_sequence.stream_ticks <
+                (u64)panel_sequence.stream_wait_ms * BASEOS_PANEL_TICKS_PER_MS)
+                return;
+            panel_sequence.stream_waiting = 0;
+            panel_sequence.stream_wait_ms = 0;
+        }
+        while (panel_sequence.stream_next < panel_sequence.stream_count) {
+            u16 op = panel_sequence.stream_ops[panel_sequence.stream_next++];
+            if (op & 0x8000u) {
+                u32 ms = op & 0x7fffu;
+                if (!ms || ms > 1000u) {
+                    panel_sequence.stream_state = BASEOS_PANEL_STREAM_NONE;
+                    panel_sequence.streams_staged = 0;
+                    return;
+                }
+                panel_sequence.stream_wait_ms = ms;
+                panel_sequence.stream_ticks = panel_mark();
+                panel_sequence.stream_waiting = 1;
+                return;
+            }
+            baseos_panel_spi9_send(&panel_sequence.spi9, (uint8_t)op, op & 0x100u);
+        }
+        panel_sequence.stream_state = BASEOS_PANEL_STREAM_DONE;
+        panel_sequence.stream_wait_ms = 0;
+        panel_sequence.stream_waiting = 0;
+        panel_sequence.stream_ticks = panel_mark();
+        return;
+    }
 }
 
 static void panel_publish(void)
@@ -138,6 +232,7 @@ static void panel_publish(void)
         panel_advance();
     if (panel_sequence.step != 5)
         return;
+    panel_advance();
     struct baseos_native_panel *record = (void *)BASEOS_NATIVE_PANEL_ADDRESS, next;
     memset(&next, 0, sizeof(next));
     next.magic = BASEOS_NATIVE_PANEL_MAGIC;
@@ -147,14 +242,22 @@ static void panel_publish(void)
     next.rule = BASEOS_PANEL_RULE;
     memcpy(next.ticks, panel_sequence.ticks, sizeof(next.ticks));
     memcpy(next.generation, baseos_generation, sizeof(next.generation));
+    if (panel_sequence.stream_state == BASEOS_PANEL_STREAM_DONE ||
+        (panel_sequence.stream_state == BASEOS_PANEL_STREAM_PARTIAL && panel_sequence.stream_waiting)) {
+        next.stream_state = panel_sequence.stream_state;
+        next.stream_next = panel_sequence.stream_next;
+        next.stream_fnv = panel_sequence.stream_fnv;
+        next.stream_wait_ms = panel_sequence.stream_wait_ms;
+        next.stream_ticks = panel_sequence.stream_ticks;
+    }
     next.fnv = baseos_panel_hash(&next);
     memcpy((u8 *)record + 4, (const u8 *)&next + 4, sizeof(next) - 4);
     asm volatile("dmb sy" ::: "memory");
     record->magic = next.magic;
 }
 
-/* 512 KiB per command (about 22 ms at 23.5 MB/s) bounds how far a panel wait stretches. */
-#define BASEOS_READ_CHUNK_BLOCKS 1024u
+/* 256 KiB per command (about 11 ms at 23.5 MB/s) bounds how far a panel wait stretches. */
+#define BASEOS_READ_CHUNK_BLOCKS 512u
 
 static int read_polled(struct blk_desc *card, lbaint_t start, lbaint_t blocks, void *output)
 {
@@ -218,13 +321,11 @@ int baseos_vendor_handoff(struct blk_desc *card, u32 *result, const u8 *stock)
     struct baseos_native_display *display = (void *)BASEOS_NATIVE_DISPLAY_ADDRESS;
     memset(display, 0, sizeof(*display));
     memset((void *)BASEOS_NATIVE_PANEL_ADDRESS, 0, sizeof(struct baseos_native_panel));
-    /* A strapped model always probes, so start at once. A fixed panel is powered
-     * only for the splash, as before. */
-    if (BASEOS_PANEL_RULE == 2)
-        panel_start();
+    memset(&panel_sequence, 0, sizeof(panel_sequence));
+    /* Start panel power/reset ahead of all reads so fixed and strapped models alike
+     * finish the 195 ms GPIO sequence and begin SPI9 init while reading image.bin. */
+    panel_start();
     load_boot_logo(card);
-    if (((struct baseos_native_logo *)BASEOS_NATIVE_LOGO_RECORD_ADDRESS)->magic == BASEOS_NATIVE_LOGO_MAGIC)
-        panel_start();
     u8 *package = (void *)0x42e00000;
     if (!read_polled(card, BASEOS_FIRMWARE_SECTOR, BASEOS_FIRMWARE_BYTES / 512, package) ||
         fnv(package, BASEOS_FIRMWARE_BYTES) != BASEOS_FIRMWARE_FNV) return -1;
@@ -233,6 +334,8 @@ int baseos_vendor_handoff(struct blk_desc *card, u32 *result, const u8 *stock)
         if (item->offset > BASEOS_FIRMWARE_BYTES || item->bytes > BASEOS_FIRMWARE_BYTES - item->offset) return -1;
         memcpy((void *)(ulong)item->destination, package + item->offset, item->bytes);
     }
+    panel_stream_stage();
+    panel_advance();
     if (!read_polled(card, BASEOS_IMAGE_SECTOR, BASEOS_IMAGE_BYTES / 512, (void *)BASEOS_NATIVE_IMAGE_ADDRESS) ||
         fnv((void *)BASEOS_NATIVE_IMAGE_ADDRESS, BASEOS_IMAGE_BYTES) != BASEOS_IMAGE_FNV) return -1;
     asm volatile("mrs %0, cntpct_el0" : "=r"(loaded));

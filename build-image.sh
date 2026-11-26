@@ -119,7 +119,7 @@ docker run --rm --platform "$BASEOS_DOCKER_PLATFORM_HOST" \
   # than the card delivers; gzip and xz are smaller but cost more time to
   # unpack than the read they save. The 4.9 kernel has no squashfs xattrs.
   LIB_IMAGE=/usr/share/baseos/usr-lib.sqfs
-  mksquashfs "$R/usr/lib" "$R$LIB_IMAGE" -comp lz4 -Xhc -b 131072 -noappend \
+  mksquashfs "$R/usr/lib" "$R$LIB_IMAGE" -comp lz4 -Xhc -b 262144 -noappend \
     -no-xattrs -no-exports -no-progress -mkfs-time 0 >/dev/null
   chmod 644 "$R$LIB_IMAGE"
   # Unpack it again and compare every name, mode, owner, link and content.

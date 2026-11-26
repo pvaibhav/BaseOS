@@ -114,6 +114,35 @@ __attribute__((noinline)) int baseos_spl_panel(void)
     return (int)panel->panel;
 }
 
+__attribute__((noinline)) int baseos_spl_panel_stream(unsigned panel_id, unsigned count,
+                                                        uint32_t expected_fnv, uint32_t *next,
+                                                        uint32_t *wait_ms, uint64_t *ticks)
+{
+    const struct baseos_native_panel *panel = (void *)BASEOS_NATIVE_PANEL_ADDRESS;
+    uint64_t now = native_ticks();
+    if (baseos_spl_panel() != (int)panel_id) return BASEOS_PANEL_STREAM_NONE;
+    if (panel->reserved || panel->stream_fnv != expected_fnv) return BASEOS_PANEL_STREAM_NONE;
+    if (panel->stream_ticks < panel->ticks[4] || panel->stream_ticks > now) return BASEOS_PANEL_STREAM_NONE;
+    if ((panel_read32(0x0300b124u) & 0xff000fffu) != 0x11000111u ||
+        (panel_read32(0x0300b130u) & 0xc100u) != 0xc100u) return BASEOS_PANEL_STREAM_NONE;
+    if (panel->stream_state == BASEOS_PANEL_STREAM_DONE) {
+        if (panel->stream_next != count || panel->stream_wait_ms) return BASEOS_PANEL_STREAM_NONE;
+        *next = count;
+        *wait_ms = 0;
+        *ticks = panel->stream_ticks;
+        return BASEOS_PANEL_STREAM_DONE;
+    }
+    if (panel->stream_state == BASEOS_PANEL_STREAM_PARTIAL) {
+        if (panel->stream_next > count || !panel->stream_wait_ms ||
+            panel->stream_wait_ms > 1000u) return BASEOS_PANEL_STREAM_NONE;
+        *next = panel->stream_next;
+        *wait_ms = panel->stream_wait_ms;
+        *ticks = panel->stream_ticks;
+        return BASEOS_PANEL_STREAM_PARTIAL;
+    }
+    return BASEOS_PANEL_STREAM_NONE;
+}
+
 __attribute__((noinline)) int baseos_native_display_state(void)
 {
     const struct baseos_native_display *display = (void *)BASEOS_NATIVE_DISPLAY_ADDRESS;

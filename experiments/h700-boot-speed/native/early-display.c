@@ -10,6 +10,8 @@
 extern uint64_t native_ticks(void);
 extern void release_display_sram(void);
 extern int baseos_spl_panel(void);
+extern int baseos_spl_panel_stream(unsigned panel, unsigned count, uint32_t expected_fnv,
+                                   uint32_t *next, uint32_t *wait_ms, uint64_t *ticks);
 
 enum display_operation_kind { DISPLAY_UPDATE, DISPLAY_WRITE, DISPLAY_FRAMEBUFFER,
                               DISPLAY_DELAY_US, DISPLAY_POLL, DISPLAY_BARRIER };
@@ -253,15 +255,35 @@ int baseos_early_display_start(const struct baseos_native_logo *logo)
     if (apply(baseos_display_prepare, sizeof(baseos_display_prepare) / sizeof(*baseos_display_prepare))) return -1;
     int panel = prepare_panel();
     if (panel < 0) return -1;
-    job.stage = DISPLAY_STREAM;
     job.panel = (unsigned)panel;
     job.stream = panel ? baseos_panel_boe : baseos_panel_old;
     job.count = panel ? sizeof(baseos_panel_boe) / sizeof(*baseos_panel_boe)
                       : sizeof(baseos_panel_old) / sizeof(*baseos_panel_old);
-    job.next = 0;
-    job.port = (struct baseos_panel_spi9){{NULL, read32, write32, barrier}, 0};
-    job.since = native_ticks();
-    job.wait = 0;
+    uint32_t expected_fnv = panel ? BASEOS_PANEL_BOE_FNV : BASEOS_PANEL_OLD_FNV;
+    uint32_t resumed_next = 0, resumed_wait_ms = 0;
+    uint64_t resumed_ticks = 0;
+    int stream_handoff = baseos_spl_panel_stream(job.panel, (unsigned)job.count,
+                                                 expected_fnv, &resumed_next,
+                                                 &resumed_wait_ms, &resumed_ticks);
+    if (stream_handoff == 2) {
+        job.stage = DISPLAY_PUBLISH;
+        job.next = job.count;
+        job.port = (struct baseos_panel_spi9){{NULL, read32, write32, barrier}, 1};
+        job.since = resumed_ticks;
+        job.wait = 50000u * 24u;
+    } else if (stream_handoff == 1) {
+        job.stage = DISPLAY_STREAM;
+        job.next = resumed_next;
+        job.port = (struct baseos_panel_spi9){{NULL, read32, write32, barrier}, 1};
+        job.since = resumed_ticks;
+        job.wait = (uint64_t)resumed_wait_ms * 24000u;
+    } else {
+        job.stage = DISPLAY_STREAM;
+        job.next = 0;
+        job.port = (struct baseos_panel_spi9){{NULL, read32, write32, barrier}, 0};
+        job.since = native_ticks();
+        job.wait = 0;
+    }
     job.logo = logo;
     return baseos_early_display_poll() < 0 ? -1 : panel;
 }

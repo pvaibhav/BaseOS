@@ -139,9 +139,10 @@ def model_policy(target, inventory):
             "bootreason_policy": "vendor PMIC reg20/reg00 classifier and unknown-only regf0 fallback",
             "bootreason_values": ["button", "irq", "usb", "charger", "battery", "unknow"],
             "bootreason_sources": ["unknown", "poweron", "pmu-f0-fallback"]}
-    policy["native_panel"] = {"record_address": 0x4a300280, "record_bytes": 96, "record_version": 1,
-        "producer": "SPL: PI15 power, PI14 reset 30/15/50/100 ms minimum waits and PE6 strap, polled between card reads",
-        "consumer": "A32 loader: used only when every wait is proved and live pins match; otherwise it redoes the steps"}
+    policy["native_panel"] = {"record_address": 0x4a300280, "record_bytes": 128, "record_version": 2,
+        "streams_address": 0x4a302000, "streams_capacity": 0x2000,
+        "producer": "SPL: PI15 power, PI14 reset 30/15/50/100 ms minimum waits, PE6 strap and non-blocking SPI9 stream, polled between card reads",
+        "consumer": "A32 loader: used only when every wait is proved, live pins match and stream state validates; otherwise it redoes what remains"}
     policy["kernel_decoder"] = {"source": "native/lz4-stream.c", "flags": "-O2 -munaligned-access",
         "sliced": True, "overlaps_display_waits": True}
     policy["early_display"] = {"runs_in": "a32-loader", "record_address": 0x4a300300, "record_bytes": 80,
@@ -252,10 +253,19 @@ def build(target, inventory, output, single_cpu=False, kernel_probes=False, pers
         toc["monitor"] = bytes(monitor)
     monitor = toc["monitor"]
     (output / "monitor.bin").write_bytes(monitor)
-    # BaseOS modifies this tree in kernel_gzip.py. The old Android-embedded
-    # tree still enables debug printing and five deferred USB controllers.
-    parts[4] = toc["dtb"]
-    image = fast.kg.join(original[:2048], parts, original[64:576].split(b"\0")[0])
+    # Firmware keeps untouched stock toc["dtb"] at 0x4a200000; only image.bin's
+    # Linux FDT defers sdc1 and appends non-blocking bootargs optimizations.
+    fdt_spec = importlib.util.spec_from_file_location("baseos_fdt_edit", ROOT / "tools/fdt_edit.py")
+    fdt_mod = importlib.util.module_from_spec(fdt_spec)
+    fdt_spec.loader.exec_module(fdt_mod)
+    linux_dtb = bytearray(toc["dtb"])
+    fdt_mod.replace(linux_dtb, "sdmmc@04021000", "status", b"okay\0", b"late\0")
+    parts[4] = bytes(linux_dtb)
+    extra_cmdline = b"initcall_blacklist=deeplay_encrypt_init,vin_init,brd_init rootfstype=ext4 elevator=noop"
+    base_cmdline = original[64:576].split(b"\0")[0]
+    image_cmdline = (base_cmdline + b" " + extra_cmdline) if base_cmdline else extra_cmdline
+    assert len(image_cmdline) < 512, f"image cmdline too long: {len(image_cmdline)}"
+    image = fast.kg.join(original[:2048], parts, image_cmdline)
     assert len(image) <= 0x1000000 and len(image) % 512 == 0
     (output / "image.bin").write_bytes(image)
     (output / "kernel.bin").write_bytes(kernel)
@@ -298,7 +308,7 @@ char *strrchr(const char *, int);
                HERE / "display-handoff.json",
                HERE / "panel-init.json", HERE / "panel-spi9.h", SPL / "native-display.h",
                HERE / "vendor-handoff.json", HERE / "derive-handoff.py",
-               ROOT / "devices.json", ROOT / "tools/device_profile.py",
+               ROOT / "devices.json", ROOT / "tools/device_profile.py", ROOT / "tools/fdt_edit.py",
                HERE / "kernel-trace64.S", HERE / "check-entry64.c",
                HERE / "kernel-fault64.S",
                HERE / "monitor-probe64.S", HERE / "initcall64.S",
@@ -398,12 +408,14 @@ SECTIONS {
     blob += bytes(-len(blob) % 512)
     assert len(blob) <= 0xe0000
     (output / "loader.bin").write_bytes(blob)
+    panel_streams = (output / "panel-streams.bin").read_bytes()
     firmware, regions = bytearray(), []
     for name, destination, payload in (("monitor", 0x48000000, toc["monitor"]),
                                         ("dtbo", 0x4a100000, toc["dtbo"]),
                                         ("dtb", 0x4a200000, toc["dtb"]),
-                                        ("loader", 0x4a000000, bytes(blob))):
-        limit = 0x40000 if name == "monitor" else 0x100000
+                                        ("loader", 0x4a000000, bytes(blob)),
+                                        ("panel-streams", 0x4a302000, panel_streams)):
+        limit = 0x2000 if name == "panel-streams" else (0x40000 if name == "monitor" else 0x100000)
         assert len(payload) <= limit
         regions.append({"name": name, "offset": len(firmware), "bytes": len(payload), "destination": destination})
         firmware.extend(payload)
@@ -419,6 +431,7 @@ SECTIONS {
     report = dict(policy, generation=generation.hex(), image_sha256=sha(image), image_bytes=len(image),
                   image_fnv=fnv(image), loader_sha256=sha(blob), loader_bytes=len(blob), loader_fnv=fnv(blob),
                   firmware_sha256=sha(firmware), firmware_bytes=len(firmware), firmware_fnv=fnv(firmware),
+                  panel_streams_sha256=sha(panel_streams), panel_streams_bytes=len(panel_streams),
                   firmware_regions=regions, kernel_sha256=sha(kernel), libfdt_archive_sha256=PIN,
                   early_display_tables=display_manifest,
                   native_diagnostic=kernel_probes,
@@ -428,6 +441,7 @@ SECTIONS {
                   source_monitor_sha256=source_monitor_sha256,
                   monitor_psci_probe=kernel_probes, kernel_initcall_probe=kernel_probes, monitor_sha256=sha(monitor),
                   kernel_dtb_source="prepared-toc1", kernel_dtb_sha256=sha(toc["dtb"]),
+                  linux_dtb_sha256=sha(parts[4]), late_sdc1=True, extra_cmdline=extra_cmdline.decode(),
                   durable_install_eligible=False)
     if persistent or raw_capsule:
         report["source_boot0_sha256"] = sha(source_boot0)

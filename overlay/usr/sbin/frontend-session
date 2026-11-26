@@ -44,7 +44,7 @@ fi
 # later would make that state look like a failed update and roll back forever.
 # An OS without its dynamic loader is not healthy, whatever is on the card: the
 # /usr/lib image did not mount, and only the rollback can repair that.
-[ -x /usr/sbin/baseos-update ] && [ -e /lib/ld-linux-aarch64.so.1 ] \
+[ -f /data/update/state ] && [ -x /usr/sbin/baseos-update ] && [ -e /lib/ld-linux-aarch64.so.1 ] \
 	&& /usr/sbin/baseos-update confirm 2>/dev/null
 
 # 1.236 -> 1.24: two decimals are plenty for a person reading the log.
@@ -191,8 +191,8 @@ if [ "$CARD_MISSING" -eq 0 ] && [ -f "$LAUNCH" ]; then
 	# rcS loads mali_kbase in the background; make sure /dev/mali0 exists
 	# before the frontend initializes graphics (near-always already true).
 	m=0
-	while [ ! -e /dev/mali0 ] && [ "$m" -lt 30 ]; do
-		sleep 0.1 2>/dev/null || sleep 1
+	while [ ! -e /dev/mali0 ] && [ "$m" -lt 300 ]; do
+		sleep 0.01 2>/dev/null || sleep 1
 		m=$((m + 1))
 	done
 	# A plain name for the log: the pak's name (MinUI for NextUI's MinUI.pak),
@@ -207,7 +207,7 @@ if [ "$CARD_MISSING" -eq 0 ] && [ -f "$LAUNCH" ]; then
 			esac ;;
 	esac
 	gpu_wait=
-	[ "$m" -eq 0 ] || gpu_wait=", after $((m / 10)).$((m % 10)) s waiting for the GPU"
+	[ "$m" -eq 0 ] || gpu_wait=", after $((m / 100)).$(((m / 10) % 10))$((m % 10)) s waiting for the GPU"
 	# Keep the first handoff across respawns and record it in the readable log.
 	if [ ! -s /run/boot-frontend-exec ]; then
 		# boot-clock validates counter access/frequency at the first handoff.

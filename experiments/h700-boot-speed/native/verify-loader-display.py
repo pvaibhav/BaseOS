@@ -83,7 +83,7 @@ class Run:
             assert self.code[address - 0x4a000000:address - 0x4a000000 + len(expected)] == expected, phase
             self.tables[address] = phase
 
-    def run(self, name, high=True, line=64, fault=None, unpack=False, panel=None, pio=None, record=None, skip=False):
+    def run(self, name, high=True, line=64, fault=None, unpack=False, panel=None, pio=None, record=None, skip=False, resumed=None):
         """panel: SPL panel record bytes (None = none published); pio: live PIO values it left;
         skip: the loader must use the record and leave power, reset and strap alone."""
         m = u.Uc(u.UC_ARCH_ARM, u.UC_MODE_ARM)
@@ -103,7 +103,7 @@ class Run:
         m.mem_write(0x45000000, self.image)
         record = record or self.record
         m.mem_write(RECORD, record)
-        m.mem_write(PANEL_RECORD, panel or bytes(96))
+        m.mem_write(PANEL_RECORD, panel or bytes(128))
         bmp = bytearray(self.bmp)
         descriptor = self.descriptor
         if fault == "no-logo":
@@ -275,6 +275,18 @@ class Run:
             if address == S.get("prepare_return"):
                 S["result"] = uc.reg_read(a.UC_ARM_REG_R0)
                 return
+            if address == self.sym["baseos_spl_panel_stream"]:
+                S["stream_return"] = uc.reg_read(a.UC_ARM_REG_LR)
+                watch(S["stream_return"])
+                return
+            if address == S.get("stream_return"):
+                got = uc.reg_read(a.UC_ARM_REG_R0)
+                expected_state = resumed[0] if resumed else 0
+                assert got == expected_state, ("unexpected SPL panel stream handoff", name, got, expected_state)
+                if resumed:
+                    _, _, resumed_wait_ms, resumed_ticks = resumed
+                    S["deferred"] = (resumed_ticks, (resumed_wait_ms if resumed[0] == 1 else 50) * 1000)
+                return
             if address == self.sym["baseos_lz4_step"]:
                 S["lz4_steps"] += 1
                 S["lz4_before_lit"] += not S["lit"]
@@ -348,7 +360,7 @@ class Run:
                 m.hook_add(u.UC_HOOK_CODE, code, begin=address, end=address)
 
         for address in set(self.special) | {self.sym[n] for n in ("apply", "wait_us", "defer_us", "baseos_prepare_kernel",
-                                                                 "baseos_lz4_step")}:
+                                                                 "baseos_lz4_step", "baseos_spl_panel_stream")}:
             watch(address)
         m.reg_write(a.UC_ARM_REG_CPSR, 0x1d3)
         start = 0x4a000000
@@ -360,9 +372,9 @@ class Run:
             S["unmapped"] = True
             start = m.reg_read(a.UC_ARM_REG_PC)
         assert fault == "bad-bmp" or S.get("unmapped") and get(0x03000004) == 0x88abcdef and get(0x03000000) == 0x80000000, "SYSCTRL state"
-        return self.check(name, m, S, high, line, fault, bytes(bmp), descriptor, width, height, pixel_end, panel, unpack, skip)
+        return self.check(name, m, S, high, line, fault, bytes(bmp), descriptor, width, height, pixel_end, panel, unpack, skip, resumed)
 
-    def check(self, name, m, S, high, line, fault, bmp, descriptor, width, height, pixel_end, spl_panel, unpack, fast):
+    def check(self, name, m, S, high, line, fault, bmp, descriptor, width, height, pixel_end, spl_panel, unpack, fast, resumed):
         PIXELS = pixel_end - width * height * 4
         record = bytes(m.mem_read(DISPLAY, 80))
         assert not S["sram_c"], ("loader touched SRAM C", S["sram_c"][:4])
@@ -399,9 +411,21 @@ class Run:
         expected = [["wait_us", op["set_bits"]] for op in self.model["prepare"] if op["kind"] == "delay_us"]
         if not fast:
             expected += [["wait_us", v] for v in (30000, 15000, 50000, 100000)]
-        expected += [["wait_us", (op & 0x7fff) * 1000] if op & 0x8000 else ["data" if op & 0x100 else "command", op & 255]
-                     for op in stream]
-        expected += [["wait_us", 50000]]
+        if resumed and resumed[0] == 2:
+            stream_ops = []
+            expected_deferred_waits = 2
+        elif resumed and resumed[0] == 1:
+            stream_ops = stream[resumed[1]:]
+            expected += [["wait_us", (op & 0x7fff) * 1000] if op & 0x8000 else ["data" if op & 0x100 else "command", op & 255]
+                         for op in stream_ops]
+            expected += [["wait_us", 50000]]
+            expected_deferred_waits = sum(1 for op in stream_ops if op & 0x8000) + 3
+        else:
+            stream_ops = stream
+            expected += [["wait_us", (op & 0x7fff) * 1000] if op & 0x8000 else ["data" if op & 0x100 else "command", op & 255]
+                         for op in stream_ops]
+            expected += [["wait_us", 50000]]
+            expected_deferred_waits = sum(1 for op in stream_ops if op & 0x8000) + 2
         for phase in ("publish", "enable"):
             expected += [["wait_us", op["set_bits"]] for op in self.model[phase] if op["kind"] == "delay_us"]
         expected += [["wait_us", 100000]]
@@ -435,7 +459,7 @@ class Run:
         assert list(stamps) == sorted(stamps) and stamps[2] <= shown <= stamps[5], (stamps, shown)
         assert S["lz4_before_lit"] >= 1 and stamps[3] <= shown, "kernel decode did not overlap the display waits"
         assert S["deferred"] is None and len(S["deferred_checked"]) == \
-            sum(1 for op in stream if op & 0x8000) + 2, ("deferred waits not all honoured", S["deferred_checked"])
+            expected_deferred_waits, ("deferred waits not all honoured", S["deferred_checked"], expected_deferred_waits)
         command = props["/chosen", "bootargs"].rstrip(b"\0").split()
         assert [t for t in command if t.startswith(b"lcd_type=")] == [b"lcd_type=" + (b"boe" if panel else b"old")]
         row.update(decode_steps_before_backlight=S["lz4_before_lit"], deferred_waits_us=S["deferred_checked"],
@@ -490,10 +514,12 @@ def main():
     def strap_panel(high):
         return int(contract["high" if high else "low"] == "boe") if rule == 2 else rule
 
-    def panel_record(panel, ticks, version=1, generation=None, rule_field=None):
-        raw = bytearray(struct.pack("<6I5Q32s", 0x314c4e50, version, 96, 0, panel,
+    def panel_record(panel, ticks, version=2, generation=None, rule_field=None,
+                     stream_state=0, stream_next=0, stream_fnv=0, stream_wait_ms=0, stream_ticks=0, reserved=0):
+        raw = bytearray(struct.pack("<6I5Q32s4I2Q", 0x314c4e50, version, 128, 0, panel,
                                     rule if rule_field is None else rule_field, *ticks,
-                                    generation or bytes.fromhex(manifest["generation"])))
+                                    generation or bytes.fromhex(manifest["generation"]),
+                                    stream_state, stream_next, stream_fnv, stream_wait_ms, stream_ticks, reserved))
         struct.pack_into("<I", raw, 12, fnv(raw, (12, 16)))
         return bytes(raw)
 
@@ -548,7 +574,7 @@ def main():
              runner.run("fallback-low-64", high=False),
              refused("refuse-wait-short", panel=panel_record(panel, short)),
              refused("refuse-checksum", panel=bytes(damaged)),
-             refused("refuse-version", panel=panel_record(panel, ticks, version=2)),
+             refused("refuse-version", panel=panel_record(panel, ticks, version=1)),
              refused("refuse-generation", panel=panel_record(panel, ticks, generation=bytes(32))),
              refused("refuse-rule", panel=panel_record(panel, ticks, rule_field=(rule + 1) % 3)),
              refused("refuse-before-spl-start", panel=panel_record(panel, [started - 1] + ticks[1:])),
@@ -568,6 +594,39 @@ def main():
               fast("scanline-stuck", False, fault="scanline-stuck")]
     if any(op["kind"] == "poll" for phase in PHASES for op in engine[phase]):
         cases.append(fast("poll-timeout", False, fault="poll-timeout"))
+    if not args.spl_proof:
+        # Exercise SPL v2 SPI9 stream handoff (DONE, PARTIAL, and refusal fallbacks).
+        stream0 = streams[panel]
+        stream0_fnv = fnv(b"".join(op.to_bytes(2, "little") for op in stream0))
+        spi_pio = {**panels[False][1], CFG: 0x11345111, DAT: 0xa5a5e1a5}
+        done_pending_ticks = loaded - 10 * TICK if loaded >= 10 * TICK + ticks[4] else ticks[4]
+        done_ready_ticks = ticks[4]
+        cases.append(runner.run(
+            "spl-stream-done-pending", high=False, pio=spi_pio, skip=True,
+            panel=panel_record(panel, ticks, stream_state=2, stream_next=len(stream0),
+                               stream_fnv=stream0_fnv, stream_wait_ms=0, stream_ticks=done_pending_ticks),
+            resumed=(2, len(stream0), 0, done_pending_ticks)))
+        cases.append(runner.run(
+            "spl-stream-done-ready", high=False, pio=spi_pio, skip=True,
+            panel=panel_record(panel, ticks, stream_state=2, stream_next=len(stream0),
+                               stream_fnv=stream0_fnv, stream_wait_ms=0, stream_ticks=done_ready_ticks),
+            resumed=(2, len(stream0), 0, done_ready_ticks)))
+        delay_idx = next(i for i, op in enumerate(stream0) if op & 0x8000)
+        delay_ms = stream0[delay_idx] & 0x7fff
+        partial_ticks = loaded - 10 * TICK if loaded >= 10 * TICK + ticks[4] else ticks[4] + 1000
+        cases.append(runner.run(
+            "spl-stream-partial", high=False, pio=spi_pio, skip=True,
+            panel=panel_record(panel, ticks, stream_state=1, stream_next=delay_idx + 1,
+                               stream_fnv=stream0_fnv, stream_wait_ms=delay_ms, stream_ticks=partial_ticks),
+            resumed=(1, delay_idx + 1, delay_ms, partial_ticks)))
+        for bad_name, bad_kw, bad_pio in (
+            ("refuse-stream-fnv", dict(stream_state=2, stream_next=len(stream0), stream_fnv=stream0_fnv ^ 1, stream_ticks=ticks[4]), spi_pio),
+            ("refuse-stream-ticks", dict(stream_state=2, stream_next=len(stream0), stream_fnv=stream0_fnv, stream_ticks=ticks[4] - 1), spi_pio),
+            ("refuse-stream-reserved", dict(stream_state=2, stream_next=len(stream0), stream_fnv=stream0_fnv, stream_ticks=ticks[4], reserved=1), spi_pio),
+            ("refuse-stream-pins", dict(stream_state=2, stream_next=len(stream0), stream_fnv=stream0_fnv, stream_ticks=ticks[4]), panels[False][1]),
+        ):
+            cases.append(runner.run(bad_name, high=False, pio=bad_pio, skip=True,
+                                    panel=panel_record(panel, ticks, **bad_kw)))
     args.output.mkdir(parents=True)
     first = cases[0].pop("_artifacts")
     for row in cases:

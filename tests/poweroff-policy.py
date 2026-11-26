@@ -44,6 +44,7 @@ class Boot:
         self.write("dev/console", "")
         self.write("dev/urandom", "seed")
         self.write("etc/hostname", "baseos\n")
+        self.write("data/update/state", "trial\n")
         for script in ("etc/init.d/rcS", "etc/init.d/rcK", "usr/sbin/baseos-charger",
                        "usr/bin/baseos-splash", "usr/share/baseos/boot-log.sh"):
             self.write(script, (ROOT / "overlay" / script).read_bytes(), executable=True)
@@ -181,6 +182,15 @@ def check(name, test):
 
 
 check("normal boot skips all charger work", {"env": {"mode": "0"}, "wait": False})
+boot_no_trial = Boot(mode="0")
+try:
+    (boot_no_trial.root / "data/update/state").unlink()
+    boot_no_trial.start()
+    assert boot_no_trial.proc.wait(timeout=4) == 0
+    assert "baseos-update boot-check" not in boot_no_trial.calls()
+    print("PASS: normal boot without update trial skips baseos-update boot-check")
+finally:
+    boot_no_trial.close()
 check("exact cmdline token", {"env": {"mode": None, "cmdline": "bootreason=charger-extra"}, "wait": False})
 check("normal latched mode wins over cmdline", {"env": {"mode": "0"}, "wait": False})
 check("older kernel charger token", {"env": {"mode": None}, "cut": True})

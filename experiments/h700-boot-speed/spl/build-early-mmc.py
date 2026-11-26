@@ -165,6 +165,7 @@ def main(output: Path, boot0: Path | None = None, dram: bool = False, package: P
         for name in ("native-handoff.h", "native-logo.h", "native-display.h", "native-panel.h", "native-cache.c", "native-cache-off.S"):
             shutil.copyfile(HERE / name, arch / name)
         shutil.copyfile(HERE.parent / "native/boot-logo-file.h", arch / "boot-logo-file.h")
+        shutil.copyfile(HERE.parent / "native/panel-spi9.h", arch / "panel-spi9.h")
         header = native_header.decode()
         header += (f"\n#define BASEOS_FIRMWARE_SECTOR {native_manifest['boot_partition_lba'] + 40 * 2048}ul\n"
                    f"#define BASEOS_IMAGE_SECTOR {native_manifest['boot_partition_lba'] + 48 * 2048}ul\n")

@@ -19,15 +19,11 @@ grep -q ' /dev devtmpfs ' /proc/mounts || /bin/mount -t devtmpfs dev /dev
 # directory the time it always had. -c: never create a file in its place.
 /bin/touch -c -d @1 /dev/input 2>/dev/null
 
-# Root filesystem. The vendor initramfs used to run e2fsck on it and mount it
-# writable; a boot without that initramfs arrives here with the kernel's own
-# read-only mount instead. Finish the job the same way, so the rest of the
-# system cannot tell which boot pair is installed. The kernel has already
-# replayed the journal, so a check is only due when the filesystem carries
-# recorded errors. e2fsck repairs a mounted root behind the kernel's back: when
-# it changed anything, keep the root read-only until the next restart rather
-# than write through stale cached state. Nothing runs here on a root that is
-# already writable.
+# Root filesystem. The vendor initramfs used to mount it writable after e2fsck.
+# BaseOS keeps the root filesystem mounted read-only; writable runtime state
+# lives on tmpfs (/run, /tmp, /var) and persistent userdata (/data). When a boot
+# arrives here with recorded ext4 errors on mmcblk0p5, run e2fsck once and log
+# the outcome while leaving / read-only.
 root_opts=
 while read -r _ root_dir _ root_o _; do
 	[ "$root_dir" != / ] || root_opts=$root_o
@@ -36,15 +32,10 @@ case ",$root_opts," in *,ro,*)
 	root_errors=0
 	[ ! -r /sys/fs/ext4/mmcblk0p5/errors_count ] \
 		|| read -r root_errors < /sys/fs/ext4/mmcblk0p5/errors_count
-	root_fsck=0
 	if [ "$root_errors" != 0 ] && [ -x /usr/sbin/e2fsck ]; then
+		root_fsck=0
 		/usr/sbin/e2fsck -y /dev/mmcblk0p5 >/dev/null 2>&1 || root_fsck=$?
 		echo "baseos: root filesystem had $root_errors recorded errors; e2fsck exit $root_fsck" > /dev/kmsg
-	fi
-	if [ "$root_fsck" -eq 0 ]; then
-		/bin/mount -o remount,rw,noatime,nodiratime,nobarrier,noauto_da_alloc / 2>/dev/null \
-			|| /bin/mount -o remount,rw,noatime / 2>/dev/null \
-			|| echo 'baseos: root filesystem stays read-only: remount failed' > /dev/kmsg
 	fi
 	;;
 esac
@@ -108,15 +99,9 @@ fi
 # background to overlap startup; frontend-session waits for /dev/mali0.
 /sbin/insmod /lib/modules/mali_kbase.ko 2>/dev/null &
 
-# USB host controllers: the boot files hold back every one except the one the
-# OTG port needs, so the kernel does not spend 0.3 s starting them before init.
-# This module starts them now, beside the rest of startup. On boot files that
-# hold nothing back it finds nothing to do.
-[ ! -f /lib/modules/h700_late_usb.ko ] || /sbin/insmod /lib/modules/h700_late_usb.ko 2>/dev/null &
-
 # Persistent state partition (p6, label "userdata"). It survives system
 # updates: an A/B slot flip only moves the rootfs partition.
-/bin/mkdir -p /data
+[ -d /data ] || /bin/mkdir -p /data
 if ! /bin/mount -t ext4 -o rw,noatime /dev/mmcblk0p6 /data 2>/dev/null; then
 	/bin/mount -t tmpfs tmpfs /data
 fi
@@ -146,15 +131,32 @@ if [ -e /sys/firmware/devicetree/base/chosen/baseos,native-boot ]; then
 	fi
 fi
 
+# USB host controllers: the boot files hold back every one except the one the
+# OTG port needs, so the kernel does not spend 0.3 s starting them before init.
+# Load this after native acceptance so the PMIC/display accept wait stays minimal.
+[ ! -f /lib/modules/h700_late_usb.ko ] || /sbin/insmod /lib/modules/h700_late_usb.ko 2>/dev/null &
+
 # A freshly updated slot is on trial until a frontend session starts. Count the
 # boots that never got that far and restore the previous slot if this one
 # cannot. No-op unless an update is in its trial window.
-[ -x /usr/sbin/baseos-update ] && /usr/sbin/baseos-update boot-check
+[ -f /data/update/state ] && [ -x /usr/sbin/baseos-update ] && /usr/sbin/baseos-update boot-check
 
-# Restore the selected timezone. /etc/localtime is baked as a symlink to
-# /run/localtime because the root filesystem is read-only; timedatectl keeps
-# the selected zone name on the persistent /data partition.
-[ -x /usr/bin/timedatectl ] && /usr/bin/timedatectl apply 2>/dev/null
+# Restore the selected timezone and deferred NTP daemon without spawning a
+# shell wrapper on the hot path. /etc/localtime symlinks into /run/localtime.
+tz=Etc/UTC
+if [ -s /data/timezone ]; then
+	IFS= read -r tz_cand < /data/timezone || :
+	case "$tz_cand" in ''|/*|*..*) ;; *)
+		[ ! -f "/usr/share/zoneinfo/$tz_cand" ] || tz=$tz_cand ;;
+	esac
+fi
+/bin/ln -sfn "/usr/share/zoneinfo/$tz" /run/localtime
+if [ -s /data/ntp-enabled ]; then
+	IFS= read -r ntp_on < /data/ntp-enabled || :
+	if [ "$ntp_on" = yes ] && [ -x /usr/sbin/baseos-ntp ]; then
+		(sleep 2; /usr/sbin/baseos-ntp run </dev/null >> /var/log/baseos-ntp.log 2>&1) &
+	fi
+fi
 
 # Entropy: restore last boot's seed (kernel 4.9 is slow to gather on its own).
 [ -f /data/random-seed ] && /bin/cat /data/random-seed > /dev/urandom 2>/dev/null
@@ -166,6 +168,8 @@ fi
 # usual alternative — an adjtime file declaring UTC — cannot work here: this
 # busybox looks for it at /var/lib/hwclock/adjtime, and /var is tmpfs.
 /sbin/hwclock -u -s 2>/dev/null &
+
+[ ! -r /etc/baseos-release ] || . /etc/baseos-release
 
 # Radio initialization stays in the background: never delay frontend handoff.
 # The vendor kernel can enumerate the bootloader-powered SDIO card, then turn
@@ -182,73 +186,80 @@ fi
 # radio off), keep it off for a stock-length interval, and load again. Remember
 # that on /data so later boots hold the first load instead of failing first.
 # Units whose first attempt works, the common case, are unaffected.
+if [ "${BASEOS_BLUETOOTH:-1}" != 0 ] || [ "${BASEOS_WIFI:-1}" != 0 ]; then
 (
 	# Stock loads the Bluetooth wake-handshake driver during early boot
 	# (/etc/modules); its probe drives BT_WAKE (PG17) high. Keep that state,
 	# and keep it ahead of the WiFi driver. Loading it takes about 40 ms.
-	[ ! -f /lib/modules/rtl_btlpm.ko ] || /sbin/insmod /lib/modules/rtl_btlpm.ko 2>/dev/null
-	wifi_slow=/data/wifi-slow-radio
-	wifi_off_cs=500                 # power-off interval, centiseconds (stock: ~380)
-	wifi_cut_cs=185                 # kernel disables the WLAN supply about here
-	wifi_first_cs=225               # startup used to reach the first load about here
-	wifi_uptime() {                 # centiseconds; empty when unavailable
-		read -r wifi_up _ < /proc/uptime 2>/dev/null || wifi_up=
-		wifi_up="${wifi_up%.*}${wifi_up#*.}"
-		while [ "${wifi_up#0}" != "$wifi_up" ]; do wifi_up="${wifi_up#0}"; done
-	}
-	wifi_hold_until() {             # bounded wait for uptime >= $1 cs
-		wifi_n=0
-		wifi_uptime
-		while [ -n "$wifi_up" ] && [ "$wifi_up" -lt "$1" ] && [ "$wifi_n" -lt 80 ]; do
-			sleep 0.25 2>/dev/null || sleep 1
-			wifi_n=$((wifi_n + 1))
-			wifi_uptime
-		done
-	}
-	wifi_load() {
-		wifi_rf=/sys/class/misc/sunxi-wlan/rf-ctrl
-		if [ -w "$wifi_rf/scan_device" ] && [ -r "$wifi_rf/power_state" ] \
-			&& read -r wifi_power < "$wifi_rf/power_state" && [ "$wifi_power" = 0 ]; then
-			printf '1\n' > "$wifi_rf/scan_device"
-			wifi_wait=0
-			for wifi_card in /sys/bus/sdio/devices/*; do
-				while [ -d "$wifi_card" ] && [ "$wifi_wait" -lt 20 ]; do
-					sleep 0.05
-					wifi_wait=$((wifi_wait + 1))
-				done
-			done
-		fi
-		/sbin/insmod /lib/modules/8821cs.ko 2>/dev/null
-		wifi_wait=0
-		while [ ! -d /sys/class/net/wlan0 ] && [ "$wifi_wait" -lt "$1" ]; do
-			sleep 0.25 2>/dev/null || sleep 1
-			wifi_wait=$((wifi_wait + 1))
-		done
-	}
-	if [ -e "$wifi_slow" ]; then
-		echo 'baseos: wifi: holding the driver load for a slow-resetting radio' > /dev/kmsg
-		wifi_hold_until $((wifi_cut_cs + wifi_off_cs))
-		wifi_load 40
-	else
-		# Startup now gets here sooner after the kernel cuts the WLAN supply.
-		# The radio keeps the power-off interval it has always had before its
-		# first power-up: start no earlier than startup used to.
-		wifi_hold_until "$wifi_first_cs"
-		wifi_load 8
-		if [ ! -d /sys/class/net/wlan0 ]; then
-			echo 'baseos: wifi: no wlan0 after the first load; retrying after a longer power-off' > /dev/kmsg
-			/sbin/rmmod 8821cs 2>/dev/null
-			: > "$wifi_slow" 2>/dev/null
-			wifi_uptime
-			[ -n "$wifi_up" ] && wifi_hold_until $((wifi_up + wifi_off_cs)) || sleep 5
-			wifi_load 40
-		fi
+	if [ "${BASEOS_BLUETOOTH:-1}" != 0 ] && [ -f /lib/modules/rtl_btlpm.ko ]; then
+		/sbin/insmod /lib/modules/rtl_btlpm.ko 2>/dev/null
 	fi
-	if [ -d /sys/class/net/wlan0 ]; then
-		rfkill unblock wifi 2>/dev/null || true
-		ip link set wlan0 up 2>/dev/null || true
+	if [ "${BASEOS_WIFI:-1}" != 0 ]; then
+		wifi_slow=/data/wifi-slow-radio
+		wifi_off_cs=500                 # power-off interval, centiseconds (stock: ~380)
+		wifi_cut_cs=185                 # kernel disables the WLAN supply about here
+		wifi_first_cs=380               # defer radio bring-up safely past first frame
+		wifi_uptime() {                 # centiseconds; empty when unavailable
+			read -r wifi_up _ < /proc/uptime 2>/dev/null || wifi_up=
+			wifi_up="${wifi_up%.*}${wifi_up#*.}"
+			while [ "${wifi_up#0}" != "$wifi_up" ]; do wifi_up="${wifi_up#0}"; done
+		}
+		wifi_hold_until() {             # bounded wait for uptime >= $1 cs
+			wifi_n=0
+			wifi_uptime
+			while [ -n "$wifi_up" ] && [ "$wifi_up" -lt "$1" ] && [ "$wifi_n" -lt 80 ]; do
+				sleep 0.25 2>/dev/null || sleep 1
+				wifi_n=$((wifi_n + 1))
+				wifi_uptime
+			done
+		}
+		wifi_load() {
+			[ ! -f /lib/modules/h700_late_sdc1.ko ] || /sbin/insmod /lib/modules/h700_late_sdc1.ko 2>/dev/null
+			wifi_rf=/sys/class/misc/sunxi-wlan/rf-ctrl
+			if [ -w "$wifi_rf/scan_device" ] && [ -r "$wifi_rf/power_state" ] \
+				&& read -r wifi_power < "$wifi_rf/power_state" && [ "$wifi_power" = 0 ]; then
+				printf '1\n' > "$wifi_rf/scan_device"
+				wifi_wait=0
+				for wifi_card in /sys/bus/sdio/devices/*; do
+					while [ -d "$wifi_card" ] && [ "$wifi_wait" -lt 20 ]; do
+						sleep 0.05
+						wifi_wait=$((wifi_wait + 1))
+					done
+				done
+			fi
+			/sbin/insmod /lib/modules/8821cs.ko 2>/dev/null
+			wifi_wait=0
+			while [ ! -d /sys/class/net/wlan0 ] && [ "$wifi_wait" -lt "$1" ]; do
+				sleep 0.25 2>/dev/null || sleep 1
+				wifi_wait=$((wifi_wait + 1))
+			done
+		}
+		if [ -e "$wifi_slow" ]; then
+			echo 'baseos: wifi: holding the driver load for a slow-resetting radio' > /dev/kmsg
+			wifi_hold_until $((wifi_cut_cs + wifi_off_cs))
+			wifi_load 40
+		else
+			# Startup now gets here sooner after the kernel cuts the WLAN supply.
+			# The radio keeps the power-off interval it has always had before its
+			# first power-up: start no earlier than startup used to.
+			wifi_hold_until "$wifi_first_cs"
+			wifi_load 8
+			if [ ! -d /sys/class/net/wlan0 ]; then
+				echo 'baseos: wifi: no wlan0 after the first load; retrying after a longer power-off' > /dev/kmsg
+				/sbin/rmmod 8821cs 2>/dev/null
+				: > "$wifi_slow" 2>/dev/null
+				wifi_uptime
+				[ -n "$wifi_up" ] && wifi_hold_until $((wifi_up + wifi_off_cs)) || sleep 5
+				wifi_load 40
+			fi
+		fi
+		if [ -d /sys/class/net/wlan0 ]; then
+			rfkill unblock wifi 2>/dev/null || true
+			ip link set wlan0 up 2>/dev/null || true
+		fi
 	fi
 ) &
+fi
 
 # machine-id (dbus/BlueZ). /etc/machine-id is a baked symlink into /run.
 if [ -s /data/machine-id ]; then
@@ -264,7 +275,19 @@ fi
 # First boot on a fresh flash: grow this card's data partition to fill the
 # whole card (leaving it empty for the user to add a frontend). No-op once the
 # card already fills the disk.
-[ -x /usr/sbin/expand-storage ] && /usr/sbin/expand-storage
+need_expand=1
+if [ -r /sys/class/block/mmcblk0/size ] && [ -r /sys/class/block/mmcblk0p7/start ] \
+	&& [ -r /sys/class/block/mmcblk0p7/size ]; then
+	read -r d_sz < /sys/class/block/mmcblk0/size || d_sz=0
+	read -r p7_st < /sys/class/block/mmcblk0p7/start || p7_st=0
+	read -r p7_sz < /sys/class/block/mmcblk0p7/size || p7_sz=0
+	case "$d_sz/$p7_st/$p7_sz" in *[!0-9/]*) ;; *)
+		[ $((p7_st + p7_sz)) -lt $((d_sz - 34)) ] || need_expand=0 ;;
+	esac
+fi
+if [ "$need_expand" -ne 0 ] && [ -x /usr/sbin/expand-storage ]; then
+	/usr/sbin/expand-storage
+fi
 
 # The second card slot (TF2) is powered and identified by the kernel in the
 # background, about 0.4 s after its controller starts, so its card can still be
@@ -309,7 +332,7 @@ done
 # delay. Because no frontend card has been mounted yet, TF2 can be exported as
 # a complete disk (partition table included); without TF2, export TF1's p7.
 USB_STORAGE_MODE=0
-/bin/mkdir -p /mnt/sdcard
+[ -d /mnt/sdcard ] || /bin/mkdir -p /mnt/sdcard
 if { [ -e /run/boot-menu-held ] || /usr/sbin/boot-menu-held; } \
 	&& [ -x /usr/sbin/usb-storage-mode ] \
 	&& /usr/sbin/usb-storage-mode prepare; then
@@ -334,13 +357,12 @@ if [ "$USB_STORAGE_MODE" -eq 0 ]; then
 	done
 fi
 # Older rootfs images may lack the alias baked into current builds.
-[ "$(readlink /mnt/SDCARD)" = /mnt/sdcard ] || /bin/ln -sfn /mnt/sdcard /mnt/SDCARD
+[ "$(readlink /mnt/SDCARD 2>/dev/null)" = /mnt/sdcard ] || /bin/ln -sfn /mnt/sdcard /mnt/SDCARD
 
 # One header per boot. Everything else in the log belongs to the boot above it.
 . /usr/share/baseos/boot-log.sh
 select_boot_log
 read -r boot_id < /proc/sys/kernel/random/boot_id
-[ ! -r /etc/baseos-release ] || . /etc/baseos-release
 log "=== BaseOS boot $(date '+%Y-%m-%d %H:%M:%S'), BaseOS ${BASEOS_VERSION:-?} for ${BASEOS_TARGET:-?}, boot ${boot_id%%-*} ==="
 flush_early_boot_log
 
@@ -353,7 +375,7 @@ if [ "$USB_STORAGE_MODE" -eq 0 ]; then
 	if grep -q '^/dev/mmcblk0p7 /mnt/sdcard ' /proc/mounts; then
 		BASEOS_CONFIG=/mnt/sdcard/baseos.conf
 	else
-		/bin/mkdir -p /mnt/system
+		[ -d /mnt/system ] || /bin/mkdir -p /mnt/system
 		if /bin/mount -t vfat -o ro /dev/mmcblk0p7 /mnt/system 2>/dev/null; then
 			TF1_CONFIG_MOUNTED=1
 			BASEOS_CONFIG=/mnt/system/baseos.conf
@@ -367,8 +389,21 @@ fi
 # inactive rootfs slot, verifies it, flips the GPT and reboots. Storage mode
 # leaves every card file to the USB host; the update runs on the next normal
 # boot after the user ejects and restarts without MENU.
-if [ "$USB_STORAGE_MODE" -eq 0 ]; then
-	[ -x /usr/sbin/baseos-update ] && /usr/sbin/baseos-update apply
+if [ "$USB_STORAGE_MODE" -eq 0 ] && [ -x /usr/sbin/baseos-update ]; then
+	has_bosupd=0
+	for upd_file in /mnt/sdcard/*.bosupd; do
+		[ -f "$upd_file" ] || continue
+		has_bosupd=1
+		break
+	done
+	if [ "$has_bosupd" -eq 0 ] && [ "$TF1_CONFIG_MOUNTED" -eq 1 ]; then
+		for upd_file in /mnt/system/*.bosupd; do
+			[ -f "$upd_file" ] || continue
+			has_bosupd=1
+			break
+		done
+	fi
+	[ "$has_bosupd" -eq 0 ] || /usr/sbin/baseos-update apply
 fi
 if [ "$USB_STORAGE_MODE" -eq 0 ] && [ -f /usr/share/baseos/native/capsule.bin ] \
 	&& [ -x /usr/sbin/native-health ]; then
@@ -393,7 +428,7 @@ if [ "$USB_STORAGE_MODE" -eq 0 ] && [ -x /usr/sbin/baseos-startup-sound ]; then
 	/usr/sbin/baseos-startup-sound </dev/null >/run/startup-sound.log 2>&1 &
 fi
 
-# Dev image extras (serial getty is in inittab; this starts SSH).
-[ -x /etc/init.d/dev ] && /etc/init.d/dev &
+# Dev image extras (serial getty is in inittab; delay SSH/ADB past first frame).
+[ -x /etc/init.d/dev ] && (sleep 2; /etc/init.d/dev) &
 
 : # rcS must succeed; init proceeds to respawn frontend-session

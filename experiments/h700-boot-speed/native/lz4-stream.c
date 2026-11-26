@@ -13,9 +13,11 @@ typedef unsigned int u32;
 typedef __SIZE_TYPE__ usize;
 
 /* Work per step: about 2 ms of hashing or 1 ms of output on the device. */
-#define HASH_SLICE 0x80000u
 #define OUTPUT_SLICE 0x40000u
+#ifdef BASEOS_NATIVE_DIAGNOSTIC
+#define HASH_SLICE 0x80000u
 #define FNV_PRIME 16777619u
+#endif
 
 static inline u32 little32(const u8 *p)
 {
@@ -69,6 +71,7 @@ int baseos_lz4_begin(struct baseos_lz4 *state, u8 *dst, unsigned long capacity,
     return 0;
 }
 
+#ifdef BASEOS_NATIVE_DIAGNOSTIC
 static int hash_slice(struct baseos_lz4 *state)
 {
     const u8 *q = state->hashed, *end = state->end;
@@ -90,6 +93,7 @@ static int hash_slice(struct baseos_lz4 *state)
         return -3;
     return 1;
 }
+#endif
 
 static inline void copy_literal(u8 *out, const u8 *in, usize bytes, const u8 *end, const u8 *limit)
 {
@@ -263,7 +267,9 @@ static int decode_slice(struct baseos_lz4 *state)
 
 int baseos_lz4_step(struct baseos_lz4 *state)
 {
+#ifdef BASEOS_NATIVE_DIAGNOSTIC
     if (state->hashed != state->end)
         return hash_slice(state);
+#endif
     return decode_slice(state);
 }

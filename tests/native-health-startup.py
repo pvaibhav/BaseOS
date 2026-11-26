@@ -33,6 +33,8 @@ def display_record(panel, generation=GENERATION, blank=False):
 def boot_fixture(args, *, native=True, **env):
     boot = Boot(**env)
     boot.write("etc/init.d/rcS", args.rcs.read_bytes(), executable=True)
+    if env.get("UPDATE_REBOOT_AT") == "apply":
+        boot.write("mnt/sdcard/update.bosupd", "placeholder\n")
     boot.write("test/native-health-model", args.helper.read_bytes(), executable=True)
     boot.stub("usr/sbin/native-health", 'exec /test/native-health-model "$@"')
     boot.stub("usr/sbin/baseos-update", '''
@@ -260,6 +262,16 @@ def main():
     finally:
         boot.close()
     print("PASS: failed wake DRAM sync logs to boot log without blocking boot")
+
+    boot = boot_fixture(args, mode="0")
+    try:
+        (boot.root / "data/update/state").unlink()
+        boot.start()
+        assert boot.proc.wait(timeout=4) == 0, boot.calls()
+        assert "baseos-update" not in boot.calls(), boot.calls()
+    finally:
+        boot.close()
+    print("PASS: steady-state normal boot without trial/payload skips baseos-update")
 
 
 if __name__ == "__main__":

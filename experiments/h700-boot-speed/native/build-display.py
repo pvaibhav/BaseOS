@@ -2,6 +2,7 @@
 """Generate a model's pinned display tables for the A32 loader's pre-Linux logo."""
 import hashlib
 import json
+import struct
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -13,6 +14,13 @@ PHASES = ("prepare", "publish", "enable", "backlight")
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def fnv(data):
+    value = 2166136261
+    for byte in data:
+        value = ((value ^ byte) * 16777619) & 0xffffffff
+    return value
 
 
 def handoff(target, policy):
@@ -88,10 +96,27 @@ def build(output, target, policy, generation):
               "static const unsigned char baseos_generation[32] = {" +
               ",".join(map(str, generation)) + "};\n")
     fallback = panel["old"] or panel["boe"]
+    packed_raw = {}
+    packed_counts = {}
+    packed_fnvs = {}
     for name in ("old", "boe"):
         values = streams[panel[name] or fallback]
+        raw = b"".join(op.to_bytes(2, "little") for op in values)
+        packed_raw[name] = raw
+        packed_counts[name] = len(values)
+        packed_fnvs[name] = fnv(raw)
+        header += f"#define BASEOS_PANEL_{name.upper()}_FNV 0x{packed_fnvs[name]:08x}u\n"
         header += f"static const uint16_t baseos_panel_{name}[] = {{" + ",".join(hex(op) for op in values) + "};\n"
     (output / "early-display-generated.h").write_text(header)
+    old_padded = packed_raw["old"] + bytes(-len(packed_raw["old"]) % 4)
+    boe_padded = packed_raw["boe"] + bytes(-len(packed_raw["boe"]) % 4)
+    old_offset = 32
+    boe_offset = old_offset + len(old_padded)
+    stream_blob = (struct.pack("<8I", 0x31535042, 1, old_offset, packed_counts["old"],
+                               boe_offset, packed_counts["boe"], packed_fnvs["old"], packed_fnvs["boe"])
+                   + old_padded + boe_padded)
+    assert len(stream_blob) <= 0x2000, f"panel-streams exceeds 8 KiB arena: {len(stream_blob)}"
+    (output / "panel-streams.bin").write_bytes(stream_blob)
     operations = ""
     for phase in PHASES:
         operations += f"static const struct display_operation baseos_display_{phase}[] = {{\n"

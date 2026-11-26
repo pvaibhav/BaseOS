@@ -185,20 +185,29 @@ boot() { reset_runtime; USB_STORAGE_MODE="$1" sh "$TMP/boot-block"; }
 # One-card boot reuses the frontend mount and leaves it mounted.
 printf '%s/tf1 %s/sdcard vfat rw 0 0\n' "$TMP" "$TMP" > "$TMP/mounts"
 printf 'hostname=TF1\nmdns=false\n' > "$TMP/sdcard/baseos.conf"
+: > "$TMP/sdcard/test.bosupd"
 boot 0
 check_runtime TF1 false
 [ "$(cat "$TMP/events")" = "$(printf 'hostname TF1\nupdate apply')" ] || fail "TF1 mount reuse"
+
+# Steady-state boot with no .bosupd payload skips baseos-update apply.
+rm -f "$TMP/sdcard/test.bosupd"
+boot 0
+check_runtime TF1 false
+[ "$(cat "$TMP/events")" = 'hostname TF1' ] || fail "steady-state update skipped"
 
 # With TF2 as frontend, TF1 alone supplies settings. Its temporary mount spans
 # both configuration and the update scan, then is released.
 printf '%s/tf2 %s/sdcard vfat rw 0 0\n' "$TMP" "$TMP" > "$TMP/mounts"
 printf 'hostname=TF2\n' > "$TMP/sdcard/baseos.conf"
 printf 'hostname=TF1\nmdns=false\n' > "$TMP/tf1-data/baseos.conf"
+: > "$TMP/system/test.bosupd"
 boot 0
 check_runtime TF1 false
 printf 'mount -t vfat -o ro %s/tf1 %s/system\nhostname TF1\nupdate apply\numount %s/system\n' \
 	"$TMP" "$TMP" "$TMP" > "$TMP/want"
 cmp -s "$TMP/want" "$TMP/events" || fail "TF2 boot mount/config/update ordering"
+rm -f "$TMP/system/test.bosupd"
 
 # Absent configuration and failed TF1 mounts do not borrow TF2 settings.
 rm "$TMP/tf1-data/baseos.conf" "$TMP/system/baseos.conf"
@@ -277,7 +286,7 @@ charger="$(line_of '/usr/sbin/baseos-charger')"
 storage="$(line_of '/usr/sbin/usb-storage-mode prepare')"
 config="$(line_of '/usr/sbin/baseos-config "$BASEOS_CONFIG"')"
 audio="$(line_of '/usr/sbin/h700-speaker-amp-load >')"
-services="$(line_of '/etc/init.d/dev &')"
+services="$(line_of '/etc/init.d/dev')"
 [ "$config" -lt "$audio" ] && [ "$audio" -lt "$services" ] || fail "audio configuration order"
 [ "$charger" -lt "$storage" ] && [ "$storage" -lt "$config" ] && [ "$config" -lt "$services" ] \
 	|| fail "boot ordering"

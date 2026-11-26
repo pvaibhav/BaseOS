@@ -348,7 +348,7 @@ static int accept_boot(int write_ack, enum ready_mode mode,
             result = 6;
             goto read_done;
         }
-        const struct timespec pause = {0, 100000000};
+        const struct timespec pause = {0, 5000000};
         if (nanosleep(&pause, NULL) && errno != EINTR) { result = 1; goto read_done; }
     }
     if (!write_ack) { puts("native-health: ready; read-only check"); result = 0; goto read_done; }

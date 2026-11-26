@@ -45,4 +45,9 @@ for target in sys.argv[1:] or catalog["profiles"]:
              for path, value in compatible.items() if re.fullmatch(r"allwinner,sunxi-[eo]hci\d", value)}
     assert len(hosts) == 8 and all(status == b"okay\0" for path, status in hosts.items() if path not in late), target
     print(f"{target}: five host controllers held back, all known to the module; three left as the vendor set them")
-print("late USB tests passed")
+
+sdc1_source = (ROOT / "src/h700-late-usb/h700_late_sdc1.c").read_text()
+assert '#define HELD_BACK "late"' in sdc1_source
+assert "module_exit" not in sdc1_source
+assert '"allwinner,sunxi-mmc-v4p1x"' in sdc1_source and '"sdc1"' in sdc1_source
+print("late USB and sdc1 tests passed")

@@ -36,7 +36,7 @@ echo "$1" >> /tmp/sleep.log
 if [ "$1" = 3600 ]; then
 	# Stop the intentional USB-storage idle loop without waiting an hour.
 	kill -TERM "$PPID"
-elif [ "$1" = 0.1 ] && [ -f /tmp/gpu-ready-after ]; then
+elif [ "$1" = 0.01 ] && [ -f /tmp/gpu-ready-after ]; then
 	if [ "$(wc -l < /tmp/sleep.log)" -ge "$(cat /tmp/gpu-ready-after)" ]; then
 		: > /dev/mali0
 	fi
@@ -136,7 +136,8 @@ chmod 644 /tmp/nextui-launch /tmp/installer /tmp/spruce-runtime /tmp/generic-lau
 
 reset() {
 	rm -rf /mnt/sdcard
-	mkdir -p /mnt/sdcard
+	mkdir -p /mnt/sdcard /data/update
+	: > /data/update/state
 	rm -f /tmp/*.log /tmp/no-card /tmp/gpu-ready-after /tmp/slot-exit /tmp/spruce-exit /tmp/installer-exit \
 		"$EXPANSION_LOG" /tmp/generic-exit \
 		/run/boot-frontend-exec /run/usb-storage-device \
@@ -278,7 +279,7 @@ echo 3 > /tmp/gpu-ready-after
 run_session
 [ "$status" -eq 0 ]
 grep -qx spruce /tmp/frontend.log
-[ "$(grep -c '^0.1$' /tmp/sleep.log)" -eq 3 ]
+[ "$(grep -c '^0.01$' /tmp/sleep.log)" -eq 3 ]
 echo 'ok: spruceOS waits for GPU readiness before handoff'
 
 reset
@@ -357,13 +358,13 @@ rm /dev/mali0
 echo 3 > /tmp/gpu-ready-after
 run_session
 [ "$status" -eq 0 ] && [ -s /tmp/frontend.log ]
-[ "$(grep -c '^0.1$' /tmp/sleep.log)" -eq 3 ]
+[ "$(grep -c '^0.01$' /tmp/sleep.log)" -eq 3 ]
 reset
 slot_card
 rm /dev/mali0
 run_session
 [ "$status" -eq 0 ] && [ -s /tmp/frontend.log ]
-[ "$(grep -c '^0.1$' /tmp/sleep.log)" -eq 30 ]
+[ "$(grep -c '^0.01$' /tmp/sleep.log)" -eq 300 ]
 echo 'ok: Slot shares the bounded GPU readiness wait'
 
 # Both generic forms share card-root cwd, output handling, GPU wait and respawn.
@@ -375,7 +376,7 @@ for kind in binary script; do
 	run_session
 	[ "$status" -eq 0 ]
 	grep -qx generic /tmp/frontend.log
-	[ "$(grep -c '^0.1$' /tmp/sleep.log)" -eq 3 ]
+	[ "$(grep -c '^0.01$' /tmp/sleep.log)" -eq 3 ]
 	[ "$(cat /tmp/generic.log)" = "$(printf 'generic stdout\ngeneric stderr\n')" ]
 	! grep -qE '^generic (stdout|stderr)$' "$BOOT_LOG"
 	[ ! -e /tmp/splash.log ] && [ ! -e /tmp/slot.log ]
@@ -696,5 +697,11 @@ for frontend in slot nextui spruce generic-binary generic-script; do
 		/tmp/frontend-env.log
 	echo "ok: $frontend inherits all release metadata without session-local variables"
 done
+reset
+nextui_card
+rm -f /data/update/state
+run_session
+[ "$status" -eq 0 ] && [ ! -e /tmp/update.log ]
+echo 'ok: steady-state boot without /data/update/state skips baseos-update confirm'
 echo 'frontend session tests passed'
 TEST
